@@ -4,9 +4,12 @@ from pathlib import Path
 
 
 class MyModel:
+    """
+    generic container class for network(torch Module), optimizer and scheduler.
+    """
     def __init__(self, opt):
         self.opt = copy.deepcopy(opt)
-        self.network = MyNaiveNetwork(opt)
+        self.network = MyModule(opt)
         if opt.continue_train:
             self.load_network("latest")
         self.optimizer = torch.optim.Adam(self.network.parameters(),
@@ -17,6 +20,10 @@ class MyModel:
         self.network.to(self.opt.device)
 
     def get_scheduler(self):
+        """
+        picks a scheduler according to lr policy
+        :return: the scheduler
+        """
         if self.opt.lr_policy == 'lambda':
             lambda_rule = lambda epoch: self.opt.lr_decay_rate ** epoch
             scheduler = torch.optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda=lambda_rule)
@@ -27,7 +34,11 @@ class MyModel:
         return scheduler
 
     def load_network(self, which_epoch):
-        """load model from disk"""
+        """
+        load model from disk
+        :param which_epoch: "latest" = uses the latest version. any other number = some particular epoch.
+        :return:
+        """
         save_filename = '{}_net.pth'.format(str(which_epoch))
         load_path = Path.joinpath(self.opt.experiment_path, save_filename)
         net = self.network
@@ -42,19 +53,30 @@ class MyModel:
         net.load_state_dict(state_dict)
 
     def save_network(self, which_epoch):
-        """save model to disk"""
+        """
+        save model to disk.
+        :param which_epoch: "latest" = uses the latest version. any other number = some particular epoch.
+        :return:
+        """
         save_filename = '{}_net.pth'.format(str(which_epoch))
         save_path = Path.joinpath(self.opt.experiment_path, save_filename)
         torch.save(self.network.cpu().state_dict(), str(save_path))
         self.network.to(self.opt.device)
 
     def count_parameters(self):
+        """
+        retrieve number of parameters in the network
+        :return: number of parameters in the network
+        """
         return sum(p.numel() for p in self.network.parameters() if p.requires_grad)
 
 
-class MyNaiveNetwork(torch.nn.Module):
+class MyModule(torch.nn.Module):
+    """
+    Container for torch.nn.module. Supports various network architectures.
+    """
     def __init__(self, opt):
-        super(MyNaiveNetwork, self).__init__()
+        super(MyModule, self).__init__()
         self.opt = copy.deepcopy(opt)
         if opt.architecture == "fc":
             fc_network = FullyConnected(self.opt.number_of_classes)
@@ -73,6 +95,9 @@ class MyNaiveNetwork(torch.nn.Module):
 
 
 class FullyConnected:
+    """
+    A straight forward fully-connected neural network, input and output sizes are defined by args.
+    """
     def __init__(self, args):
         self.network = torch.nn.ModuleList([
             torch.nn.Flatten(),
