@@ -7,26 +7,29 @@ import logging
 import visualize
 
 
-def preprocess_raw_lookit_dataset():
+def preprocess_raw_lookit_dataset(force_create=False):
     """
     Organizes the raw videos downloaded from the Lookit platform.
     It puts the videos with annotations into videos folder and
     the annotation from the first and second human annotators into coding_first and coding_second folders respectively.
     :return:
     """
-    project_data_dir.mkdir(parents=True, exist_ok=True)
+    if not raw_dataset_folder.is_dir():
+        raise NotADirectoryError
+    processed_data_set_folder.mkdir(parents=True, exist_ok=True)
     video_folder.mkdir(parents=True, exist_ok=True)
     label_folder.mkdir(parents=True, exist_ok=True)
     label2_folder.mkdir(parents=True, exist_ok=True)
+    faces_folder.mkdir(parents=True, exist_ok=True)
 
     prefix = 'cfddb63f-12e9-4e62-abd1-47534d6c4dd2_'
-    coding_first = [f.stem[:-5] for f in Path(raw_folder / 'coding_first').glob('*.txt')]
-    coding_second = [f.stem[:-5] for f in Path(raw_folder / 'coding_second').glob('*.txt')]
-    videos = [f.stem for f in Path(raw_folder / 'videos').glob(prefix+'*.mp4')]
+    coding_first = [f.stem[:-5] for f in Path(raw_dataset_folder / 'coding_first').glob('*.txt')]
+    coding_second = [f.stem[:-5] for f in Path(raw_dataset_folder / 'coding_second').glob('*.txt')]
+    videos = [f.stem for f in Path(raw_dataset_folder / 'videos').glob(prefix+'*.mp4')]
 
-    logging.info('coding_fist:', len(coding_first))
-    logging.info('coding_second:', len(coding_second))
-    logging.info('videos: ', len(videos))
+    logging.info("coding_fist: {}".format(len(coding_first)))
+    logging.info('coding_second: {}'.format(len(coding_second)))
+    logging.info('videos: {}'.format(len(videos)))
 
     training_set = []
     test_set = []
@@ -41,121 +44,21 @@ def preprocess_raw_lookit_dataset():
             else:
                 training_set.append(filename)
 
-    logging.info('training set:', len(training_set), 'validation set:', len(test_set))
+    logging.info('training set: {} validation set: {}'.format(len(training_set), len(test_set)))
 
     for filename in training_set:
-        shutil.copyfile(raw_folder / 'videos' / (filename+'.mp4'), project_data_dir / 'videos'/ (filename[len(prefix):]+'.mp4'))
-        shutil.copyfile(raw_folder / 'coding_first' / (filename[len(prefix):]+'-evts.txt'), project_data_dir / 'coding_first'/ (filename[len(prefix):]+'.txt'))
+        if not Path(video_folder, (filename[len(prefix):]+'.mp4')).is_file() or force_create:
+            shutil.copyfile(raw_dataset_folder / 'videos' / (filename+'.mp4'), video_folder / (filename[len(prefix):]+'.mp4'))
+        if not Path(label_folder, (filename[len(prefix):]+'.txt')).is_file() or force_create:
+            shutil.copyfile(raw_dataset_folder / 'coding_first' / (filename[len(prefix):]+'-evts.txt'), label_folder / (filename[len(prefix):]+'.txt'))
 
     for filename in test_set:
-        shutil.copyfile(raw_folder / 'videos' / (filename + '.mp4'), project_data_dir / 'videos'/(filename[len(prefix):]+'.mp4'))
-        shutil.copyfile(raw_folder / 'coding_first' / (filename[len(prefix):] + '-evts.txt'), project_data_dir / 'coding_first'/(filename[len(prefix):]+'.txt'))
-        shutil.copyfile(raw_folder / 'coding_second' / (filename[len(prefix):] + '-evts.txt'), project_data_dir / 'coding_second'/(filename[len(prefix):]+'.txt'))
-
-
-def process_lookit_dataset(video_list):
-    """
-    Processes the videos into crops & extra information
-    :param video_list:
-    :return:
-    """
-    net = cv2.dnn.readNetFromCaffe(str(config_file), str(face_model_file))
-    for video_file in video_list:
-        st_time = time.time()
-        logging.critical(f"Proccessing: {str(video_file)}")
-        Path.joinpath(dataset_folder / video_file.stem).mkdir()
-        img_folder = Path.joinpath(dataset_folder, video_file.stem, 'img')
-        img_folder.mkdir()
-        box_folder = Path.joinpath(dataset_folder, video_file.stem, 'box')
-        box_folder.mkdir()
-
-        frame_counter = 0
-        no_face_counter = 0
-        no_annotation_counter = 0
-        valid_counter = 0
-        gaze_labels = []
-        face_labels = []
-
-        cap = cv2.VideoCapture(str(video_file))
-        responses = parse_lookit_label(label_folder / (video_file.stem + '.txt'), cap.get(cv2.CAP_PROP_FPS))
-        ret_val, frame = cap.read()
-
-        while ret_val:
-            if responses:
-                if frame_counter >= responses[0][0]:  # skip until reaching first annotated frame
-                    # find closest (previous) response this frame belongs to
-                    q = [index for index, val in enumerate(responses) if frame_counter >= val[0]]
-                    response_index = max(q)
-                    if responses[response_index][1] != 0:  # make sure response is valid
-                        bbox = detect_face_opencv_dnn(net, frame, 0.7)
-                        if not bbox:
-                            no_face_counter += 1
-                            gaze_labels.append(-1)
-                            face_labels.append(-1)
-                            logging.info("Face not detected in frame: " + str(frame_counter))
-                        else:
-                            # select lowest face, probably belongs to kid: face = min(bbox, key=lambda x: x[3] - x[1])
-                            selected_face = 0
-                            min_value = bbox[0][3] - bbox[0][1]
-                            gaze_class = responses[response_index][2]
-                            for i, face in enumerate(bbox):
-                                if bbox[i][3] - bbox[i][1] < min_value:
-                                    min_value = bbox[i][3] - bbox[i][1]
-                                    selected_face = i
-                                crop_img = frame[face[1]:face[1] + face[3], face[0]:face[0] + face[2]]
-                                resized_img = cv2.resize(crop_img, (100, 100))
-                                face_box = np.array([face[1], face[1] + face[3], face[0], face[0] + face[2]])
-                                img_shape = np.array(frame.shape)
-                                ratio = np.array([face_box[0] / img_shape[0], face_box[1] / img_shape[0],
-                                                  face_box[2] / img_shape[1], face_box[3] / img_shape[1]])
-                                face_size = (ratio[1] - ratio[0]) * (ratio[3] - ratio[2])
-                                face_ver = (ratio[0] + ratio[1]) / 2
-                                face_hor = (ratio[2] + ratio[3]) / 2
-                                face_height = ratio[1] - ratio[0]
-                                face_width = ratio[3] - ratio[2]
-                                feature_dict = {
-                                    'face_box': face_box,
-                                    'img_shape': img_shape,
-                                    'face_size': face_size,
-                                    'face_ver': face_ver,
-                                    'face_hor': face_hor,
-                                    'face_height': face_height,
-                                    'face_width': face_width
-                                }
-                                cv2.imwrite(str(img_folder / f'{frame_counter:05d}_{i:01d}.png'), resized_img)
-                                np.save(str(box_folder / f'{frame_counter:05d}_{i:01d}.npy'), feature_dict)
-                            valid_counter += 1
-                            gaze_labels.append(classes[gaze_class])
-                            face_labels.append(selected_face)
-                            logging.info(f"valid frame in class {gaze_class}")
-
-                    else:
-                        no_annotation_counter += 1
-                        gaze_labels.append(-2)
-                        face_labels.append(-2)
-                        logging.info("Skipping since frame is invalid")
-                else:
-                    no_annotation_counter += 1
-                    gaze_labels.append(-2)
-                    face_labels.append(-2)
-                    logging.info("Skipping since no annotation (yet)")
-            else:
-                gaze_labels.append(-2)
-                face_labels.append(-2)
-                no_annotation_counter += 1
-                logging.info("Skipping frame since parser reported no annotation")
-            ret_val, frame = cap.read()
-            frame_counter += 1
-            logging.info("Processing frame: {}".format(frame_counter))
-        gaze_labels = np.array(gaze_labels)
-        face_labels = np.array(face_labels)
-        np.save(str(Path.joinpath(dataset_folder, video_file.stem, 'gaze_labels.npy')), gaze_labels)
-        np.save(str(Path.joinpath(dataset_folder, video_file.stem, 'face_labels.npy')), face_labels)
-        logging.critical(
-            "Total frame: {}, No face: {}, No annotation: {}, Valid: {}".format(frame_counter, no_face_counter,
-                                                                                no_annotation_counter, valid_counter))
-        ed_time = time.time()
-        logging.critical('Time used: {}'.format(ed_time - st_time))
+        if not Path(video_folder, (filename[len(prefix):] + '.mp4')).is_file() or force_create:
+            shutil.copyfile(raw_dataset_folder / 'videos' / (filename + '.mp4'), video_folder /(filename[len(prefix):]+'.mp4'))
+        if not Path(label_folder, (filename[len(prefix):] + '.txt')).is_file() or force_create:
+            shutil.copyfile(raw_dataset_folder / 'coding_first' / (filename[len(prefix):] + '-evts.txt'), label_folder / (filename[len(prefix):]+'.txt'))
+        if not Path(label2_folder, (filename[len(prefix):] + '.txt')).is_file() or force_create:
+            shutil.copyfile(raw_dataset_folder / 'coding_second' / (filename[len(prefix):] + '-evts.txt'), label2_folder / (filename[len(prefix):]+'.txt'))
 
 
 def parse_lookit_label(file, fps):
@@ -198,20 +101,137 @@ def detect_face_opencv_dnn(net, frame, conf_threshold):
     return bboxes
 
 
-def generate_lookit_gaze_labels_second(video_list):
+def process_lookit_dataset_legacy(force_create=False):
     """
-    Generates labels from second annotator from the lokit dataset
+    process the lookit dataset using the "lowest" face mechanism
     :param video_list:
     :return:
     """
-    labels = []
-    preds = []
+    video_list = list(video_folder.glob("*.mp4"))
+    net = cv2.dnn.readNetFromCaffe(str(config_file), str(face_model_file))
     for video_file in video_list:
-        print(video_file)
+        st_time = time.time()
+        logging.info("Proccessing: {}".format(str(video_file)))
+        cur_video_folder = Path.joinpath(faces_folder / video_file.stem)
+        cur_video_folder.mkdir(parents=True, exist_ok=True)
+        img_folder = Path.joinpath(faces_folder, video_file.stem, 'img')
+        img_folder.mkdir(parents=True, exist_ok=True)
+        box_folder = Path.joinpath(faces_folder, video_file.stem, 'box')
+        box_folder.mkdir(parents=True, exist_ok=True)
+
+        frame_counter = 0
+        no_face_counter = 0
+        no_annotation_counter = 0
+        valid_counter = 0
+        gaze_labels = []
+        face_labels = []
+
+        cap = cv2.VideoCapture(str(video_file))
+        responses = parse_lookit_label(label_folder / (video_file.stem + '.txt'), cap.get(cv2.CAP_PROP_FPS))
+        ret_val, frame = cap.read()
+
+        while ret_val:
+            if responses:
+                if frame_counter >= responses[0][0]:  # skip until reaching first annotated frame
+                    # find closest (previous) response this frame belongs to
+                    q = [index for index, val in enumerate(responses) if frame_counter >= val[0]]
+                    response_index = max(q)
+                    if responses[response_index][1] != 0:  # make sure response is valid
+                        bbox = detect_face_opencv_dnn(net, frame, 0.7)
+                        if not bbox:
+                            no_face_counter += 1
+                            gaze_labels.append(-1)
+                            face_labels.append(-1)
+                            logging.info("Face not detected in frame: " + str(frame_counter))
+                        else:
+                            # select lowest face, probably belongs to kid: face = min(bbox, key=lambda x: x[3] - x[1])
+                            selected_face = 0
+                            min_value = bbox[0][3] - bbox[0][1]
+                            gaze_class = responses[response_index][2]
+                            for i, face in enumerate(bbox):
+                                if bbox[i][3] - bbox[i][1] < min_value:
+                                    min_value = bbox[i][3] - bbox[i][1]
+                                    selected_face = i
+                                crop_img = frame[face[1]:face[1] + face[3], face[0]:face[0] + face[2]]
+                                # resized_img = cv2.resize(crop_img, (100, 100))
+                                resized_img = crop_img  # do not lose information in pre-processing step!
+                                face_box = np.array([face[1], face[1] + face[3], face[0], face[0] + face[2]])
+                                img_shape = np.array(frame.shape)
+                                ratio = np.array([face_box[0] / img_shape[0], face_box[1] / img_shape[0],
+                                                  face_box[2] / img_shape[1], face_box[3] / img_shape[1]])
+                                face_size = (ratio[1] - ratio[0]) * (ratio[3] - ratio[2])
+                                face_ver = (ratio[0] + ratio[1]) / 2
+                                face_hor = (ratio[2] + ratio[3]) / 2
+                                face_height = ratio[1] - ratio[0]
+                                face_width = ratio[3] - ratio[2]
+                                feature_dict = {
+                                    'face_box': face_box,
+                                    'img_shape': img_shape,
+                                    'face_size': face_size,
+                                    'face_ver': face_ver,
+                                    'face_hor': face_hor,
+                                    'face_height': face_height,
+                                    'face_width': face_width
+                                }
+                                img_filename = img_folder / f'{frame_counter:05d}_{i:01d}.png'
+                                if not img_filename.is_file() or force_create:
+                                    cv2.imwrite(str(img_filename), resized_img)
+                                box_filename = box_folder / f'{frame_counter:05d}_{i:01d}.npy'
+                                if not box_filename.is_file() or force_create:
+                                    np.save(str(box_filename), feature_dict)
+                            valid_counter += 1
+                            gaze_labels.append(classes[gaze_class])
+                            face_labels.append(selected_face)
+                            logging.info(f"valid frame in class {gaze_class}")
+
+                    else:
+                        no_annotation_counter += 1
+                        gaze_labels.append(-2)
+                        face_labels.append(-2)
+                        logging.info("Skipping since frame is invalid")
+                else:
+                    no_annotation_counter += 1
+                    gaze_labels.append(-2)
+                    face_labels.append(-2)
+                    logging.info("Skipping since no annotation (yet)")
+            else:
+                gaze_labels.append(-2)
+                face_labels.append(-2)
+                no_annotation_counter += 1
+                logging.info("Skipping frame since parser reported no annotation")
+            ret_val, frame = cap.read()
+            frame_counter += 1
+            logging.info("Processing frame: {}".format(frame_counter))
+        gaze_labels = np.array(gaze_labels)
+        face_labels = np.array(face_labels)
+        gaze_labels_filename = Path.joinpath(faces_folder, video_file.stem, 'gaze_labels.npy')
+        if not gaze_labels_filename.is_file() or force_create:
+            np.save(str(gaze_labels_filename), gaze_labels)
+        face_labels_filename = Path.joinpath(faces_folder, video_file.stem, 'face_labels.npy')
+        if not face_labels_filename.is_file() or force_create:
+            np.save(str(face_labels_filename), face_labels)
+        logging.info(
+            "Total frame: {}, No face: {}, No annotation: {}, Valid: {}".format(frame_counter, no_face_counter,
+                                                                                no_annotation_counter, valid_counter))
+        ed_time = time.time()
+        logging.info('Time used: {}'.format(ed_time - st_time))
+
+
+def generate_second_gaze_labels(force_create=False, visualize_confusion=True):
+    """
+    Processes the second annotator labels
+    :param force_create: forces creation of files even if they exist
+    :param visualize_confusion: if true, visualizes confusion between human annotators.
+    :return:
+    """
+    video_list = list(video_folder.glob("*.mp4"))
+
+    for video_file in video_list:
+        logging.info(video_file)
         if (label2_folder / (video_file.stem + '.txt')).exists():
             cap = cv2.VideoCapture(str(video_file))
             responses = parse_lookit_label(label2_folder / (video_file.stem + '.txt'), cap.get(cv2.CAP_PROP_FPS))
-            gaze_labels = np.load(str(Path.joinpath(dataset_folder, video_file.stem, 'gaze_labels.npy')))
+            gaze_labels = np.load(str(Path.joinpath(faces_folder, video_file.stem, 'gaze_labels.npy')))
             gaze_labels_second = []
             for frame in range(gaze_labels.shape[0]):
                 if frame >= responses[0][0]:
@@ -225,14 +245,32 @@ def generate_lookit_gaze_labels_second(video_list):
                 else:
                     gaze_labels_second.append(-2)
             gaze_labels_second = np.array(gaze_labels_second)
-            np.save(str(Path.joinpath(dataset_folder, video_file.stem, 'gaze_labels_second.npy')), gaze_labels_second)
-            idxs = np.where((gaze_labels >= 0) & (gaze_labels_second >= 0))
-            labels.extend(list(gaze_labels[idxs]))
-            preds.extend(list(gaze_labels_second[idxs]))
+            gaze_labels_second_filename = Path.joinpath(faces_folder, video_file.stem, 'gaze_labels_second.npy')
+            if not gaze_labels_second_filename.is_file() or force_create:
+                np.save(str(gaze_labels_second_filename), gaze_labels_second)
         else:
-            print('no label')
-    Path('models', 'human').mkdir()
-    visualize.calculate_confusion_matrix(labels, preds, Path('models', 'human') / 'conf.pdf')
+            logging.info('no label')
+    if visualize_confusion:
+        visualize_human_confusion_matrix()
+
+
+def visualize_human_confusion_matrix():
+    """
+    wrapper for calculating and visualizing confusion matrix with human annotations
+    :return:
+    """
+    labels = []
+    preds = []
+    video_list = list(video_folder.glob("*.mp4"))
+    for video_file in video_list:
+        gaze_labels = np.load(str(Path.joinpath(faces_folder, video_file.stem, 'gaze_labels.npy')))
+        gaze_labels_second = np.load(str(Path.joinpath(faces_folder, video_file.stem, 'gaze_labels_second.npy')))
+        idxs = np.where((gaze_labels >= 0) & (gaze_labels_second >= 0))
+        labels.extend(list(gaze_labels[idxs]))
+        preds.extend(list(gaze_labels_second[idxs]))
+    human_dir = Path('plots', 'human')
+    human_dir.mkdir(exist_ok=True, parents=True)
+    visualize.calculate_confusion_matrix(labels, preds, human_dir / 'conf.pdf')
 
 
 def gen_lookit_multi_face_subset():
@@ -245,8 +283,8 @@ def gen_lookit_multi_face_subset():
     face_hist = np.zeros(10)
     total_datapoint = 0
     for name in names:
-        print(name)
-        src_folder = dataset_folder / name
+        logging.info(name)
+        src_folder = faces_folder / name
         dst_folder = multi_face_folder / name
         dst_folder.mkdir()
         (dst_folder / 'img').mkdir()
@@ -277,9 +315,8 @@ def gen_lookit_multi_face_subset():
 
 
 if __name__ == "__main__":
-    dataset_folder.mkdir()
-    preprocess_raw_lookit_dataset()
-    video_files = list(video_folder.glob("*.mp4"))
-    process_lookit_dataset(video_files)
-    generate_lookit_gaze_labels_second(video_files)
-    gen_lookit_multi_face_subset()
+    logging.basicConfig(level="INFO")
+    preprocess_raw_lookit_dataset(force_create=False)
+    process_lookit_dataset_legacy(force_create=False)
+    # generate_second_gaze_labels(force_create=False)
+    # gen_lookit_multi_face_subset()
