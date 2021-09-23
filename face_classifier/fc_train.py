@@ -7,9 +7,9 @@ import numpy as np
 import visualize
 from pathlib import Path
 
-from fc_model import *
-from fc_eval import *
-from utils import *
+from .fc_model import *
+from .fc_eval import *
+from .fc_data import *
 
 
 def get_args():
