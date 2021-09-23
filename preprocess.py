@@ -182,8 +182,7 @@ def process_lookit_dataset_legacy(force_create=False):
                             valid_counter += 1
                             gaze_labels.append(classes[gaze_class])
                             face_labels.append(selected_face)
-                            logging.info(f"valid frame in class {gaze_class}")
-
+                            # logging.info(f"valid frame in class {gaze_class}")
                     else:
                         no_annotation_counter += 1
                         gaze_labels.append(-2)
@@ -273,7 +272,7 @@ def visualize_human_confusion_matrix():
     visualize.calculate_confusion_matrix(labels, preds, human_dir / 'conf.pdf')
 
 
-def gen_lookit_multi_face_subset():
+def gen_lookit_multi_face_subset(force_create=False):
     """
     Generates the face labels for each frame using the trained face classifier and the nearest patch mechanism.
     :return:
@@ -305,10 +304,12 @@ def gen_lookit_multi_face_subset():
                     i += 1
                 face_hist[len(faces)] += 1
                 for face in faces:
-                    shutil.copy((src_folder / 'img' / (face + '.png')),
-                                (dst_folder / 'img' / f'{name}_{face}_{face_label}.png'))
-                    shutil.copy((src_folder / 'box' / (face + '.npy')),
-                                (dst_folder / 'box' / f'{name}_{face}_{face_label}.npy'))
+                    dst_face_file = (dst_folder / 'img' / f'{name}_{face}_{face_label}.png')
+                    if not dst_face_file.is_file() or force_create:
+                        shutil.copy((src_folder / 'img' / (face + '.png')), dst_face_file)
+                    dst_box_file = (dst_folder / 'box' / f'{name}_{face}_{face_label}.npy')
+                    if not dst_box_file.is_file() or force_create:
+                        shutil.copy((src_folder / 'box' / (face + '.npy')), dst_box_file)
         logging.info('# multi-face datapoint:{}'.format(num_datapoint))
     logging.info('total # multi-face datapoint:{}'.format(total_datapoint))
     logging.info(face_hist)
@@ -318,5 +319,5 @@ if __name__ == "__main__":
     logging.basicConfig(level="INFO")
     preprocess_raw_lookit_dataset(force_create=False)
     process_lookit_dataset_legacy(force_create=False)
-    # generate_second_gaze_labels(force_create=False)
-    # gen_lookit_multi_face_subset()
+    generate_second_gaze_labels(force_create=False)
+    gen_lookit_multi_face_subset()
