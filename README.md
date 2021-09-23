@@ -1,4 +1,4 @@
-#READ THIS FIRST !!!
+# READ THIS FIRST !!!
 structure of project is as follows:
 
     ├── datasets                # put all your (raw or not) datasets here 
@@ -18,7 +18,7 @@ structure of project is as follows:
     ├── config.py               # Contains general configurations. Should be integrated into options.py.    
 
 
-###coding conventions:
+### coding conventions:
 - indent: 4 spaces
 - system paths: Use Path from pathlib only (no os functions)
 - git push: Never push to master(main). when you want to edit, branch out, commit there, and merge when you are done.
@@ -26,7 +26,7 @@ structure of project is as follows:
 - code was mostly taken from Xincheng's and Peng's efforts, modified for usage as a team.
 - keep project structure as generic as possible. don't open a util.py, etc.
 
-###conda
+### conda
 Use conda with the environment.yml file to synchronize environments:
 
 `conda env create --prefix /path/to/virtual/environment -f "/path/to/environment.yml"`
