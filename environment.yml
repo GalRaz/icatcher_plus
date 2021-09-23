@@ -1,10 +1,12 @@
 channels:
   - pytorch
+  - anaconda
   - defaults
 dependencies:
   - pytorch
   - torchvision
   - python=3.8
   - pip
+  - seaborn
   - pip:
     - opencv-python
