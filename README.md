@@ -3,16 +3,16 @@ structure of project is as follows:
 
     ├── datasets                # put all your (raw or not) datasets here 
     ├── face_classifier         # contains all specific code for face classification, separated from main project files on purpose.
-        ├── fc_data.py          # not tested yet!
-        ├── fc_eval.py          # not tested yet!
-        ├── fc_model.py         # not tested yet!
-        ├── fc_train.py         # not tested yet!
-    ├── models                  # put all your model files here
+        ├── fc_data.py          # not tested yet! (copy pasted, plus fixed errors)
+        ├── fc_eval.py          # not tested yet! (copy pasted, plus fixed errors)
+        ├── fc_model.py         # not tested yet! (copy pasted, plus fixed errors)
+        ├── fc_train.py         # not tested yet! (copy pasted, plus fixed errors)
+    ├── models                  # Put all your model files here
     ├── train.py                # Main training loop, keep as generic as possible and minimal
     ├── visualize.py            # All visualizations should go here
     ├── logger.py               # Logging functions should go here (including prints)
     ├── models.py               # All torch models go here
-    ├── data.py                 # All torch data loaders should go here
+    ├── data.py                 # All torch data loaders should go here (todo: adjust this to work with train.py)
     ├── preprocess.py           # All functions related to processing a raw dataset go here (such as lookit - mostly code from icatcher+, or any other dataset)
     ├── options.py              # Use to parse command line arguments.
     ├── config.py               # Contains general configurations. Should be integrated into options.py.    
