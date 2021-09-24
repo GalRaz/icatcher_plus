@@ -14,31 +14,39 @@ def train_loop(args):
     :return:
     """
     my_logger = logger.Logger(args)
-    args.is_train = True
+    args.phase = "train"
     train_dataset = data.MyDataLoader(args)
-    args.is_train = False
+    args.phase = "val"
     val_dataset = data.MyDataLoader(args)
     model = models.MyModel(args)
-    model.optimizer.zero_grad()
     for epoch in range(args.number_of_epochs):
-        train_loss_total = []
-        for batch_index, (input, target) in enumerate(train_dataset):
-            output = model.network(input)
-            train_loss = model.network.loss_fn(output, target)
+        running_loss = 0.0
+        running_corrects = 0
+        num_datapoints = 0
+        for batch_index, batch in enumerate(train_dataset):
+            model.optimizer.zero_grad()
+            output = model.network(batch)
+            train_loss = model.network.loss_fn(output, batch["label"])
+            _, predictions = torch.max(output, 1)
             train_loss.backward()
             model.optimizer.step()
-            model.optimizer.zero_grad()
             train_loss_np = train_loss.cpu().detach().numpy()
-            my_logger.write_scaler("batch", "train_loss_total", train_loss_np, epoch*(len(train_dataset) // args.batch_size) + batch_index)
+            my_logger.write_scaler("batch", "train_loss", train_loss_np, epoch*(len(train_dataset) // args.batch_size) + batch_index)
             logging.info("train: epoch: {}, batch {} / {}, loss: {}".format(epoch,
                                                                             batch_index,
                                                                             len(train_dataset) // args.batch_size,
                                                                             train_loss_np))
-            train_loss_total.append(train_loss_np)
-        train_loss_total = np.mean(np.array(train_loss_total))
-        my_logger.write_scaler("epoch", "train_loss_total", train_loss_total, epoch)
+            num_datapoints += batch["label"].shape[0]
+            running_loss += train_loss.item() * batch["label"].shape[0]
+            running_corrects += torch.sum(torch.eq(predictions, batch["label"])).item()
+        epoch_loss = running_loss / num_datapoints
+        epoch_acc = running_corrects / num_datapoints
+        my_logger.write_scaler("epoch", "train_loss", epoch_loss, epoch)
+        my_logger.write_scaler("epoch", "train_acc", epoch_acc, epoch)
         logging.info("train: epoch: {}, training loss: {}".format(epoch,
-                                                                  train_loss_total))
+                                                                  epoch_loss))
+        logging.info("train: epoch: {}, training acc: {}".format(epoch,
+                                                                 epoch_acc))
         model.save_network(which_epoch=str(epoch))
         model.save_network(which_epoch="latest")
         with torch.no_grad():
@@ -49,7 +57,7 @@ def train_loop(args):
                 val_loss = model.network.loss_fn(output, target)
                 val_loss_total.append(val_loss.cpu().detach().numpy())
             val_loss_total = np.mean(np.array(val_loss_total))
-            my_logger.write_scaler("epoch", "val_loss_total", val_loss_total, epoch)
+            my_logger.write_scaler("epoch", "val_loss", val_loss_total, epoch)
             logging.info("validation: epoch: {}, loss: {}".format(epoch, val_loss_total))
         my_logger.write_scaler("epoch", "learning rate", model.optimizer.param_groups[0]['lr'], epoch)
         logging.info("lr: {}".format(model.optimizer.param_groups[0]['lr']))

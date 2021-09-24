@@ -75,28 +75,28 @@ class MyModel:
 
 class MyModule(torch.nn.Module):
     """
-    Container for torch.nn.module. Supports various network architectures.
+    wrapper around different architectures. supports various network architectures.
     """
-    def __init__(self, opt):
+    def __init__(self, args):
         super(MyModule, self).__init__()
-        self.opt = copy.deepcopy(opt)
-        if opt.architecture == "fc":
-            fc_network = FullyConnected(self.opt.number_of_classes)
+        self.args = copy.deepcopy(args)
+        if self.args.architecture == "fc":
+            fc_network = FullyConnected(self.args)
             self.net = fc_network.network
+        elif self.args.architecture == "icatcher+":
+            self.net = GazeCodingModel(self.args)
         else:
             raise NotImplementedError
-        if self.opt.loss == "cat_cross_entropy":
+        if self.args.loss == "cat_cross_entropy":
             self.loss_fn = torch.nn.CrossEntropyLoss()
         else:
             raise NotImplementedError
 
     def forward(self, x):
-        for i, layer in enumerate(self.net):
-            x = layer(x)
-        return x
+        self.net.forward(x)
 
 
-class FullyConnected:
+class FullyConnected(torch.nn.Module):
     """
     A straight forward fully-connected neural network, input and output sizes are defined by args.
     """
@@ -112,6 +112,11 @@ class FullyConnected:
             torch.nn.Linear(32, args.number_of_classes),
         ])
 
+    def forward(self, x):
+        for i, layer in enumerate(self):
+            x = layer(x)
+        return x
+
 
 class iCatcherOriginal:
     """
@@ -122,18 +127,18 @@ class iCatcherOriginal:
 
 
 class GazeCodingModel(torch.nn.Module):
-    def __init__(self, device, n, add_box):
+    def __init__(self, args, add_box=True):
         super().__init__()
-        self.n = n
-        self.device = device
+        self.args = args
+        self.n = args.frames_per_datapoint // args.frames_stride_size
         self.add_box = add_box
-        self.encoder_img = resnet18(num_classes=256)
-        self.encoder_box = Encoder_box()
-        self.predictor = Predictor_fc(n, add_box)
+        self.encoder_img = resnet18(num_classes=256).to(self.args.device)
+        self.encoder_box = Encoder_box().to(self.args.device)
+        self.predictor = Predictor_fc(self.n, add_box).to(self.args.device)
 
     def forward(self, data):
-        imgs = data['imgs'].to(self.device)  # bs x n x 3 x 100 x 100
-        boxs = data['boxs'].to(self.device)  # bs x n x 5
+        imgs = data['imgs']  # bs x n x 3 x 100 x 100
+        boxs = data['boxs']  # bs x n x 5
         embedding = self.encoder_img(imgs.view(-1, 3, 100, 100)).view(-1, self.n, 256)
         if self.add_box:
             box_embedding = self.encoder_box(boxs.view(-1, 5)).view(-1, self.n, 256)
