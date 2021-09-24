@@ -58,7 +58,7 @@ class LookItDataset:
         all_names = [f.stem for f in all_names_path.glob('*.txt')]
         test_names = [f.stem for f in test_names_path.glob('*.txt')]
         my_list = []
-        for name in all_names[:10]:
+        for name in all_names:
             if self.args.phase == "val":
                 if name not in test_names:
                     continue
@@ -93,21 +93,21 @@ class LookItDataset:
 
         imgs = []
         for img_file in img_files_seg:
-            img = Image.open(self.args.dataset_folder / img_file).convert('RGB')
+            img = Image.open(self.args.dataset_folder / "faces" / img_file).convert('RGB')
             img = self.img_processor(img)
             imgs.append(img)
         imgs = torch.stack(imgs)
 
         boxs = []
         for box_file in box_files_seg:
-            box = np.load(self.args.dataset_folder / box_file, allow_pickle=True).item()
+            box = np.load(self.args.dataset_folder / "faces" / box_file, allow_pickle=True).item()
             box = torch.tensor([box['face_size'], box['face_ver'], box['face_hor'], box['face_height'], box['face_width']])
             boxs.append(box)
         boxs = torch.stack(boxs)
         boxs = boxs.float()
-        imgs.to(self.args.device)
-        boxs.to(self.args.device)
-        class_seg.to(self.args.device)
+        imgs = imgs.to(self.args.device)
+        boxs = boxs.to(self.args.device)
+        class_seg = torch.as_tensor(class_seg).to(self.args.device)
         return {
             'imgs': imgs,  # n x 3 x 100 x 100
             'boxs': boxs,  # n x 5

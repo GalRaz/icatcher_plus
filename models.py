@@ -76,15 +76,16 @@ class MyModel:
 class MyModule(torch.nn.Module):
     """
     wrapper around different architectures. supports various network architectures.
+    if this "layer" seems redundant, can be removed
     """
     def __init__(self, args):
         super(MyModule, self).__init__()
         self.args = copy.deepcopy(args)
         if self.args.architecture == "fc":
-            fc_network = FullyConnected(self.args)
+            fc_network = FullyConnected(self.args).to(self.args.device)
             self.net = fc_network.network
         elif self.args.architecture == "icatcher+":
-            self.net = GazeCodingModel(self.args)
+            self.net = GazeCodingModel(self.args).to(self.args.device)
         else:
             raise NotImplementedError
         if self.args.loss == "cat_cross_entropy":
@@ -93,7 +94,7 @@ class MyModule(torch.nn.Module):
             raise NotImplementedError
 
     def forward(self, x):
-        self.net.forward(x)
+        return self.net.forward(x)
 
 
 class FullyConnected(torch.nn.Module):
