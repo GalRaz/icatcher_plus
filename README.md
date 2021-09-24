@@ -12,7 +12,7 @@ structure of project is as follows:
     ├── visualize.py            # All visualizations should go here
     ├── logger.py               # Logging functions should go here (including prints)
     ├── models.py               # All torch models go here
-    ├── data.py                 # All torch data loaders should go here (todo: adjust this to work with train.py)
+    ├── data.py                 # All torch data loaders should go here
     ├── preprocess.py           # All functions related to processing a raw dataset go here (such as lookit - mostly code from icatcher+, or any other dataset)
     ├── options.py              # Use to parse command line arguments.
     ├── config.py               # Contains general configurations. Should be integrated into options.py.    
