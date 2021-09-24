@@ -16,7 +16,7 @@ class MyModel:
             self.load_network("latest")
         self.optimizer = torch.optim.Adam(self.network.parameters(),
                                           lr=opt.lr,
-                                          betas=(opt.beta1, 0.999),
+                                          betas=(0.9, 0.999),
                                           weight_decay=1e-5)
         self.scheduler = self.get_scheduler()
         self.network.to(self.opt.device)

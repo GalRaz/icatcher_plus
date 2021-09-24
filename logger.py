@@ -9,7 +9,7 @@ class Logger:
     """
     def __init__(self, opt):
         self.opt = opt
-        self.writer = SummaryWriter(log_dir=opt.root)
+        self.writer = SummaryWriter(log_dir=opt.experiment_path)
 
     def write_scaler(self, category, name, scalar_value, iterations):
         final_name = category + "/" + name

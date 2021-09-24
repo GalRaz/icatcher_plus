@@ -5,6 +5,7 @@ import data
 import models
 import torch
 import numpy as np
+from pathlib import Path
 
 
 def train_loop(args):
@@ -70,8 +71,8 @@ def train_loop(args):
 if __name__ == "__main__":
     args = options.parse_arguments()
     if args.log:
-        args.log.parent.mkdir(parents=True, exist_ok=True)
-        logging.basicConfig(filename=args.log, filemode='w', level=args.verbosity.upper())
+        logging_file = Path(args.experiment_path, "log")
+        logging.basicConfig(filename=str(logging_file), filemode='w', level=args.verbosity.upper())
     else:
         logging.basicConfig(level=args.verbosity.upper())
     logging.info("Entering training loop")

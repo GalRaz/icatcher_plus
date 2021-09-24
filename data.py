@@ -58,7 +58,7 @@ class LookItDataset:
         all_names = [f.stem for f in all_names_path.glob('*.txt')]
         test_names = [f.stem for f in test_names_path.glob('*.txt')]
         my_list = []
-        for name in all_names:
+        for name in all_names[:10]:
             if self.args.phase == "val":
                 if name not in test_names:
                     continue
@@ -76,7 +76,7 @@ class LookItDataset:
                     break
                 if sum(face_label_seg < 0):
                     continue
-                if not self.args.eliminate_transition or self.check_all_same(gaze_label_seg):
+                if not self.args.eliminate_transitions or self.check_all_same(gaze_label_seg):
                     class_seg = gaze_label_seg[self.args.frames_per_datapoint // 2]
                     img_files_seg = []
                     box_files_seg = []
@@ -118,11 +118,12 @@ class LookItDataset:
 class MyDataLoader:
     def __init__(self, opt):
         self.opt = copy.deepcopy(opt)
+        shuffle = (self.opt.phase == "train")
         self.dataset = LookItDataset(opt)
         self.dataloader = torch.utils.data.DataLoader(
             self.dataset,
             batch_size=opt.batch_size,
-            shuffle=self.opt.is_train,
+            shuffle=shuffle,
             num_workers=int(opt.num_threads)
         )
 

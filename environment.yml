@@ -10,5 +10,6 @@ dependencies:
   - pip
   - seaborn
   - scikit-learn
+  - tensorboard
   - pip:
     - opencv-python
