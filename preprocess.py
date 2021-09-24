@@ -346,6 +346,8 @@ def process_lookit_dataset(model_path, force_create=False):
             num_correct += 1
     logging.info("{}, {}, {}".format(num_correct, total, num_correct / total))
 
+    # emulate command line arguments
+    # replace with what was used to train the face classifier!
     class Args:
         def __init__(self):
             self.device = "cuda:0"
