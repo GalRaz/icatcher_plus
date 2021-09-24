@@ -18,6 +18,7 @@ def preprocess_raw_lookit_dataset(force_create=False):
     Organizes the raw videos downloaded from the Lookit platform.
     It puts the videos with annotations into videos folder and
     the annotation from the first and second human annotators into coding_first and coding_second folders respectively.
+    :param force_create: forces creation of files even if they exist
     :return:
     """
     if not raw_dataset_folder.is_dir():
@@ -70,8 +71,8 @@ def preprocess_raw_lookit_dataset(force_create=False):
 def parse_lookit_label(file, fps):
     """
     parses a label file from the lookit dataset
-    :param file:
-    :param fps:
+    :param file: the file to parse
+    :param fps: fps of the video
     :return:
     """
     labels = np.genfromtxt(open(file, "rb"), dtype='str', delimiter=",", skip_header=3)
@@ -109,8 +110,10 @@ def detect_face_opencv_dnn(net, frame, conf_threshold):
 
 def process_lookit_dataset_legacy(force_create=False):
     """
+    TODO: huge bug with this - frames which dont have an associated extracted patch are labeled as -1 !!!
+    MUST fix this to properly get a confusion matrix between humans.
     process the lookit dataset using the "lowest" face mechanism
-    :param video_list:
+    :param force_create: forces creation of files even if they exist
     :return:
     """
     video_list = list(video_folder.glob("*.mp4"))
@@ -268,11 +271,13 @@ def visualize_human_confusion_matrix():
     preds = []
     video_list = list(video_folder.glob("*.mp4"))
     for video_file in video_list:
-        gaze_labels = np.load(str(Path.joinpath(faces_folder, video_file.stem, 'gaze_labels.npy')))
-        gaze_labels_second = np.load(str(Path.joinpath(faces_folder, video_file.stem, 'gaze_labels_second.npy')))
-        idxs = np.where((gaze_labels >= 0) & (gaze_labels_second >= 0))
-        labels.extend(list(gaze_labels[idxs]))
-        preds.extend(list(gaze_labels_second[idxs]))
+        gaze_labels_second_filename = Path.joinpath(faces_folder, video_file.stem, 'gaze_labels_second.npy')
+        if gaze_labels_second_filename.is_file():
+            gaze_labels = np.load(str(Path.joinpath(faces_folder, video_file.stem, 'gaze_labels.npy')))
+            gaze_labels_second = np.load(str(gaze_labels_second_filename))
+            idxs = np.where((gaze_labels >= 0) & (gaze_labels_second >= 0))
+            labels.extend(list(gaze_labels[idxs]))
+            preds.extend(list(gaze_labels_second[idxs]))
     human_dir = Path('plots', 'human')
     human_dir.mkdir(exist_ok=True, parents=True)
     visualize.calculate_confusion_matrix(labels, preds, human_dir / 'conf.pdf')
@@ -281,6 +286,7 @@ def visualize_human_confusion_matrix():
 def gen_lookit_multi_face_subset(force_create=False):
     """
     Generates the face labels for each frame using the trained face classifier and the nearest patch mechanism.
+    :param force_create: forces creation of files even if they exist
     :return:
     """
     multi_face_folder.mkdir()
@@ -321,12 +327,13 @@ def gen_lookit_multi_face_subset(force_create=False):
     logging.info(face_hist)
 
 
-def process_lookit_dataset():
+def process_lookit_dataset(model_path, force_create=False):
     """
-    process the lookit dataset using a trained face baby vs adult classifier
+    further process the lookit dataset using a trained face baby vs adult classifier
+    :param model_path: path to trained torch model file
+    :param force_create: forces creation of files even if they exist
     :return:
     """
-    model_path = ""
     val_infant_files = [f.stem for f in (face_data_folder / 'val' / 'infant').glob('*.png')]
     val_others_files = [f.stem for f in (face_data_folder / 'val' / 'others').glob('*.png')]
     num_correct = 0
@@ -338,30 +345,33 @@ def process_lookit_dataset():
         if f[-1] != f[-3]:
             num_correct += 1
     logging.info("{}, {}, {}".format(num_correct, total, num_correct / total))
-    parser = argparse.ArgumentParser(description='Training Script')
-    parser.add_argument('--device', '-d', default='cuda:0', type=str)
-    # augmentations
-    parser.add_argument('--rotation', default=False, action='store_true')
-    parser.add_argument('--cropping', default=False, action='store_true')
-    parser.add_argument('--hor_flip', default=False, action='store_true')
-    parser.add_argument('--ver_flip', default=False, action='store_true')
-    parser.add_argument('--color', default=False, action='store_true')
-    parser.add_argument('--erasing', default=False, action='store_true')
-    parser.add_argument('--noise', default=False, action='store_true')
-    # model architecture
-    parser.add_argument('--model', default='vgg16', type=str)  # resnet, alexnet, vgg, squeezenet
-    # dropout
-    parser.add_argument('--dropout', default=0, type=float)  # can only be applied to resnet & densenet
-    args = parser.parse_args()
 
+    class Args:
+        def __init__(self):
+            self.device = "cuda:0"
+            self.rotation = False
+            self.cropping = False
+            self.hor_flip = False
+            self.ver_flip = False
+            self.color = False
+            self.erasing = False
+            self.noise = False
+            self.model = "vgg16"
+            self.dropout = 0.0
+
+    args = Args()
     model, input_size = face_classifier.fc_model.init_face_classifier(args, model_name=args.model, num_classes=2, resume_from=model_path)
     data_transforms = face_classifier.fc_eval.get_fc_data_transforms(args, input_size)
     dataloaders = face_classifier.fc_data.get_dataset_dataloaders(args, input_size, 64, False)
     criterion = face_classifier.fc_model.get_loss()
     model.to(args.device)
 
-    val_loss, val_top1, val_labels, val_probs, val_target_labels = face_classifier.fc_eval.evaluate(args, model, dataloaders['val'], criterion,
-                                                                                                    return_prob=False, is_labelled=True,
+    val_loss, val_top1, val_labels, val_probs, val_target_labels = face_classifier.fc_eval.evaluate(args,
+                                                                                                    model,
+                                                                                                    dataloaders['val'],
+                                                                                                    criterion,
+                                                                                                    return_prob=False,
+                                                                                                    is_labelled=True,
                                                                                                     generate_labels=True)
 
     logging.info("\n[val] Failed images:\n")
@@ -371,46 +381,48 @@ def process_lookit_dataset():
 
     video_files = list(video_folder.glob("*.mp4"))
     for video_file in video_files:
-        logging.info(video_file.stem)
-        files = list((faces_folder / video_file.stem / 'img').glob(f'*.png'))
-        filenames = [f.stem for f in files]
-        filenames = sorted(filenames)
-        idx = 0
-        face_labels = np.load(str(Path.joinpath(faces_folder, video_file.stem, 'face_labels.npy')))
-        face_labels_fc = []
-        hor, ver = 0.5, 1
-        for frame in range(face_labels.shape[0]):
-            if face_labels[frame] < 0:
-                face_labels_fc.append(face_labels[frame])
-            else:
-                faces = []
-                centers = []
-                while idx < len(filenames) and (int(filenames[idx][:5]) == frame):
-                    img = Image.open(faces_folder / video_file.stem / 'img' / (filenames[idx] + '.png')).convert(
-                        'RGB')
-                    box = np.load(faces_folder / video_file.stem / 'box' / (filenames[idx] + '.npy'),
-                                  allow_pickle=True).item()
-                    centers.append([box['face_hor'], box['face_ver']])
-                    img = data_transforms['val'](img)
-                    faces.append(img)
-                    idx += 1
-                centers = np.stack(centers)
-                faces = torch.stack(faces).to(args.device)
-                model.eval()
-                output = model(faces)
-                _, preds = torch.max(output, 1)
-                preds = preds.cpu().numpy()
-                idxs = np.where(preds == 0)[0]
-                centers = centers[idxs]
-                if centers.shape[0] == 0:
-                    face_labels_fc.append(-1)
+        face_labels_fc_filename = Path.joinpath(faces_folder, video_file.stem, 'face_labels_fc.npy')
+        if not face_labels_fc_filename.is_file() or force_create:
+            logging.info(video_file.stem)
+            files = list((faces_folder / video_file.stem / 'img').glob(f'*.png'))
+            filenames = [f.stem for f in files]
+            filenames = sorted(filenames)
+            idx = 0
+            face_labels = np.load(str(Path.joinpath(faces_folder, video_file.stem, 'face_labels.npy')))
+            face_labels_fc = []
+            hor, ver = 0.5, 1
+            for frame in range(face_labels.shape[0]):
+                if face_labels[frame] < 0:
+                    face_labels_fc.append(face_labels[frame])
                 else:
-                    dis = np.sqrt((centers[:, 0] - hor) ** 2 + (centers[:, 1] - ver) ** 2)
-                    i = np.argmin(dis)
-                    face_labels_fc.append(idxs[i])
-                    hor, ver = centers[i]
-        face_labels_fc = np.array(face_labels_fc)
-        np.save(str(Path.joinpath(faces_folder, video_file.stem, 'face_labels_fc.npy')), face_labels_fc)
+                    faces = []
+                    centers = []
+                    while idx < len(filenames) and (int(filenames[idx][:5]) == frame):
+                        img = Image.open(faces_folder / video_file.stem / 'img' / (filenames[idx] + '.png')).convert(
+                            'RGB')
+                        box = np.load(faces_folder / video_file.stem / 'box' / (filenames[idx] + '.npy'),
+                                      allow_pickle=True).item()
+                        centers.append([box['face_hor'], box['face_ver']])
+                        img = data_transforms['val'](img)
+                        faces.append(img)
+                        idx += 1
+                    centers = np.stack(centers)
+                    faces = torch.stack(faces).to(args.device)
+                    model.eval()
+                    output = model(faces)
+                    _, preds = torch.max(output, 1)
+                    preds = preds.cpu().numpy()
+                    idxs = np.where(preds == 0)[0]
+                    centers = centers[idxs]
+                    if centers.shape[0] == 0:
+                        face_labels_fc.append(-1)
+                    else:
+                        dis = np.sqrt((centers[:, 0] - hor) ** 2 + (centers[:, 1] - ver) ** 2)
+                        i = np.argmin(dis)
+                        face_labels_fc.append(idxs[i])
+                        hor, ver = centers[i]
+            face_labels_fc = np.array(face_labels_fc)
+            np.save(str(face_labels_fc_filename), face_labels_fc)
 
 
 if __name__ == "__main__":
@@ -418,4 +430,6 @@ if __name__ == "__main__":
     preprocess_raw_lookit_dataset(force_create=False)
     process_lookit_dataset_legacy(force_create=False)
     generate_second_gaze_labels(force_create=False)
-    gen_lookit_multi_face_subset()
+    gen_lookit_multi_face_subset(force_create=False)
+    # uncomment next line if face classifier was trained:
+    # process_lookit_dataset(model_file_path, force_create=False)
