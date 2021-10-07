@@ -1,7 +1,6 @@
 import argparse
 from pathlib import Path
 
-
 def parse_arguments():
     """
     parse command line arguments
@@ -18,7 +17,7 @@ def parse_arguments():
     parser.add_argument("--frames_stride_size", type=int, default=2, help="Stride between frames")
     parser.add_argument("--eliminate_transitions", action="store_true",
                         help="If true, does not use frames where transitions occur (train only!)")
-    parser.add_argument("--architecture", type=str, choices=["fc", "icatcher_vanilla", "icatcher+"],
+    parser.add_argument("--architecture", type=str, choices=["fc", "icatcher_vanilla", "icatcher+", "rnn"],
                         default="icatcher+",
                         help="Selects architecture to use")
     parser.add_argument("--loss", type=str, choices=["cat_cross_entropy"], default="cat_cross_entropy",
@@ -45,5 +44,7 @@ def parse_arguments():
     if args.gpu_id == -1:
         args.device = "cpu"
     else:
-        args.device = "cuda:{}".format(args.gpu_id)
+        import os
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
+        args.device = "cuda:{}".format(0)
     return args

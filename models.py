@@ -86,6 +86,8 @@ class MyModule(torch.nn.Module):
             self.net = fc_network.network
         elif self.args.architecture == "icatcher+":
             self.net = GazeCodingModel(self.args).to(self.args.device)
+        elif self.args.architecture == "rnn":
+            self.net = RNNModel(self.args).to(self.args.device)
         else:
             raise NotImplementedError
         if self.args.loss == "cat_cross_entropy":
@@ -125,6 +127,49 @@ class iCatcherOriginal:
     """
     def __init__(self, args):
         raise NotImplementedError
+
+
+class RNNModel(torch.nn.Module):
+    def __init__(self, args):
+        super().__init__()
+        self.args = args
+        pretrained_model = resnet18(pretrained=True)
+        modules = list(pretrained_model.children())[:-1]      # delete the last fc layer.
+        self.baseModel = torch.nn.Sequential(*modules)
+        self.fc1 = torch.nn.Linear(512, 256).to(self.args.device)
+        self.bn1 = torch.nn.BatchNorm1d(256).to(self.args.device)
+        self.dropout = torch.nn.Dropout(0.2).to(self.args.device)
+        self.fc2 = torch.nn.Linear(256, 128).to(self.args.device)
+        self.rnn = torch.nn.LSTM(128, 32).to(self.args.device)
+        self.fc3 = torch.nn.Linear(32, 3).to(self.args.device)
+
+    def forward(self, x):
+        x = x["imgs"]
+        b, t, c, h, w = x.shape
+        seq = []
+        for tt in range(t):
+            with torch.no_grad():
+                out = self.baseModel(x[:, tt, :, :, :])  # ResNet
+                out = out.view(out.size(0), -1)  # flatten output of conv
+            out = self.fc1(out)
+            out = self.bn1(out)
+            out = F.relu(out)
+            out = self.dropout(out)
+            out = self.fc2(out)
+            seq.append(out)
+        seq = torch.stack(seq, dim=0)
+        out, (h_n, h_c) = self.rnn(seq)
+        out = self.fc3(out.transpose(1, 0)[:, 2, :])  # choose RNN_out at the mid time step
+        # b, t, c, h, w = x.shape
+        # ii = 0
+        # y = self.baseModel((x[:, ii]))
+        # output, (hn, cn) = self.rnn(y.unsqueeze(1))
+        # for ii in range(1, t):
+        #     y = self.baseModel((x[:, ii]))
+        #     out, (hn, cn) = self.rnn(y.unsqueeze(1), (hn, cn))
+        # out = self.dropout(out[:, -1])
+        # out = self.fc1(out)
+        return out
 
 
 class GazeCodingModel(torch.nn.Module):

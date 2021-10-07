@@ -4,6 +4,7 @@ import numpy as np
 from PIL import Image
 import copy
 from pathlib import Path
+import logging
 
 
 class DataTransforms:
@@ -86,6 +87,8 @@ class LookItDataset:
                     img_files_seg = img_files_seg[::self.args.frames_stride_size]
                     box_files_seg = box_files_seg[::self.args.frames_stride_size]
                     my_list.append((img_files_seg, box_files_seg, class_seg))
+            if not my_list:
+                logging.info("The video {} has no annotations".format(name))
         return my_list
 
     def __getitem__(self, index):
