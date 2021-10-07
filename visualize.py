@@ -388,10 +388,10 @@ def generate_plot_set(sorted_IDs, all_metrics, inference):
 
     accuracy_bar.legend()
 
-    ID_index = axs[0, 1]
-    cell_text = [[i, sorted_IDs[i]] for i in range(len(sorted_IDs))]
-    ID_index.table(cell_text, loc='center', fontsize=18)
-    ID_index.set_title("Video index to ID")
+    # ID_index = axs[0, 1]
+    # cell_text = [[i, sorted_IDs[i]] for i in range(len(sorted_IDs))]
+    # ID_index.table(cell_text, loc='center', fontsize=18)
+    # ID_index.set_title("Video index to ID")
 
     x_target_valid = [all_metrics[ID][inference]['num_target_valid'] for ID in sorted_IDs]
     y_target_valid = [all_metrics[ID][inference]['num_infered_valid'] for ID in sorted_IDs]
@@ -443,12 +443,12 @@ def generate_plot_set(sorted_IDs, all_metrics, inference):
         bottoms_tar += label_counts_tar
     label_bar.xaxis.set_major_locator(MultipleLocator(1))
     label_bar.set_xticks(ticks)
-    label_bar.set_title('Portion of each label\ntype for each video')
+    label_bar.set_title('Portion of each label\ntype for each video\n(left is infered)')
     label_bar.set_ylabel('Portion of total')
     label_bar.set_xlabel('Video')
     plt.subplots_adjust(left=0.1, bottom=0.075, right=0.9, top=0.925, wspace=0.2, hspace=0.5)
     plt.suptitle(f'{inference} evaluation', fontsize=24)
-    plt.savefig(f'./{inference}.png')
+    plt.savefig(f'/home/jupyter/{inference}.png', dpi=5000)
 
 
 def compare_all():
@@ -460,20 +460,26 @@ def compare_all():
     infered_root = "/home/jupyter/inference_output/iCatcherPlus/training_labels/"
 
     target_root = "/home/jupyter/data/training/labels/coding_union/"
+    coding_first = set([f for s,d,f in os.walk("/home/jupyter/data/training/labels/coding_first")][0])
+    coding_second = set([f for s,d,f in os.walk("/home/jupyter/data/training/labels/coding_second")][0])
+    coding_intersect = coding_first.intersection(coding_second)
+    print(coding_intersect)
     # Get a list of all iCatcher data files
     for subdir, dirs, files in os.walk(infered_root):
         for filename in files:
             if "checkpoint" not in filename:
                 print(filename)
                 infereds.append(os.path.abspath(infered_root + filename))
+
     print("target label time!")
     # Get a list of all target (humman annotated) data files
     for subdir, dirs, files in os.walk(target_root):
         for filename in files:
             logging.info("found label file {target_root}{filename}")
             if "checkpoint" not in filename:
-                print(filename)
-                targets.append(target_root + filename)
+                if filename in coding_intersect:
+                    print(filename)
+                    targets.append(target_root + filename)
 
     # sort the file paths alphabetically to pair them up
     targets.sort()
