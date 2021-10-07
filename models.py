@@ -149,8 +149,8 @@ class RNNModel(torch.nn.Module):
         seq = []
         for tt in range(t):
             with torch.no_grad():
-                out = self.baseModel(x[:, tt, :, :, :])  # ResNet
-                out = out.view(out.size(0), -1)  # flatten output of conv
+                out = self.baseModel(x[:, tt, :, :, :])  # use base model to predict per time-slice, but don't train it.
+                out = out.view(out.size(0), -1)  # flatten output
             out = self.fc1(out)
             out = self.bn1(out)
             out = F.relu(out)
@@ -160,15 +160,6 @@ class RNNModel(torch.nn.Module):
         seq = torch.stack(seq, dim=0)
         out, (h_n, h_c) = self.rnn(seq)
         out = self.fc3(out.transpose(1, 0)[:, 2, :])  # choose RNN_out at the mid time step
-        # b, t, c, h, w = x.shape
-        # ii = 0
-        # y = self.baseModel((x[:, ii]))
-        # output, (hn, cn) = self.rnn(y.unsqueeze(1))
-        # for ii in range(1, t):
-        #     y = self.baseModel((x[:, ii]))
-        #     out, (hn, cn) = self.rnn(y.unsqueeze(1), (hn, cn))
-        # out = self.dropout(out[:, -1])
-        # out = self.fc1(out)
         return out
 
 
