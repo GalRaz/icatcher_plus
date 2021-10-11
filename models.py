@@ -31,6 +31,12 @@ class MyModel:
             scheduler = torch.optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda=lambda_rule)
         elif self.opt.lr_policy == 'plateau':
             scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, 'min', verbose=True, patience=5)
+        elif self.opt.lr_policy == "cyclic":
+            scheduler = torch.optim.lr_scheduler.CyclicLR(optimizer=self.optimizer,
+                                                          base_lr=self.opt.lr / 20,
+                                                          max_lr=self.opt.lr,
+                                                          step_size_up=3,
+                                                          verbose=True)
         else:
             raise NotImplementedError
         return scheduler
