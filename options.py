@@ -22,7 +22,7 @@ def parse_arguments():
                         help="Selects architecture to use")
     parser.add_argument("--loss", type=str, choices=["cat_cross_entropy"], default="cat_cross_entropy",
                         help="Selects loss function to optimize")
-    parser.add_argument("--lr", type=int, default=1e-5, help="Initial learning rate")
+    parser.add_argument("--lr", type=float, default=1e-5, help="Initial learning rate")
     parser.add_argument('--lr_policy', type=str, choices=["lambda", "plateau", "cyclic"],
                         default='plateau',
                         help='learning rate scheduler policy')

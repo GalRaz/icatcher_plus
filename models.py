@@ -36,6 +36,7 @@ class MyModel:
                                                           base_lr=self.opt.lr / 20,
                                                           max_lr=self.opt.lr,
                                                           step_size_up=3,
+                                                          cycle_momentum=False,
                                                           verbose=True)
         else:
             raise NotImplementedError
