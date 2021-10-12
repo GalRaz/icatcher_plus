@@ -52,17 +52,25 @@ def train_loop(args):
                                                                  epoch_acc))
         model.save_network(which_epoch=str(epoch))
         model.save_network(which_epoch="latest")
+        model.network.train(mode=False)
         with torch.no_grad():
             running_loss = 0.0
+            running_corrects = 0
             num_datapoints = 0
             for batch in val_dataset:
                 output = model.network(batch)
                 val_loss = model.network.loss_fn(output, batch["label"])
+                _, predictions = torch.max(output, 1)
                 num_datapoints += batch["label"].shape[0]
                 running_loss += val_loss.item() * batch["label"].shape[0]
-            val_loss_total = running_loss / num_datapoints
-            my_logger.write_scaler("epoch", "val_loss", val_loss_total, epoch)
-            logging.info("validation: epoch: {}, loss: {}".format(epoch, val_loss_total))
+                running_corrects += torch.sum(torch.eq(predictions, batch["label"])).item()
+        model.network.train(mode=True)
+        val_loss_total = running_loss / num_datapoints
+        val_acc_total = (running_corrects / num_datapoints) * 100
+        my_logger.write_scaler("epoch", "val_loss", val_loss_total, epoch)
+        my_logger.write_scaler("epoch", "val_acc", val_acc_total, epoch)
+        logging.info("validation: epoch: {}, loss: {}".format(epoch, val_loss_total))
+        logging.info("validation: epoch: {}, acc: {}".format(epoch, val_acc_total))
         my_logger.write_scaler("epoch", "learning rate", model.optimizer.param_groups[0]['lr'], epoch)
         logging.info("lr: {}".format(model.optimizer.param_groups[0]['lr']))
         if args.lr_policy == "plateau":
