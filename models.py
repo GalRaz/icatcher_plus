@@ -33,8 +33,8 @@ class MyModel:
             scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, 'min', verbose=True, patience=5)
         elif self.opt.lr_policy == "cyclic":
             scheduler = torch.optim.lr_scheduler.CyclicLR(optimizer=self.optimizer,
-                                                          base_lr=self.opt.lr / 20,
-                                                          max_lr=self.opt.lr,
+                                                          base_lr=self.opt.lr,
+                                                          max_lr=self.opt.lr / 20,
                                                           step_size_up=3,
                                                           cycle_momentum=False,
                                                           verbose=True)
