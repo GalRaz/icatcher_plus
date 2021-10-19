@@ -86,7 +86,6 @@ def print_data_img_name(dataloaders, dl_key, selected_idxs=None):
 
 import sys
 
-# sys.path.append('/home/jupyter/parsers')
 from parsers import MyParserTxt
 import os
 import matplotlib.pyplot as plt
@@ -101,18 +100,19 @@ import cv2
 
 from colour import Color
 
+DEPLOYMENT_ROOT = Path("/home/jupyter")
+
 VALID_CLASSES = ["left", "right", "away"]
 GRAPH_CLASSES = ["left", "right", "away", "none"]
 ON_CLASSES = ["left", "right"]
 OFF_CLASSES = ["away"]
 LABEL_TO_COLOR = {"left": (0.5, 0.6, 0.9), "right": (0.6, 0.8, 0), "away": (0.95, 0.5, 0.4), "none": "lightgrey"}
-ICATCHER = "iCatcher"
-OPENGAZE = "Open Gaze"
-ICATCHER_SHIFT = "iCatcher shifted"
-INFERENCE_METHODS = [ICATCHER, ICATCHER_SHIFT]  # , OPENGAZE]
-OPEN_GAZE_PATH = "/home/jupyter/openGaze/open_gaze_labels.pkl"
+ICATCHER_PLUS = "iCatcher+"
+CODING_FIRST = "coding_first"
+CODING_SECOND = "coding_second"
+INFERENCE_METHODS = [CODING_SECOND, ICATCHER_PLUS]
 logging.basicConfig(level=logging.CRITICAL)
-OPEN_GAZE_LABELS = pickle.load(open(OPEN_GAZE_PATH, "rb"))
+METRIC_SAVE_PATH = visualization_root / "iCatcherPlus.p"
 
 
 def time_ms_to_frame(time_ms, fps=30):
@@ -132,40 +132,38 @@ def frame_to_time_ms(frame, fps=30):
 #                 return [time_ms, "none", 0]
 #     raise ValueError("ID not found in opengaze labels")
 
-def parse_open_gaze(ID):
-    labels = []
-    for video_path, label_list in OPEN_GAZE_LABELS.items():
-        if ID in video_path:
-            for frame_idx, label in enumerate(label_list):
+# def parse_open_gaze(ID):
+#     labels = []
+#     for video_path, label_list in OPEN_GAZE_LABELS.items():
+#         if ID in video_path:
+#             for frame_idx, label in enumerate(label_list):
+#
+#                 if frame_idx == 0:
+#                     labels.append([0, 1, label])
+#                 else:
+#                     if label != labels[-1][2]:
+#                         labels.append([frame_to_time_ms(frame_idx), 1, label])
+#             return labels
+#     return
+#     raise ValueError("ID not found in opengaze labels")
 
-                if frame_idx == 0:
-                    labels.append([0, 1, label])
-                else:
-                    if label != labels[-1][2]:
-                        labels.append([frame_to_time_ms(frame_idx), 1, label])
-            return labels
-    return
-    raise ValueError("ID not found in opengaze labels")
 
-
-def compare_files(target_path, infered_path, ID, offset=0):
-    logging.info("comparing target and infered labels: {target_path} vs {infered_path}")
+def compare_files(target_path, inferred_path, ID, offset=0):
+    logging.info("comparing target and inferred labels: {target_path} vs {inferred_path}")
     parser = MyParserTxt()
 
     target, start, end = parser.parse(target_path)
-    iCatcherParsed = parser.parse(infered_path)[0][:-1]
-    labels = {ICATCHER: iCatcherParsed,
-              ICATCHER_SHIFT: iCatcherParsed}
+    coding_second, _, _ = parser.parse(str(target_path).replace("first", "second"))
+    i_catcher_parsed = parser.parse(inferred_path)[0][:-1]
+    labels = {ICATCHER_PLUS: i_catcher_parsed,
+              CODING_SECOND: coding_second}
 
     total_frames = end - start
     metrics = dict()
 
     for inference in INFERENCE_METHODS:
-        offset=0
-        if inference == ICATCHER_SHIFT:
-            offset = 150
 
-        infered = labels[inference]
+        inferred = labels[inference]
         same_count = 0
         valid_frames_target = 0
 
@@ -174,86 +172,82 @@ def compare_files(target_path, infered_path, ID, offset=0):
                         "away": [],
                         "none": []}
 
-        times_infered = {"left": [],
-                         "right": [],
-                         "away": [],
-                         "none": []}
+        times_inferred = {"left": [],
+                          "right": [],
+                          "away": [],
+                          "none": []}
 
         target_by_label = [0, 0, 0]
-        infered_by_label = [0, 0, 0]
+        inferred_by_label = [0, 0, 0]
 
         left_right_agree = 0
         left_right_total = 0
 
         logging.info(f'There are {len(target)} labels in the human annotated data')
-        logging.info(f'There are {len(infered)} labels in the {inference} output')
+        logging.info(f'There are {len(inferred)} labels in the {inference} output')
 
         valid_labels_target = set()
-        valid_labels_infered = set()
-        print("frames!: ", start, end)
+        valid_labels_inferred = set()
         for frame_index in range(start, end):
-            # print(frame_index)
-
-
             if frame_index >= target[0][0]:  # wait for first ground truth (target) label
                 target_q = [index for index, val in enumerate(target) if frame_index >= val[0]]
                 target_label = target[max(target_q)]
-                if frame_index >= infered[0][0]:  # get the infered label if it exists
-                    infered_q = [index for index, val in enumerate(infered) if frame_index >= val[0] - offset]
-                    infered_label = infered[max(infered_q)]
+                if frame_index >= inferred[0][0]:  # get the inferred label if it exists
+                    inferred_q = [index for index, val in enumerate(inferred) if frame_index >= val[0] - offset]
+                    inferred_label = inferred[max(inferred_q)]
                 else:
-                    infered_label = [0, 0, "none"]
+                    inferred_label = [0, 0, "none"]
 
                 if target_label[2] in VALID_CLASSES:
                     times_target[target_label[2]].append(frame_index)
                 else:
                     times_target["none"].append(frame_index)
 
-                if infered_label[2] in VALID_CLASSES:
-                    times_infered[infered_label[2]].append(frame_index)
+                if inferred_label[2] in VALID_CLASSES:
+                    times_inferred[inferred_label[2]].append(frame_index)
                 else:
-                    times_infered["none"].append(frame_index)
+                    times_inferred["none"].append(frame_index)
 
                 # only consider frames where the target label is valid:
                 if target_label[1] == 1:
                     if target_label[2] not in VALID_CLASSES:
                         logging.critical("thats weird: {target_label}")
                     valid_labels_target.add(target_label[0])
-                    valid_labels_infered.add(infered_label[0])
+                    valid_labels_inferred.add(inferred_label[0])
 
                     valid_frames_target += 1
-                    if target_label[2] == infered_label[2]:
+                    if target_label[2] == inferred_label[2]:
                         same_count += 1
 
                     if target_label[2] in VALID_CLASSES:
                         target_by_label[VALID_CLASSES.index(target_label[2])] += 1
-                    if infered_label[2] in VALID_CLASSES:
-                        infered_by_label[VALID_CLASSES.index(infered_label[2])] += 1
+                    if inferred_label[2] in VALID_CLASSES:
+                        inferred_by_label[VALID_CLASSES.index(inferred_label[2])] += 1
 
                     if target_label[2] in ON_CLASSES:
-                        if target_label[2] == infered_label[2]:
+                        if target_label[2] == inferred_label[2]:
                             left_right_agree += 1
                         left_right_total += 1
 
         accuracy = same_count / valid_frames_target
         num_target_valid = len(valid_labels_target) / total_frames * 1000
-        num_infered_valid = len(valid_labels_infered) / total_frames * 1000
+        num_inferred_valid = len(valid_labels_inferred) / total_frames * 1000
 
         target_on_vs_away = (target_by_label[0] + target_by_label[1]) / sum(target_by_label)
-        infered_on_vs_away = (infered_by_label[0] + infered_by_label[1]) / sum(target_by_label)
+        inferred_on_vs_away = (inferred_by_label[0] + inferred_by_label[1]) / sum(target_by_label)
         left_right_accuracy = left_right_agree / left_right_total
 
         metrics[inference] = {"accuracy": accuracy,
                               "num_target_valid": num_target_valid,
-                              "num_infered_valid": num_infered_valid,
-                              "num_infered_valid": num_infered_valid,
+                              "num_inferred_valid": num_inferred_valid,
+                              "num_inferred_valid": num_inferred_valid,
                               "target_on_vs_away": target_on_vs_away,
-                              "infered_on_vs_away": infered_on_vs_away,
+                              "inferred_on_vs_away": inferred_on_vs_away,
                               "left_right_accuracy": left_right_accuracy,
-                              "infered_by_label": infered_by_label,
+                              "inferred_by_label": inferred_by_label,
                               "target_by_label": target_by_label,
                               "times_target": times_target,
-                              "times_infered": times_infered,
+                              "times_inferred": times_inferred,
                               "valid_range": [start, end]}
 
     return metrics
@@ -274,28 +268,48 @@ def save_metrics_csv(sorted_IDs, all_metrics, inference):
 
 
 def get_frame_from_video(ID, time_in_ms):
-    video_dir = "gaze-coding/videos/"
-    for subdir, dirs, files in os.walk(video_dir):
+    for subdir, dirs, files in os.walk(video_folder):
         for filename in files:
             if ID in filename:
-                video_path = video_dir + filename
+                video_path = video_folder / filename
                 cap = cv2.VideoCapture(str(video_path))
                 fps = cap.get(cv2.CAP_PROP_FPS)
                 frame_no = int(time_in_ms / 1000 * fps)
                 cap.set(cv2.CAP_PROP_FRAME_COUNT, frame_no - 1)
-                #                 print(frame_no)
                 ret, frame = cap.read()
                 x = 0
                 for i in range(frame_no):
                     x = i
                     ret, frame = cap.read()
-                #                 print(x)
                 if ret:
                     # first convert color mode to RGB
                     b, g, r = cv2.split(frame)
                     rgb_img = cv2.merge([r, g, b])
                     return rgb_img
     return np.ones(shape=(255, 255))
+
+
+def sample_luminance(ID, start, end, num_samples=10):
+    total_luminance = 0
+    sampled = 0
+    for subdir, dirs, files in os.walk(video_folder):
+        for filename in files:
+            if ID in filename:
+                video_path = video_folder + filename
+                cap = cv2.VideoCapture(str(video_path))
+                fps = cap.get(cv2.CAP_PROP_FPS)
+                frame_no = int(start / 1000 * fps)
+
+                for i in range(num_samples):
+                    cap.set(cv2.CAP_PROP_FRAME_COUNT, frame_no - 1)
+                    ret, frame = cap.read()
+                    b, g, r = cv2.split(frame)
+
+                    total_luminance += 0.2126 * np.sum(r) + 0.7152 * np.sum(g) + 0.0722 * np.sum(b)
+                    sampled += 1
+                    frame_no += (((end - start) / num_samples) / 1000 * fps)
+
+    return total_luminance / sampled
 
 
 def generate_frame_comparison(sorted_IDs, all_metrics):
@@ -310,33 +324,30 @@ def generate_frame_comparison(sorted_IDs, all_metrics):
     for i, target_ID in enumerate(tqdm(sorted_IDs)):
         timeline, accuracy, sample_frame = axs[i, :]
 
-        start, end = all_metrics[target_ID][ICATCHER]["valid_range"]
+        start, end = all_metrics[target_ID][ICATCHER_PLUS]["valid_range"]
         # end = start + 5000
         timeline.set_title("Video ID: " + str(target_ID) + " (Times " + str(start) + "-" + str(end) + " milliseconds)",
                            fontsize=14)
-        for i, name in enumerate([ICATCHER, "human_annotated", ICATCHER_SHIFT]):
+        for name in ["coding_first", "coding_second", ICATCHER_PLUS]:
             if name in INFERENCE_METHODS:  # iCatcher or openGaze
-                times = all_metrics[target_ID][name]['times_infered']
+                times = all_metrics[target_ID][name]['times_inferred']
             else:  # human data
-                times = all_metrics[target_ID][ICATCHER]['times_target']
+                times = all_metrics[target_ID][ICATCHER_PLUS]['times_target']
 
-            video_label = str(i)+'-'+name
+            video_label = str(i) + '-' + name
             skip = 100
-            offset = 0
-            if i ==2:
-                offset = 150
             for label in GRAPH_CLASSES:
                 timeline.barh(video_label, skip, left=times[label][::skip], height=1, label=label,
                               color=LABEL_TO_COLOR[label])
             timeline.set_xlabel("Time (ms)")
 
-            if i == 0 and name == ICATCHER:
+            if i == 0 and name == ICATCHER_PLUS:
                 timeline.legend(loc='upper right')
                 accuracy.set_title("Frame by frame accuracy for each model")
         accuracies = [all_metrics[target_ID][inference]['accuracy'] for inference in INFERENCE_METHODS]
-        colors = [color_gradient[int(acc * 100)].rgb for acc in accuracies]
+        # colors = [color_gradient[int(acc * 100)].rgb for acc in accuracies]
 
-        accuracy.bar(range(len(INFERENCE_METHODS)), accuracies, color=colors)
+        accuracy.bar(range(len(INFERENCE_METHODS)), accuracies, color="black")
         accuracy.set_xticks(range(len(INFERENCE_METHODS)))
         accuracy.set_xticklabels(INFERENCE_METHODS)
         accuracy.set_ylim([0, 1])
@@ -347,7 +358,7 @@ def generate_frame_comparison(sorted_IDs, all_metrics):
         sample_frame.imshow(get_frame_from_video(target_ID, sample_frame_index))
         sample_frame.set_title(f'Sample frame from video at time {int(sample_frame_index)}')
     plt.subplots_adjust(left=0.075, bottom=0.075, right=0.925, top=0.925, wspace=0.2, hspace=0.8)
-    plt.savefig('/home/jupyter/deployment/frame_by_frame_all.png')
+    plt.savefig('/home/jupyter/frame_by_frame_all.png')
 
 
 def generate_plot_set(sorted_IDs, all_metrics, inference):
@@ -358,12 +369,12 @@ def generate_plot_set(sorted_IDs, all_metrics, inference):
     on_away_scatter = axs[1, 1]
     label_scatter = axs[2, 0]
     label_bar = axs[2, 1]
-    SCATTER_PLOTS = [target_valid_scatter, on_away_scatter, label_scatter]
-    for ax in SCATTER_PLOTS:
+    scatter_plots = [target_valid_scatter, on_away_scatter, label_scatter]
+    for ax in scatter_plots:
         if ax == target_valid_scatter:
             #             pass
             ax.set_xlim([0, 3])
-            ax.set_ylim([0, 3])  # ax.set_ylim(bottom=0)
+            ax.set_ylim([0, 3])
         else:
             ax.set_xlim([0, 1])
             ax.set_ylim([0, 1])
@@ -373,7 +384,6 @@ def generate_plot_set(sorted_IDs, all_metrics, inference):
     x = np.arange(len(sorted_IDs))
 
     labels = range(len(sorted_IDs))
-
     ticks = range(len(sorted_IDs))
     accuracies = [all_metrics[ID][inference]['accuracy'] for ID in sorted_IDs]
     accuracy_bar.bar(x, accuracies, color='purple')
@@ -394,7 +404,7 @@ def generate_plot_set(sorted_IDs, all_metrics, inference):
     # ID_index.set_title("Video index to ID")
 
     x_target_valid = [all_metrics[ID][inference]['num_target_valid'] for ID in sorted_IDs]
-    y_target_valid = [all_metrics[ID][inference]['num_infered_valid'] for ID in sorted_IDs]
+    y_target_valid = [all_metrics[ID][inference]['num_inferred_valid'] for ID in sorted_IDs]
     target_valid_scatter.scatter(x_target_valid, y_target_valid)
     for i in range(len(sorted_IDs)):
         target_valid_scatter.annotate(i, (x_target_valid[i], y_target_valid[i]))
@@ -405,7 +415,7 @@ def generate_plot_set(sorted_IDs, all_metrics, inference):
         f'Number of distinct look events\n(\"left, right, away\") per second\nfor {inference} vs human data')
 
     x_target_away = [all_metrics[ID][inference]['target_on_vs_away'] for ID in sorted_IDs]
-    y_target_away = [all_metrics[ID][inference]['infered_on_vs_away'] for ID in sorted_IDs]
+    y_target_away = [all_metrics[ID][inference]['inferred_on_vs_away'] for ID in sorted_IDs]
     on_away_scatter.scatter(x_target_away, y_target_away)
     for i in range(len(sorted_IDs)):
         on_away_scatter.annotate(i, (x_target_away[i], y_target_away[i]))
@@ -416,7 +426,7 @@ def generate_plot_set(sorted_IDs, all_metrics, inference):
         f'Portion of left and right labels compared to\ntotal number of left, right, and away labels\nfor {inference} vs Human data')
 
     for i, label in enumerate(VALID_CLASSES):
-        x_labels = [y[i] / sum(y) for y in [all_metrics[ID][inference]['infered_by_label'] for ID in sorted_IDs]]
+        x_labels = [y[i] / sum(y) for y in [all_metrics[ID][inference]['inferred_by_label'] for ID in sorted_IDs]]
         y_labels = [y[i] / sum(y) for y in [all_metrics[ID][inference]['target_by_label'] for ID in sorted_IDs]]
         label_scatter.scatter(x_labels, y_labels, color=LABEL_TO_COLOR[label], label=label)
         for n in range(len(sorted_IDs)):
@@ -431,7 +441,7 @@ def generate_plot_set(sorted_IDs, all_metrics, inference):
     bottoms_tar = np.zeros(shape=(len(sorted_IDs)))
     for i, label in enumerate(VALID_CLASSES):
         label_counts_inf = [y[i] / sum(y) for y in
-                            [all_metrics[ID][inference]['infered_by_label'] for ID in sorted_IDs]]
+                            [all_metrics[ID][inference]['inferred_by_label'] for ID in sorted_IDs]]
         label_counts_tar = [y[i] / sum(y) for y in [all_metrics[ID][inference]['target_by_label'] for ID in sorted_IDs]]
 
         label_bar.bar(x - 0.22, label_counts_inf, bottom=bottoms_inf, width=0.4, label=label,
@@ -443,80 +453,91 @@ def generate_plot_set(sorted_IDs, all_metrics, inference):
         bottoms_tar += label_counts_tar
     label_bar.xaxis.set_major_locator(MultipleLocator(1))
     label_bar.set_xticks(ticks)
-    label_bar.set_title('Portion of each label\ntype for each video\n(left is infered)')
+    label_bar.set_title('Portion of each label\ntype for each video\n(left is inferred)')
     label_bar.set_ylabel('Portion of total')
     label_bar.set_xlabel('Video')
     plt.subplots_adjust(left=0.1, bottom=0.075, right=0.9, top=0.925, wspace=0.2, hspace=0.5)
     plt.suptitle(f'{inference} evaluation', fontsize=24)
-    plt.savefig(f'/home/jupyter/{inference}.png', dpi=5000)
+    plt.savefig(visualization_root / f'{inference}.png')
 
 
-def compare_all():
-    # sample infered path: pre-trained_output/labels/57bc591dc0d9d70055f775db_9KFOl_57e698f9c0d9d70060c6832a_public.csv
-    # sample target path: pre-trained_output/target_labels/57ddb1d7c0d9d70061c67cb4-evts.txt
-    infereds = []
+def plot_inference_accuracy_vs_human_agreement(sorted_IDs, all_metrics):
+    plt.scatter([all_metrics[id][CODING_SECOND]["accuracy"] for id in sorted_IDs],
+                [all_metrics[id][ICATCHER_PLUS]["accuracy"] for id in sorted_IDs])
+    plt.xlim([0, 1])
+    plt.ylim([0, 1])
+    plt.xlabel("Human agreement")
+    plt.ylabel(f'{ICATCHER_PLUS} accuracy')
+    plt.title(f'Inference accuracy versus human agreement for the {len(all_metrics)} doubly coded videos')
+    plt.savefig(visualization_root / 'iCatcher_acc_vs_certainty.png')
+
+
+def plot_luminance_vs_accuracy(sorted_IDs, all_metrics):
+    plt.scatter([sample_luminance(id, *all_metrics[id][ICATCHER_PLUS]['valid_range']) for id in sorted_IDs],
+                [all_metrics[id][ICATCHER_PLUS]["accuracy"] for id in sorted_IDs])
+    # plt.xlim([0, 1])
+    # plt.ylim([0, 1])
+    plt.xlabel("Luminance")
+    plt.ylabel(f'{ICATCHER_PLUS} accuracy')
+    plt.title(f'Inference accuracy versus mean video luminance for {len(all_metrics)} doubly coded videos')
+    plt.savefig(visualization_root / 'iCatcher_lum_vs_acc.png')
+
+
+def regenerate_saved_metrics():
+    inferreds = []
     targets = []
-    #     infered_root = "/home/jupyter/inference_output/iCatcherPlus/labels/"
-    infered_root = "/home/jupyter/inference_output/iCatcherPlus/training_labels/"
+    inferred_root = inference_output / "iCatcherPlus/training_labels/"
 
-    target_root = "/home/jupyter/data/training/labels/coding_union/"
-    coding_first = set([f for s,d,f in os.walk("/home/jupyter/data/training/labels/coding_first")][0])
-    coding_second = set([f for s,d,f in os.walk("/home/jupyter/data/training/labels/coding_second")][0])
+    target_root = label_folder
+    coding_first = set([f for s, d, f in os.walk(label_folder)][0])
+    coding_second = set([f for s, d, f in os.walk(label2_folder)][0])
     coding_intersect = coding_first.intersection(coding_second)
-    print(coding_intersect)
+
     # Get a list of all iCatcher data files
-    for subdir, dirs, files in os.walk(infered_root):
+    for subdir, dirs, files in os.walk(inferred_root):
         for filename in files:
             if "checkpoint" not in filename:
-                print(filename)
-                infereds.append(os.path.abspath(infered_root + filename))
+                inferreds.append(os.path.abspath(inferred_root / filename))
 
-    print("target label time!")
-    # Get a list of all target (humman annotated) data files
+    # Get a list of all target (human annotated) data files
     for subdir, dirs, files in os.walk(target_root):
         for filename in files:
             logging.info("found label file {target_root}{filename}")
             if "checkpoint" not in filename:
                 if filename in coding_intersect:
-                    print(filename)
-                    targets.append(target_root + filename)
+                    targets.append(target_root / filename)
 
     # sort the file paths alphabetically to pair them up
     targets.sort()
-    infereds.sort()
-    # targets = targets[:2]
-    #     infereds = infereds[:5]
+    inferreds.sort()
+    # targets = targets[:2] #Uncomment this to pilot a new plot type
     all_metrics = {}
-    all_metrics_offset = {}
-    REGENERATE = False
-    if REGENERATE:
-        for i, target in enumerate(tqdm(targets)):
-            for j, infered in enumerate(infereds):
-                target_ID = target.split("/")[-1].split("-")[0]
-                infered_ID = infered.split("/")[-1].split("_")[1]
-                #                 print(infered_ID)
-                #                 if target_ID in infered:
-                if infered_ID in target:
-                    print(target)
-                    all_metrics[target_ID] = compare_files(target, infered, target_ID)
-                    all_metrics[target_ID][ICATCHER]['filename'] = infered.split("/")[-1]
+    # regenerate = False
+    # if regenerate:
+    for i, target in enumerate(tqdm(targets)):
+        for j, inferred in enumerate(inferreds):
+            target_id = str(target).split("/")[-1].split("-")[0]
+            inferred_id = str(inferred).split("/")[-1].split("_")[1]
+            if inferred_id in str(target):
+                all_metrics[target_id] = compare_files(target, inferred, target_id)
+                all_metrics[target_id][ICATCHER_PLUS]['filename'] = inferred.split("/")[-1]
+                break
 
-                    #                     all_metrics[target_ID][OPENGAZE]['filename'] = OPEN_GAZE_PATH
-                    break
+    # Store the intermediate results so we can access them without regenerating everything:
+    pickle.dump(all_metrics, open(METRIC_SAVE_PATH, "wb"))
 
-        # Store the intermediate results so we can access them without regenerating everything:
-            pickle.dump(all_metrics, open("/home/jupyter/deployment/offset.p", "wb"))
 
-    all_metrics = pickle.load(open("/home/jupyter/deployment/offset.p", "rb"))
-    #     print(all_metrics)
+if __name__ == "__main__":
+    regenerate_saved_metrics()  # uncomment if you made any changes to how metrics are calculated!
 
-    #     sorted_IDs = sorted(list(all_metrics.keys()), key = lambda x: all_metrics[x]['accuracy']) #sort by accuracy
-    sorted_IDs = sorted(list(all_metrics.keys()))  # sort alphabetically
+    all_metrics = pickle.load(open(METRIC_SAVE_PATH, "rb"))
+    sorted_ids = sorted(list(all_metrics.keys()),
+                        key=lambda x: all_metrics[x][ICATCHER_PLUS]['accuracy'])  # sort by accuracy
+    # sorted_ids = sorted(list(all_metrics.keys()))  # sort alphabetically
     for inference in INFERENCE_METHODS:
-    #     #         save_metrics_csv(sorted_IDs, all_metrics, inference)
-        generate_plot_set(sorted_IDs, all_metrics, inference)
-
-    generate_frame_comparison(random.sample(sorted_IDs, min(len(sorted_IDs), 8)), all_metrics)
-
-
-compare_all()
+        # save_metrics_csv(sorted_ids, all_metrics, inference)
+        generate_plot_set(sorted_ids, all_metrics, inference)
+    generate_frame_comparison(random.sample(sorted_ids, min(len(sorted_ids), 8)), all_metrics)
+    plot_inference_accuracy_vs_human_agreement(sorted_ids, all_metrics)
+    plot_luminance_vs_accuracy(sorted_ids, all_metrics)
+    print(all_metrics)
