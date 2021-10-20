@@ -294,7 +294,7 @@ def sample_luminance(ID, start, end, num_samples=10):
     for subdir, dirs, files in os.walk(video_folder):
         for filename in files:
             if ID in filename:
-                video_path = video_folder + filename
+                video_path = video_folder / filename
                 cap = cv2.VideoCapture(str(video_path))
                 fps = cap.get(cv2.CAP_PROP_FPS)
                 frame_no = int(start / 1000 * fps)
@@ -334,7 +334,7 @@ def generate_frame_comparison(sorted_IDs, all_metrics):
                 times = all_metrics[target_ID][ICATCHER_PLUS]['times_target']
 
             video_label = str(i) + '-' + name
-            skip = 100
+            skip = 100 # frame comparison resolution. Increase to speed up plotting
             for label in GRAPH_CLASSES:
                 timeline.barh(video_label, skip, left=times[label][::skip], height=1, label=label,
                               color=LABEL_TO_COLOR[label])
@@ -527,7 +527,7 @@ def regenerate_saved_metrics():
 
 
 if __name__ == "__main__":
-    regenerate_saved_metrics()  # uncomment if you made any changes to how metrics are calculated!
+    # regenerate_saved_metrics()  # uncomment if you made any changes to how metrics are calculated!
 
     all_metrics = pickle.load(open(METRIC_SAVE_PATH, "rb"))
     sorted_ids = sorted(list(all_metrics.keys()),
@@ -539,4 +539,3 @@ if __name__ == "__main__":
     generate_frame_comparison(random.sample(sorted_ids, min(len(sorted_ids), 8)), all_metrics)
     plot_inference_accuracy_vs_human_agreement(sorted_ids, all_metrics)
     plot_luminance_vs_accuracy(sorted_ids, all_metrics)
-    print(all_metrics)
