@@ -240,7 +240,6 @@ def compare_files(target_path, inferred_path, ID, offset=0):
         metrics[inference] = {"accuracy": accuracy,
                               "num_target_valid": num_target_valid,
                               "num_inferred_valid": num_inferred_valid,
-                              "num_inferred_valid": num_inferred_valid,
                               "target_on_vs_away": target_on_vs_away,
                               "inferred_on_vs_away": inferred_on_vs_away,
                               "left_right_accuracy": left_right_accuracy,
@@ -255,16 +254,16 @@ def compare_files(target_path, inferred_path, ID, offset=0):
 
 def save_metrics_csv(sorted_IDs, all_metrics, inference):
     with open(f'iCatcher/plots/CSV_reports/{inference}', 'w', newline='') as csvfile:
-        csvWriter = csv.writer(csvfile, delimiter=',')
+        csv_writer = csv.writer(csvfile, delimiter=',')
         header = ["video ID", f'{inference} label path', "Accuracy"]
-        csvWriter.writerow(header)
+        csv_writer.writerow(header)
         for ID in sorted_IDs:
             row = []
             row.append(ID)
             bucket_root = "gaze-coding/iCatcher/pre-trained-inference/"
             row.append(bucket_root + all_metrics[ID][inference]['filename'])
             row.append(all_metrics[ID][inference]['accuracy'])
-            csvWriter.writerow(row)
+            csv_writer.writerow(row)
 
 
 def get_frame_from_video(ID, time_in_ms):
@@ -510,7 +509,7 @@ def regenerate_saved_metrics():
     # sort the file paths alphabetically to pair them up
     targets.sort()
     inferreds.sort()
-    # targets = targets[:2] #Uncomment this to pilot a new plot type
+    targets = targets[:2] #Uncomment this to pilot a new plot type
     all_metrics = {}
     # regenerate = False
     # if regenerate:
