@@ -34,7 +34,7 @@ def preprocess_raw_lookit_dataset(force_create=False):
     coding_second = [f.stem[:-5] for f in Path(raw_dataset_folder / 'coding_second').glob('*.txt')]
     videos = [f.stem for f in Path(raw_dataset_folder / 'videos').glob(prefix+'*.mp4')]
 
-    logging.info("coding_fist: {}".format(len(coding_first)))
+    logging.info("coding_first: {}".format(len(coding_first)))
     logging.info('coding_second: {}'.format(len(coding_second)))
     logging.info('videos: {}'.format(len(videos)))
 
@@ -110,8 +110,6 @@ def detect_face_opencv_dnn(net, frame, conf_threshold):
 
 def process_lookit_dataset_legacy(force_create=False):
     """
-    TODO: huge bug with this - frames which dont have an associated extracted patch are labeled as -1 !!!
-    MUST fix this to properly get a confusion matrix between humans.
     process the lookit dataset using the "lowest" face mechanism
     :param force_create: forces creation of files even if they exist
     :return:
@@ -146,17 +144,18 @@ def process_lookit_dataset_legacy(force_create=False):
                     q = [index for index, val in enumerate(responses) if frame_counter >= val[0]]
                     response_index = max(q)
                     if responses[response_index][1] != 0:  # make sure response is valid
+                        gaze_class = responses[response_index][2]
+                        gaze_labels.append(classes[gaze_class])
                         bbox = detect_face_opencv_dnn(net, frame, 0.7)
                         if not bbox:
                             no_face_counter += 1
-                            gaze_labels.append(-1)
-                            face_labels.append(-1)
+                            face_labels.append(-2)
                             logging.info("Face not detected in frame: " + str(frame_counter))
                         else:
                             # select lowest face, probably belongs to kid: face = min(bbox, key=lambda x: x[3] - x[1])
                             selected_face = 0
                             min_value = bbox[0][3] - bbox[0][1]
-                            gaze_class = responses[response_index][2]
+                            # gaze_class = responses[response_index][2]
                             for i, face in enumerate(bbox):
                                 if bbox[i][3] - bbox[i][1] < min_value:
                                     min_value = bbox[i][3] - bbox[i][1]
@@ -189,7 +188,6 @@ def process_lookit_dataset_legacy(force_create=False):
                                 if not box_filename.is_file() or force_create:
                                     np.save(str(box_filename), feature_dict)
                             valid_counter += 1
-                            gaze_labels.append(classes[gaze_class])
                             face_labels.append(selected_face)
                             # logging.info(f"valid frame in class {gaze_class}")
                     else:

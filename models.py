@@ -14,10 +14,15 @@ class MyModel:
         self.network = MyModule(opt)
         if opt.continue_train:
             self.load_network("latest")
-        self.optimizer = torch.optim.Adam(self.network.parameters(),
-                                          lr=opt.lr,
-                                          betas=(0.9, 0.999),
-                                          weight_decay=1e-5)
+        if self.opt.optimizer == "adam":
+            self.optimizer = torch.optim.Adam(self.network.parameters(),
+                                              lr=opt.lr,
+                                              betas=(0.9, 0.999),
+                                              weight_decay=1e-5)
+        elif self.opt.optimizer == "SGD":
+            self.optimizer = torch.optim.SGD(self.network.parameters(), lr=1e-2, momentum=0.9, weight_decay=1e-4)
+        else:
+            raise NotImplementedError
         self.scheduler = self.get_scheduler()
         self.network.to(self.opt.device)
 
@@ -31,6 +36,8 @@ class MyModel:
             scheduler = torch.optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda=lambda_rule)
         elif self.opt.lr_policy == 'plateau':
             scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, 'min', verbose=True, patience=5)
+        elif self.opt.lr_policy == 'multi_step':
+            scheduler = torch.optim.lr_scheduler.MultiStepLR(self.optimizer, milestones=[10, 15], gamma=0.1)
         elif self.opt.lr_policy == "cyclic":
             scheduler = torch.optim.lr_scheduler.CyclicLR(optimizer=self.optimizer,
                                                           base_lr=self.opt.lr,
