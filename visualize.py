@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 from config import *
 from sklearn.metrics import confusion_matrix
+import itertools
 
 
 def calculate_confusion_matrix(label, pred, save_path, class_num=3):
