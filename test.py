@@ -6,6 +6,21 @@ from preprocess import detect_face_opencv_dnn
 from options import parse_arguments_for_testing
 import visualize
 import logging
+import face_classifier
+
+
+class FaceClassifierArgs:
+    def __init__(self, device):
+        self.device = device
+        self.rotation = False
+        self.cropping = False
+        self.hor_flip = False
+        self.ver_flip = False
+        self.color = False
+        self.erasing = False
+        self.noise = False
+        self.model = "vgg16"
+        self.dropout = 0.0
 
 
 def prep_frame(popped_frame, bbox, class_text, face):
@@ -25,12 +40,13 @@ def prep_frame(popped_frame, bbox, class_text, face):
     return popped_frame
 
 
-def select_face(bbox, frame, fc_model):
+def select_face(bbox, frame, fc_model, fc_data_transforms):
     """
     selects a correct face from candidates bbox in frame
     :param bbox: the bounding boxes of candidates
     :param frame: the frame
     :param fc_model: a classifier model, if passed it is used to decide.
+    :param fc_data_transforms: the transformations to apply to the images before fc_model sees them
     :return: the cropped face and its bbox data
     """
     if fc_model:
@@ -70,6 +86,16 @@ def predict_from_video(opt):
     else:
         primary_model.load_state_dict(torch.load(str(path_to_primary_model)))
     primary_model.eval()
+
+    if opt.fc_model:
+        fc_args = FaceClassifierArgs(opt.device)
+        fc_model, fc_input_size = face_classifier.fc_model.init_face_classifier(fc_args,
+                                                                                model_name=args.model,
+                                                                                num_classes=2,
+                                                                                resume_from=opt.fc_model)
+        fc_data_transforms = face_classifier.fc_eval.get_fc_data_transforms(fc_args,
+                                                                            fc_input_size)
+
     # load face extractor model
     face_detector_model = cv2.dnn.readNetFromCaffe(str(config_file), str(face_detector_model_file))
     # set video source
@@ -130,7 +156,7 @@ def predict_from_video(opt):
                 image_sequence.append((image, True))
                 face = None
             else:
-                crop_img, face = select_face(bbox, frame, opt.fc_model)
+                crop_img, face = select_face(bbox, frame, fc_model, fc_data_transforms)
                 if crop_img.size == 0:
                     answers.append(classes['away'])  # if face detector fails, treat as away and mark invalid
                     image = np.zeros((1, resize_window, resize_window, 3), np.float64)
