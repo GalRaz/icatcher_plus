@@ -3,6 +3,7 @@ import logging
 from pathlib import Path
 import numpy as np
 
+
 class BaseParser:
     def __init__(self):
         self.classes = {'away': 0, 'left': 1, 'right': 2}
@@ -23,6 +24,21 @@ class BaseParser:
         :return: None if failed, else: list of lists as described above
         """
         raise NotImplementedError
+
+
+class TrivialParser(BaseParser):
+    """
+    A trivial parser that labels all video as "left" if input "file" is not None
+    """
+    def __init__(self):
+        super().__init__()
+
+    def parse(self, file):
+        if file:
+            return [[0, 1, "left"]]
+        else:
+            return None
+
 
 class MyParser:
     def __init__(self):
@@ -68,6 +84,7 @@ class MyParser:
             output.append(frame_label)
             # print(frame_label)
         return output
+
 
 class MyParserTxt:
     def __init__(self):
@@ -115,18 +132,6 @@ class MyParserTxt:
         if end == 0:
             end = int(output[-1][0])
         return output, start, end
-class TrivialParser(BaseParser):
-    """
-    A trivial parser that labels all video as "left" if input "file" is not None
-    """
-    def __init__(self):
-        super().__init__()
-
-    def parse(self, file):
-        if file:
-            return [[0, 1, "left"]]
-        else:
-            return None
 
 
 class XmlParser(BaseParser):

@@ -1,13 +1,36 @@
 import random
-
-import numpy as np
-import matplotlib.pyplot as plt
 import seaborn as sns
-import os
-from pathlib import Path
 from config import *
 from sklearn.metrics import confusion_matrix
 import itertools
+from parsers import MyParserTxt
+import os
+import matplotlib.pyplot as plt
+import pickle
+import numpy as np
+from tqdm import tqdm
+from matplotlib.ticker import (MultipleLocator, FormatStrFormatter, AutoMinorLocator)
+import csv
+import logging
+import cv2
+# from colour import Color
+from pathlib import Path
+
+
+### todo: retrieve globals from command line arguments ###
+DEPLOYMENT_ROOT = Path("/home/jupyter")
+VALID_CLASSES = ["left", "right", "away"]
+GRAPH_CLASSES = ["left", "right", "away", "none"]
+ON_CLASSES = ["left", "right"]
+OFF_CLASSES = ["away"]
+LABEL_TO_COLOR = {"left": (0.5, 0.6, 0.9), "right": (0.6, 0.8, 0), "away": (0.95, 0.5, 0.4), "none": "lightgrey"}
+ICATCHER_PLUS = "iCatcher+"
+CODING_FIRST = "coding_first"
+CODING_SECOND = "coding_second"
+INFERENCE_METHODS = [CODING_SECOND, ICATCHER_PLUS]
+logging.basicConfig(level=logging.CRITICAL)
+METRIC_SAVE_PATH = visualization_root / "iCatcherPlus.p"
+###########################################################
 
 
 def calculate_confusion_matrix(label, pred, save_path, class_num=3):
@@ -85,68 +108,12 @@ def print_data_img_name(dataloaders, dl_key, selected_idxs=None):
                 print(Path(tup[0]).parent.stem, Path(tup[0]).stem)
 
 
-import sys
-
-from parsers import MyParserTxt
-import os
-import matplotlib.pyplot as plt
-from matplotlib.transforms import Bbox
-import pickle
-import numpy as np
-from tqdm import tqdm
-from matplotlib.ticker import (MultipleLocator, FormatStrFormatter, AutoMinorLocator)
-import csv
-import logging
-import cv2
-
-from colour import Color
-
-DEPLOYMENT_ROOT = Path("/home/jupyter")
-
-VALID_CLASSES = ["left", "right", "away"]
-GRAPH_CLASSES = ["left", "right", "away", "none"]
-ON_CLASSES = ["left", "right"]
-OFF_CLASSES = ["away"]
-LABEL_TO_COLOR = {"left": (0.5, 0.6, 0.9), "right": (0.6, 0.8, 0), "away": (0.95, 0.5, 0.4), "none": "lightgrey"}
-ICATCHER_PLUS = "iCatcher+"
-CODING_FIRST = "coding_first"
-CODING_SECOND = "coding_second"
-INFERENCE_METHODS = [CODING_SECOND, ICATCHER_PLUS]
-logging.basicConfig(level=logging.CRITICAL)
-METRIC_SAVE_PATH = visualization_root / "iCatcherPlus.p"
-
-
 def time_ms_to_frame(time_ms, fps=30):
     return int(time_ms / 1000.0 * fps)
 
 
 def frame_to_time_ms(frame, fps=30):
     return int(frame * 1000 / fps)
-
-
-# def get_open_gaze_label(time_ms, ID):
-#     for video_path, label_list in OPEN_GAZE_LABELS.items():
-#         if ID in video_path:
-#             try:
-#                 return [time_ms, 0, label_list[time_ms_to_frame(time_ms)]]
-#             except IndexError:
-#                 return [time_ms, "none", 0]
-#     raise ValueError("ID not found in opengaze labels")
-
-# def parse_open_gaze(ID):
-#     labels = []
-#     for video_path, label_list in OPEN_GAZE_LABELS.items():
-#         if ID in video_path:
-#             for frame_idx, label in enumerate(label_list):
-#
-#                 if frame_idx == 0:
-#                     labels.append([0, 1, label])
-#                 else:
-#                     if label != labels[-1][2]:
-#                         labels.append([frame_to_time_ms(frame_idx), 1, label])
-#             return labels
-#     return
-#     raise ValueError("ID not found in opengaze labels")
 
 
 def compare_files(target_path, inferred_path, ID, offset=0):
@@ -525,6 +492,70 @@ def regenerate_saved_metrics():
 
     # Store the intermediate results so we can access them without regenerating everything:
     pickle.dump(all_metrics, open(METRIC_SAVE_PATH, "wb"))
+
+
+def put_text(img, class_name):
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    top_left_corner_text = (10, 30)
+    font_scale = 1
+    font_color = (255, 255, 255)
+    line_type = 2
+
+    cv2.putText(img, class_name,
+                top_left_corner_text,
+                font,
+                font_scale,
+                font_color,
+                line_type)
+    return img
+
+
+def put_arrow(img, class_name, face):
+    arrow_start_x = int(face[0] + 0.5 * face[2])
+    arrow_end_x = int(face[0] + 0.1 * face[2] if class_name == "left" else face[0] + 0.9 * face[2])
+    arrow_y = int(face[1] + 0.8 * face[3])
+    img = cv2.arrowedLine(img,
+                          (arrow_start_x, arrow_y),
+                          (arrow_end_x, arrow_y),
+                          (0, 255, 0),
+                          thickness=3,
+                          tipLength=0.4)
+    return img
+
+
+def put_rectangle(popped_frame, face):
+    color = (0, 255, 0)  # green
+    thickness = 2
+    popped_frame = cv2.rectangle(popped_frame,
+                                 (face[0], face[1]), (face[0] + face[2], face[1] + face[3]),
+                                 color,
+                                 thickness)
+    return popped_frame
+
+
+# def get_open_gaze_label(time_ms, ID):
+#     for video_path, label_list in OPEN_GAZE_LABELS.items():
+#         if ID in video_path:
+#             try:
+#                 return [time_ms, 0, label_list[time_ms_to_frame(time_ms)]]
+#             except IndexError:
+#                 return [time_ms, "none", 0]
+#     raise ValueError("ID not found in opengaze labels")
+
+# def parse_open_gaze(ID):
+#     labels = []
+#     for video_path, label_list in OPEN_GAZE_LABELS.items():
+#         if ID in video_path:
+#             for frame_idx, label in enumerate(label_list):
+#
+#                 if frame_idx == 0:
+#                     labels.append([0, 1, label])
+#                 else:
+#                     if label != labels[-1][2]:
+#                         labels.append([frame_to_time_ms(frame_idx), 1, label])
+#             return labels
+#     return
+#     raise ValueError("ID not found in opengaze labels")
 
 
 if __name__ == "__main__":
