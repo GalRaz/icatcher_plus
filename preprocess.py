@@ -5,7 +5,6 @@ import numpy as np
 import time
 import logging
 import visualize
-import argparse
 from PIL import Image
 import face_classifier.fc_model
 import face_classifier.fc_data
@@ -118,9 +117,15 @@ def detect_face_opencv_dnn(net, frame, conf_threshold):
     return bboxes
 
 
-def process_lookit_dataset_legacy(force_create=False):
+def process_lookit_dataset_legacy(gaze_labels_only=False, force_create=False):
     """
     process the lookit dataset using the "lowest" face mechanism
+    creates:
+        face crops (all recognized face crops that abide a threshold value 0.7)
+        boxes (the crop parameters - area / location etc)
+        gaze_labels (the label of the crop as annotated by first human)
+        face_labels (index of the face that was selected using lowest face mechanism)
+    :param gaze_labels_only: only creates gaze labels.
     :param force_create: forces creation of files even if they exist
     :return:
     """
@@ -156,51 +161,52 @@ def process_lookit_dataset_legacy(force_create=False):
                     if responses[response_index][1] != 0:  # make sure response is valid
                         gaze_class = responses[response_index][2]
                         gaze_labels.append(classes[gaze_class])
-                        bbox = detect_face_opencv_dnn(net, frame, 0.7)
-                        if not bbox:
-                            no_face_counter += 1
-                            face_labels.append(-2)
-                            logging.info("[process_lkt_legacy] Video %s: Face not detected in frame %d" %
-                                         (video_file.name, frame_counter))
-                        else:
-                            # select lowest face, probably belongs to kid: face = min(bbox, key=lambda x: x[3] - x[1])
-                            selected_face = 0
-                            min_value = bbox[0][3] - bbox[0][1]
-                            # gaze_class = responses[response_index][2]
-                            for i, face in enumerate(bbox):
-                                if bbox[i][3] - bbox[i][1] < min_value:
-                                    min_value = bbox[i][3] - bbox[i][1]
-                                    selected_face = i
-                                crop_img = frame[face[1]:face[1] + face[3], face[0]:face[0] + face[2]]
-                                # resized_img = cv2.resize(crop_img, (100, 100))
-                                resized_img = crop_img  # do not lose information in pre-processing step!
-                                face_box = np.array([face[1], face[1] + face[3], face[0], face[0] + face[2]])
-                                img_shape = np.array(frame.shape)
-                                ratio = np.array([face_box[0] / img_shape[0], face_box[1] / img_shape[0],
-                                                  face_box[2] / img_shape[1], face_box[3] / img_shape[1]])
-                                face_size = (ratio[1] - ratio[0]) * (ratio[3] - ratio[2])
-                                face_ver = (ratio[0] + ratio[1]) / 2
-                                face_hor = (ratio[2] + ratio[3]) / 2
-                                face_height = ratio[1] - ratio[0]
-                                face_width = ratio[3] - ratio[2]
-                                feature_dict = {
-                                    'face_box': face_box,
-                                    'img_shape': img_shape,
-                                    'face_size': face_size,
-                                    'face_ver': face_ver,
-                                    'face_hor': face_hor,
-                                    'face_height': face_height,
-                                    'face_width': face_width
-                                }
-                                img_filename = img_folder / f'{frame_counter:05d}_{i:01d}.png'
-                                if not img_filename.is_file() or force_create:
-                                    cv2.imwrite(str(img_filename), resized_img)
-                                box_filename = box_folder / f'{frame_counter:05d}_{i:01d}.npy'
-                                if not box_filename.is_file() or force_create:
-                                    np.save(str(box_filename), feature_dict)
-                            valid_counter += 1
-                            face_labels.append(selected_face)
-                            # logging.info(f"valid frame in class {gaze_class}")
+                        if not gaze_labels_only:
+                            bbox = detect_face_opencv_dnn(net, frame, 0.7)
+                            if not bbox:
+                                no_face_counter += 1
+                                face_labels.append(-2)
+                                logging.info("[process_lkt_legacy] Video %s: Face not detected in frame %d" %
+                                             (video_file.name, frame_counter))
+                            else:
+                                # select lowest face, probably belongs to kid: face = min(bbox, key=lambda x: x[3] - x[1])
+                                selected_face = 0
+                                min_value = bbox[0][3] - bbox[0][1]
+                                # gaze_class = responses[response_index][2]
+                                for i, face in enumerate(bbox):
+                                    if bbox[i][3] - bbox[i][1] < min_value:
+                                        min_value = bbox[i][3] - bbox[i][1]
+                                        selected_face = i
+                                    crop_img = frame[face[1]:face[1] + face[3], face[0]:face[0] + face[2]]
+                                    # resized_img = cv2.resize(crop_img, (100, 100))
+                                    resized_img = crop_img  # do not lose information in pre-processing step!
+                                    face_box = np.array([face[1], face[1] + face[3], face[0], face[0] + face[2]])
+                                    img_shape = np.array(frame.shape)
+                                    ratio = np.array([face_box[0] / img_shape[0], face_box[1] / img_shape[0],
+                                                      face_box[2] / img_shape[1], face_box[3] / img_shape[1]])
+                                    face_size = (ratio[1] - ratio[0]) * (ratio[3] - ratio[2])
+                                    face_ver = (ratio[0] + ratio[1]) / 2
+                                    face_hor = (ratio[2] + ratio[3]) / 2
+                                    face_height = ratio[1] - ratio[0]
+                                    face_width = ratio[3] - ratio[2]
+                                    feature_dict = {
+                                        'face_box': face_box,
+                                        'img_shape': img_shape,
+                                        'face_size': face_size,
+                                        'face_ver': face_ver,
+                                        'face_hor': face_hor,
+                                        'face_height': face_height,
+                                        'face_width': face_width
+                                    }
+                                    img_filename = img_folder / f'{frame_counter:05d}_{i:01d}.png'
+                                    if not img_filename.is_file() or force_create:
+                                        cv2.imwrite(str(img_filename), resized_img)
+                                    box_filename = box_folder / f'{frame_counter:05d}_{i:01d}.npy'
+                                    if not box_filename.is_file() or force_create:
+                                        np.save(str(box_filename), feature_dict)
+                                valid_counter += 1
+                                face_labels.append(selected_face)
+                                # logging.info(f"valid frame in class {gaze_class}")
                     else:
                         no_annotation_counter += 1
                         gaze_labels.append(-2)
@@ -219,14 +225,17 @@ def process_lookit_dataset_legacy(force_create=False):
             ret_val, frame = cap.read()
             frame_counter += 1
             logging.info("[process_lkt_legacy] Processing frame: {}".format(frame_counter))
+        # save gaze labels
         gaze_labels = np.array(gaze_labels)
-        face_labels = np.array(face_labels)
         gaze_labels_filename = Path.joinpath(faces_folder, video_file.stem, 'gaze_labels.npy')
         if not gaze_labels_filename.is_file() or force_create:
             np.save(str(gaze_labels_filename), gaze_labels)
-        face_labels_filename = Path.joinpath(faces_folder, video_file.stem, 'face_labels.npy')
-        if not face_labels_filename.is_file() or force_create:
-            np.save(str(face_labels_filename), face_labels)
+        if not gaze_labels_only:
+            # save face labels
+            face_labels = np.array(face_labels)
+            face_labels_filename = Path.joinpath(faces_folder, video_file.stem, 'face_labels.npy')
+            if not face_labels_filename.is_file() or force_create:
+                np.save(str(face_labels_filename), face_labels)
         logging.info(
             "[process_lkt_legacy] Total frame: {}, No face: {}, No annotation: {}, Valid: {}".format(
                 frame_counter, no_face_counter, no_annotation_counter, valid_counter))
@@ -435,11 +444,29 @@ def process_lookit_dataset(model_path, force_create=False):
             np.save(str(face_labels_fc_filename), face_labels_fc)
 
 
+def report_dataset_split():
+    """
+    prints out a list of training and test videos according to the heuristic that doubly coded videos are test set.
+    :return:
+    """
+    all_videos = []
+    test_videos = []
+    for path in sorted(label_folder.glob("*.txt")):
+        all_videos.append(path.name)
+    for path in sorted(label2_folder.glob("*.txt")):
+        test_videos.append(path.name)
+    train_videos = [x for x in all_videos if x not in test_videos]
+    logging.info("train videos: [{0}]".format(', '.join(map(str, train_videos))))
+    logging.info("test videos: [{0}]".format(', '.join(map(str, test_videos))))
+    # visualize_human_confusion_matrix()
+
+
 if __name__ == "__main__":
     logging.basicConfig(level="INFO")
     preprocess_raw_lookit_dataset(force_create=False)
-    process_lookit_dataset_legacy(force_create=False)
+    process_lookit_dataset_legacy(gaze_labels_only=False, force_create=False)
     generate_second_gaze_labels(force_create=False)
+    # report_dataset_split()
     gen_lookit_multi_face_subset(force_create=False)
     # uncomment next line if face classifier was trained:
     process_lookit_dataset(model_path=face_classifier_model_file, force_create=False)
