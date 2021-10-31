@@ -1,7 +1,7 @@
 import cv2
 from pathlib import Path
 import numpy as np
-from models import GazeCodingModel, MyModule
+from models import GazeCodingModel
 from preprocess import detect_face_opencv_dnn
 from options import parse_arguments_for_testing
 import visualize
@@ -129,19 +129,16 @@ def predict_from_video(opt):
                 popped_frame = frames[loc]
                 frames.pop(0)
                 if not image_sequence[sequence_length // 2][1]:  # if middle image is valid
-                    if opt.model == "icatcher":
-                        to_predict = [x[0] for x in image_sequence[0::2]]
-                        prediction = primary_model.predict(to_predict)
-                        predicted_classes = np.argmax(prediction, axis=1)
-                        int32_pred = np.int32(predicted_classes[0]).item()
-                    elif opt.model == "icatcher+":
-                        to_predict = {"imgs": torch.tensor([x[0] for x in image_sequence[0::2]], dtype=torch.float).squeeze().permute(0, 3, 1, 2),
-                                      "boxs": torch.tensor(box_sequence[::2], dtype=torch.float)
+                    if opt.architecture == "icatcher+":
+                        to_predict = {"imgs": torch.tensor([x[0] for x in image_sequence[0::2]], dtype=torch.float).squeeze().permute(0, 3, 1, 2).to(opt.device),
+                                      "boxs": torch.tensor(box_sequence[::2], dtype=torch.float).to(opt.device)
                                       }
                         with torch.set_grad_enabled(False):
                             outputs = primary_model(to_predict)
                             _, prediction = torch.max(outputs, 1)
                             int32_pred = prediction.cpu().numpy()[0]
+                    else:
+                        raise NotImplementedError
                     answers[loc] = int32_pred
                 image_sequence.pop(0)
                 box_sequence.pop(0)
