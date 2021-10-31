@@ -25,6 +25,24 @@ def prep_frame(popped_frame, bbox, class_text, face):
     return popped_frame
 
 
+def select_face(bbox, frame, fc_model):
+    """
+    selects a correct face from candidates bbox in frame
+    :param bbox: the bounding boxes of candidates
+    :param frame: the frame
+    :param fc_model: a classifier model, if passed it is used to decide.
+    :return: the cropped face and its bbox data
+    """
+    if fc_model:
+        crop_img = None
+        face = None
+    else:
+        # todo: improve face selection mechanism
+        face = min(bbox, key=lambda x: x[3] - x[1])  # select lowest face in image, probably belongs to kid
+        crop_img = frame[face[1]:face[1] + face[3], face[0]:face[0] + face[2]]
+    return crop_img, face
+
+
 def predict_from_video(opt):
     """
     perform prediction on a stream or video file(s) using a network.
@@ -34,26 +52,26 @@ def predict_from_video(opt):
     """
     # initialize
     import torch
-    logging.info("using the following values for per-channel mean: {}".format(opt.per_channel_mean))
-    logging.info("using the following values for per-channel std: {}".format(opt.per_channel_std))
-    face_model_file = Path("models", "face_model.caffemodel")
-    config_file = Path("models", "config.prototxt")
-    path_to_primary_model = opt.model
     opt.frames_per_datapoint = 10
     opt.frames_stride_size = 2
+    resize_window = 100
+    classes = {'away': 0, 'left': 1, 'right': 2}
+    reverse_dict = {0: 'away', 1: 'left', 2: 'right'}
+    sequence_length = 9
+    loc = -5
+    logging.info("using the following values for per-channel mean: {}".format(opt.per_channel_mean))
+    logging.info("using the following values for per-channel std: {}".format(opt.per_channel_std))
+    face_detector_model_file = Path("models", "face_model.caffemodel")
+    config_file = Path("models", "config.prototxt")
+    path_to_primary_model = opt.model
     primary_model = GazeCodingModel(opt).to(opt.device)
     if opt.device == 'cpu':
         primary_model.load_state_dict(torch.load(str(path_to_primary_model), map_location=torch.device(opt.device)))
     else:
         primary_model.load_state_dict(torch.load(str(path_to_primary_model)))
     primary_model.eval()
-    resize_window = 100
-    classes = {'away': 0, 'left': 1, 'right': 2}
-    reverse_dict = {0: 'away', 1: 'left', 2: 'right'}
-    sequence_length = 9
-    loc = -5
     # load face extractor model
-    face_model = cv2.dnn.readNetFromCaffe(str(config_file), str(face_model_file))
+    face_detector_model = cv2.dnn.readNetFromCaffe(str(config_file), str(face_detector_model_file))
     # set video source
     if opt.source_type == 'file':
         video_path = Path(opt.source)
@@ -102,7 +120,7 @@ def predict_from_video(opt):
         img_shape = np.array(frame.shape)
         while ret_val:
             frames.append(frame)
-            bbox = detect_face_opencv_dnn(face_model, frame, 0.7)
+            bbox = detect_face_opencv_dnn(face_detector_model, frame, 0.7)
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)  # network was trained on RGB images.
             if not bbox:
                 answers.append(classes['away'])  # if face detector fails, treat as away and mark invalid
@@ -112,10 +130,7 @@ def predict_from_video(opt):
                 image_sequence.append((image, True))
                 face = None
             else:
-                # todo: improve face selection mechanism
-                face = min(bbox, key=lambda x: x[3] - x[1])  # select lowest face in image, probably belongs to kid
-                crop_img = frame[face[1]:face[1] + face[3], face[0]:face[0] + face[2]]
-
+                crop_img, face = select_face(bbox, frame, opt.fc_model)
                 if crop_img.size == 0:
                     answers.append(classes['away'])  # if face detector fails, treat as away and mark invalid
                     image = np.zeros((1, resize_window, resize_window, 3), np.float64)

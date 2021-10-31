@@ -56,6 +56,8 @@ def parse_arguments_for_testing():
     parser = argparse.ArgumentParser()
     parser.add_argument("source", type=str, help="the source to use (path to video file or webcam id)")
     parser.add_argument("model", type=str, help="path to model that will be used for predictions")
+    parser.add_argument("--fc_model", type=str, help="path to face classifier model that will be used for deciding "
+                                                     "which crop should we select from every frame")
     parser.add_argument("--source_type", type=str, default="file", choices=["file", "webcam"],
                         help="selects source of stream to use.")
     parser.add_argument("--output_annotation", type=str, help="folder to output annotations to")
