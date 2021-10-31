@@ -9,6 +9,14 @@ import logging
 
 
 def prep_frame(popped_frame, bbox, class_text, face):
+    """
+    prepares a frame for visualization by adding text, rectangles and arrows.
+    :param popped_frame: the frame for which to add the gizmo's to
+    :param bbox: if this is not None, adds arrow and bounding box
+    :param class_text: the text describing the class
+    :param face: bounding box of face
+    :return:
+    """
     popped_frame = visualize.put_text(popped_frame, class_text)
     if bbox:
         popped_frame = visualize.put_rectangle(popped_frame, face)
@@ -18,6 +26,12 @@ def prep_frame(popped_frame, bbox, class_text, face):
 
 
 def predict_from_video(opt):
+    """
+    perform prediction on a stream or video file(s) using a network.
+    output can be of various kinds, see options for details.
+    :param opt:
+    :return:
+    """
     # initialize
     import torch
     logging.info("using the following values for per-channel mean: {}".format(opt.per_channel_mean))
