@@ -11,12 +11,13 @@ import face_classifier.fc_model
 import face_classifier.fc_data
 import face_classifier.fc_eval
 import torch
+from tqdm import tqdm
 
 
 def preprocess_raw_lookit_dataset(force_create=False):
     """
     Organizes the raw videos downloaded from the Lookit platform.
-    It puts the videos with annotations into videos folder and
+    It puts the videos with annotations into raw_videos folder and
     the annotation from the first and second human annotators into coding_first and coding_second folders respectively.
     :param force_create: forces creation of files even if they exist
     :return:
@@ -29,14 +30,15 @@ def preprocess_raw_lookit_dataset(force_create=False):
     label2_folder.mkdir(parents=True, exist_ok=True)
     faces_folder.mkdir(parents=True, exist_ok=True)
 
+    # TODO: Bugs: 1 file does not have this prefix; 1 file ends with .mov
     prefix = 'cfddb63f-12e9-4e62-abd1-47534d6c4dd2_'
     coding_first = [f.stem[:-5] for f in Path(raw_dataset_folder / 'coding_first').glob('*.txt')]
     coding_second = [f.stem[:-5] for f in Path(raw_dataset_folder / 'coding_second').glob('*.txt')]
     videos = [f.stem for f in Path(raw_dataset_folder / 'videos').glob(prefix+'*.mp4')]
 
-    logging.info("coding_first: {}".format(len(coding_first)))
-    logging.info('coding_second: {}'.format(len(coding_second)))
-    logging.info('videos: {}'.format(len(videos)))
+    logging.info('[preprocess_raw] coding_first: {}'.format(len(coding_first)))
+    logging.info('[preprocess_raw] coding_second: {}'.format(len(coding_second)))
+    logging.info('[preprocess_raw] videos: {}'.format(len(videos)))
 
     training_set = []
     test_set = []
@@ -51,7 +53,7 @@ def preprocess_raw_lookit_dataset(force_create=False):
             else:
                 training_set.append(filename)
 
-    logging.info('training set: {} validation set: {}'.format(len(training_set), len(test_set)))
+    logging.info('[preprocess_raw] training set: {} validation set: {}'.format(len(training_set), len(test_set)))
 
     for filename in training_set:
         if not Path(video_folder, (filename[len(prefix):]+'.mp4')).is_file() or force_create:
@@ -70,7 +72,7 @@ def preprocess_raw_lookit_dataset(force_create=False):
 
 def parse_lookit_label(file, fps):
     """
-    parses a label file from the lookit dataset
+    Parses a label file from the lookit dataset
     :param file: the file to parse
     :param fps: fps of the video
     :return:
@@ -91,6 +93,14 @@ def parse_lookit_label(file, fps):
 
 
 def detect_face_opencv_dnn(net, frame, conf_threshold):
+    """
+    Uses a pretrained face detection model to generate facial bounding boxes,
+    with the format [x, y, width, height] where [x, y] is the lower left coord
+    :param net:
+    :param frame:
+    :param conf_threshold:
+    :return:
+    """
     frameHeight = frame.shape[0]
     frameWidth = frame.shape[1]
     blob = cv2.dnn.blobFromImage(frame, 1.0, (300, 300), [104, 117, 123], False, False)
@@ -118,7 +128,7 @@ def process_lookit_dataset_legacy(force_create=False):
     net = cv2.dnn.readNetFromCaffe(str(config_file), str(face_model_file))
     for video_file in video_list:
         st_time = time.time()
-        logging.info("Proccessing: {}".format(str(video_file)))
+        logging.info("[process_lkt_legacy] Proccessing %s" % video_file.name)
         cur_video_folder = Path.joinpath(faces_folder / video_file.stem)
         cur_video_folder.mkdir(parents=True, exist_ok=True)
         img_folder = Path.joinpath(faces_folder, video_file.stem, 'img')
@@ -150,7 +160,8 @@ def process_lookit_dataset_legacy(force_create=False):
                         if not bbox:
                             no_face_counter += 1
                             face_labels.append(-2)
-                            logging.info("Face not detected in frame: " + str(frame_counter))
+                            logging.info("[process_lkt_legacy] Video %s: Face not detected in frame %d" %
+                                         (video_file.name, frame_counter))
                         else:
                             # select lowest face, probably belongs to kid: face = min(bbox, key=lambda x: x[3] - x[1])
                             selected_face = 0
@@ -194,20 +205,20 @@ def process_lookit_dataset_legacy(force_create=False):
                         no_annotation_counter += 1
                         gaze_labels.append(-2)
                         face_labels.append(-2)
-                        logging.info("Skipping since frame is invalid")
+                        logging.info("[process_lkt_legacy] Skipping since frame is invalid")
                 else:
                     no_annotation_counter += 1
                     gaze_labels.append(-2)
                     face_labels.append(-2)
-                    logging.info("Skipping since no annotation (yet)")
+                    logging.info("[process_lkt_legacy] Skipping since no annotation (yet)")
             else:
                 gaze_labels.append(-2)
                 face_labels.append(-2)
                 no_annotation_counter += 1
-                logging.info("Skipping frame since parser reported no annotation")
+                logging.info("[process_lkt_legacy] Skipping frame since parser reported no annotation")
             ret_val, frame = cap.read()
             frame_counter += 1
-            logging.info("Processing frame: {}".format(frame_counter))
+            logging.info("[process_lkt_legacy] Processing frame: {}".format(frame_counter))
         gaze_labels = np.array(gaze_labels)
         face_labels = np.array(face_labels)
         gaze_labels_filename = Path.joinpath(faces_folder, video_file.stem, 'gaze_labels.npy')
@@ -217,10 +228,10 @@ def process_lookit_dataset_legacy(force_create=False):
         if not face_labels_filename.is_file() or force_create:
             np.save(str(face_labels_filename), face_labels)
         logging.info(
-            "Total frame: {}, No face: {}, No annotation: {}, Valid: {}".format(frame_counter, no_face_counter,
-                                                                                no_annotation_counter, valid_counter))
+            "[process_lkt_legacy] Total frame: {}, No face: {}, No annotation: {}, Valid: {}".format(
+                frame_counter, no_face_counter, no_annotation_counter, valid_counter))
         ed_time = time.time()
-        logging.info('Time used: {}'.format(ed_time - st_time))
+        logging.info('[process_lkt_legacy] Time used: %.2f sec' % (ed_time - st_time))
 
 
 def generate_second_gaze_labels(force_create=False, visualize_confusion=True):
@@ -231,9 +242,8 @@ def generate_second_gaze_labels(force_create=False, visualize_confusion=True):
     :return:
     """
     video_list = list(video_folder.glob("*.mp4"))
-
     for video_file in video_list:
-        logging.info(video_file)
+        logging.info("[gen_2nd_labels] Video: %s" % video_file.name)
         if (label2_folder / (video_file.stem + '.txt')).exists():
             cap = cv2.VideoCapture(str(video_file))
             responses = parse_lookit_label(label2_folder / (video_file.stem + '.txt'), cap.get(cv2.CAP_PROP_FPS))
@@ -255,7 +265,7 @@ def generate_second_gaze_labels(force_create=False, visualize_confusion=True):
             if not gaze_labels_second_filename.is_file() or force_create:
                 np.save(str(gaze_labels_second_filename), gaze_labels_second)
         else:
-            logging.info('no label')
+            logging.info('[gen_2nd_labels] No label!')
     if visualize_confusion:
         visualize_human_confusion_matrix()
 
@@ -342,13 +352,13 @@ def process_lookit_dataset(model_path, force_create=False):
     for f in val_others_files:
         if f[-1] != f[-3]:
             num_correct += 1
-    logging.info("{}, {}, {}".format(num_correct, total, num_correct / total))
+    logging.info("\n[process_lkt] {}, {}, {}".format(num_correct, total, num_correct / total))
 
     # emulate command line arguments
     # replace with what was used to train the face classifier!
     class Args:
         def __init__(self):
-            self.device = "cuda:0"
+            self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
             self.rotation = False
             self.cropping = False
             self.hor_flip = False
@@ -380,7 +390,7 @@ def process_lookit_dataset(model_path, force_create=False):
     logging.info('val_loss: {:.4f}, val_top1: {:.4f}'.format(val_loss, val_top1))
 
     video_files = list(video_folder.glob("*.mp4"))
-    for video_file in video_files:
+    for video_file in tqdm(video_files):
         face_labels_fc_filename = Path.joinpath(faces_folder, video_file.stem, 'face_labels_fc.npy')
         if not face_labels_fc_filename.is_file() or force_create:
             logging.info(video_file.stem)
@@ -391,7 +401,7 @@ def process_lookit_dataset(model_path, force_create=False):
             face_labels = np.load(str(Path.joinpath(faces_folder, video_file.stem, 'face_labels.npy')))
             face_labels_fc = []
             hor, ver = 0.5, 1
-            for frame in range(face_labels.shape[0]):
+            for frame in tqdm(range(face_labels.shape[0])):
                 if face_labels[frame] < 0:
                     face_labels_fc.append(face_labels[frame])
                 else:
@@ -432,4 +442,4 @@ if __name__ == "__main__":
     generate_second_gaze_labels(force_create=False)
     gen_lookit_multi_face_subset(force_create=False)
     # uncomment next line if face classifier was trained:
-    # process_lookit_dataset(model_file_path, force_create=False)
+    process_lookit_dataset(model_path=face_classifier_model_file, force_create=False)
