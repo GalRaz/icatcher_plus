@@ -1,11 +1,11 @@
 import cv2
 from pathlib import Path
 import numpy as np
-import logging
-from models import GazeCodingModel
+from models import GazeCodingModel, MyModule
 from preprocess import detect_face_opencv_dnn
 from options import parse_arguments_for_testing
 import visualize
+import logging
 
 
 def prep_frame(popped_frame, bbox, class_text, face):
@@ -19,15 +19,15 @@ def prep_frame(popped_frame, bbox, class_text, face):
 
 def predict_from_video(opt):
     # initialize
+    import torch
     logging.info("using the following values for per-channel mean: {}".format(opt.per_channel_mean))
     logging.info("using the following values for per-channel std: {}".format(opt.per_channel_std))
     face_model_file = Path("models", "face_model.caffemodel")
     config_file = Path("models", "config.prototxt")
     path_to_primary_model = opt.model
-    import torch
     opt.frames_per_datapoint = 10
     opt.frames_stride_size = 2
-    primary_model = GazeCodingModel(opt).to(opt.gpu_id)
+    primary_model = GazeCodingModel(opt).to(opt.device)
     if opt.device == 'cpu':
         primary_model.load_state_dict(torch.load(str(path_to_primary_model), map_location=torch.device(opt.device)))
     else:

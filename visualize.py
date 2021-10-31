@@ -28,7 +28,7 @@ ICATCHER_PLUS = "iCatcher+"
 CODING_FIRST = "coding_first"
 CODING_SECOND = "coding_second"
 INFERENCE_METHODS = [CODING_SECOND, ICATCHER_PLUS]
-logging.basicConfig(level=logging.CRITICAL)
+# logging.basicConfig(level=logging.CRITICAL)
 METRIC_SAVE_PATH = visualization_root / "iCatcherPlus.p"
 ###########################################################
 

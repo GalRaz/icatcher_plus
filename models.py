@@ -11,20 +11,51 @@ class MyModel:
     """
     def __init__(self, opt):
         self.opt = copy.deepcopy(opt)
-        self.network = MyModule(opt)
+        self.loss_fn = self.get_loss_fn()
+        self.network = self.get_network()
         if opt.continue_train:
             self.load_network("latest")
-        if self.opt.optimizer == "adam":
-            self.optimizer = torch.optim.Adam(self.network.parameters(),
-                                              lr=opt.lr,
-                                              betas=(0.9, 0.999),
-                                              weight_decay=1e-5)
-        elif self.opt.optimizer == "SGD":
-            self.optimizer = torch.optim.SGD(self.network.parameters(), lr=1e-2, momentum=0.9, weight_decay=1e-4)
-        else:
-            raise NotImplementedError
+        self.optimizer = self.get_optimizer()
         self.scheduler = self.get_scheduler()
         self.network.to(self.opt.device)
+
+    def get_loss_fn(self):
+        if self.opt.loss == "cat_cross_entropy":
+            fn = torch.nn.CrossEntropyLoss()
+        else:
+            raise NotImplementedError
+        return fn
+
+    def get_network(self):
+        """
+        picks a network according to architecture
+        :return: the network
+        """
+        if self.opt.architecture == "fc":
+            network = FullyConnected(self.opt)
+        elif self.opt.architecture == "icatcher+":
+            network = GazeCodingModel(self.opt)
+        elif self.opt.architecture == "rnn":
+            network = RNNModel(self.opt)
+        else:
+            raise NotImplementedError
+        network.to(self.opt.device)
+        return network
+
+    def get_optimizer(self):
+        if self.opt.optimizer == "adam":
+            optimizer = torch.optim.Adam(self.network.parameters(),
+                                         lr=self.opt.lr,
+                                         betas=(0.9, 0.999),
+                                         weight_decay=1e-5)
+        elif self.opt.optimizer == "SGD":
+            optimizer = torch.optim.SGD(self.network.parameters(),
+                                        lr=1e-2,
+                                        momentum=0.9,
+                                        weight_decay=1e-4)
+        else:
+            raise NotImplementedError
+        return optimizer
 
     def get_scheduler(self):
         """
@@ -85,32 +116,6 @@ class MyModel:
         :return: number of parameters in the network
         """
         return sum(p.numel() for p in self.network.parameters() if p.requires_grad)
-
-
-class MyModule(torch.nn.Module):
-    """
-    wrapper around different architectures. supports various network architectures.
-    if this "layer" seems redundant, can be removed
-    """
-    def __init__(self, args):
-        super(MyModule, self).__init__()
-        self.args = copy.deepcopy(args)
-        if self.args.architecture == "fc":
-            fc_network = FullyConnected(self.args).to(self.args.device)
-            self.net = fc_network.network
-        elif self.args.architecture == "icatcher+":
-            self.net = GazeCodingModel(self.args).to(self.args.device)
-        elif self.args.architecture == "rnn":
-            self.net = RNNModel(self.args).to(self.args.device)
-        else:
-            raise NotImplementedError
-        if self.args.loss == "cat_cross_entropy":
-            self.loss_fn = torch.nn.CrossEntropyLoss()
-        else:
-            raise NotImplementedError
-
-    def forward(self, x):
-        return self.net.forward(x)
 
 
 class FullyConnected(torch.nn.Module):

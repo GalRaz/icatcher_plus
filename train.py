@@ -27,7 +27,7 @@ def train_loop(args):
         for batch_index, batch in enumerate(train_dataset):
             model.optimizer.zero_grad()
             output = model.network(batch)
-            train_loss = model.network.loss_fn(output, batch["label"])
+            train_loss = model.loss_fn(output, batch["label"])
             _, predictions = torch.max(output, 1)
             train_loss.backward()
             model.optimizer.step()
@@ -59,7 +59,7 @@ def train_loop(args):
             num_datapoints = 0
             for batch in val_dataset:
                 output = model.network(batch)
-                val_loss = model.network.loss_fn(output, batch["label"])
+                val_loss = model.loss_fn(output, batch["label"])
                 _, predictions = torch.max(output, 1)
                 num_datapoints += batch["label"].shape[0]
                 running_loss += val_loss.item() * batch["label"].shape[0]

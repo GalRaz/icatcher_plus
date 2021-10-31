@@ -64,6 +64,11 @@ def parse_arguments_for_testing():
     # Set up text output file, using https://osf.io/3n97m/ - PrefLookTimestamp coding standard
     parser.add_argument("--output_format", type=str, default="PrefLookTimestamp", choices=["PrefLookTimestamp",
                                                                                            "raw_output"])
+    parser.add_argument("--architecture", type=str, choices=["fc", "icatcher_vanilla", "icatcher+", "rnn"],
+                        default="icatcher+",
+                        help="Selects architecture to use")
+    parser.add_argument("--loss", type=str, choices=["cat_cross_entropy"], default="cat_cross_entropy",
+                        help="Selects loss function to optimize")
     parser.add_argument("--output_video_path", help="if present, annotated video will be saved to this folder")
     parser.add_argument("--show_output", action="store_true", help="show results online in a separate window")
     parser.add_argument("--per_channel_mean", nargs=3, metavar=("Channel1_mean", "Channel2_mean", "Channel3_mean"),
