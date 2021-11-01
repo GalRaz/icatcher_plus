@@ -205,7 +205,7 @@ def predict_from_video(opt):
                     "Tracks: left, right, away, codingactive, outofframe\nTime,Duration,TrackName,comment\n\n")
         # iterate over frames
         ret_val, frame = cap.read()
-        hor, ver = 0.5, 1
+        hor, ver = 0.5, 1  # used for improved selection of face
         while ret_val:
             frames.append(frame)
             cv2_bboxes = detect_face_opencv_dnn(face_detector_model, frame, 0.7)
@@ -226,12 +226,12 @@ def predict_from_video(opt):
                     my_box = np.array([0, 0, 0, 0, 0])
                     box_sequence.append(my_box)
                 else:
-                    assert crop.size != 0
+                    assert crop.size != 0  # what just happened?
                     answers.append(classes['left'])  # if face detector succeeds, treat as left and mark valid
                     image_sequence.append((crop, False))
                     box_sequence.append(my_box)
                     hor, ver = my_box[2], my_box[1]
-            if len(image_sequence) == sequence_length:
+            if len(image_sequence) == sequence_length:  # we have enough frames for prediction, predict for middle frame
                 popped_frame = frames[loc]
                 frames.pop(0)
                 if not image_sequence[sequence_length // 2][1]:  # if middle image is valid
@@ -260,7 +260,7 @@ def predict_from_video(opt):
                 if opt.output_video_path:
                     prepped_frame = prep_frame(popped_frame, my_box, class_text, selected_bbox)
                     video_output.write(prepped_frame)
-
+                # handle writing output to file
                 if opt.output_annotation:
                     if opt.output_format == "raw_output":
                         output_file.write("{}, {}\n".format(frame_count, class_text))
@@ -274,6 +274,7 @@ def predict_from_video(opt):
                 logging.info("frame: {}, class: {}".format(str(frame_count - sequence_length + 1), class_text))
             ret_val, frame = cap.read()
             frame_count += 1
+        # finished processing a video file, cleanup
         if opt.show_output:
             cv2.destroyAllWindows()
         if opt.output_video_path:
