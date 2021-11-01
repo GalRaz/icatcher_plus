@@ -71,6 +71,7 @@ def parse_arguments_for_testing():
                         help="Selects architecture to use")
     parser.add_argument("--loss", type=str, choices=["cat_cross_entropy"], default="cat_cross_entropy",
                         help="Selects loss function to optimize")
+    parser.add_argument("--image_size", type=int, default=100, help="All images will be resized to this size")
     parser.add_argument("--output_video_path", help="if present, annotated video will be saved to this folder")
     parser.add_argument("--show_output", action="store_true", help="show results online in a separate window")
     parser.add_argument("--per_channel_mean", nargs=3, metavar=("Channel1_mean", "Channel2_mean", "Channel3_mean"),

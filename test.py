@@ -7,6 +7,7 @@ from options import parse_arguments_for_testing
 import visualize
 import logging
 import face_classifier
+import torch
 
 
 class FaceClassifierArgs:
@@ -40,23 +41,82 @@ def prep_frame(popped_frame, bbox, class_text, face):
     return popped_frame
 
 
-def select_face(bbox, frame, fc_model, fc_data_transforms):
+def select_face(bboxes, frame, fc_model, fc_data_transforms, hor, ver):
     """
     selects a correct face from candidates bbox in frame
-    :param bbox: the bounding boxes of candidates
+    :param bboxes: the bounding boxes of candidates
     :param frame: the frame
     :param fc_model: a classifier model, if passed it is used to decide.
     :param fc_data_transforms: the transformations to apply to the images before fc_model sees them
+    :param hor: the last known horizontal correct face location
+    :param ver: the last known vertical correct face location
     :return: the cropped face and its bbox data
     """
     if fc_model:
-        crop_img = None
-        face = None
+        centers = []
+        faces = []
+        for box in bboxes:
+            crop_img = frame[box[1]:box[1] + box[3], box[0]:box[0] + box[2]]
+            face_box = np.array([box[1], box[1] + box[3], box[0], box[0] + box[2]])
+            img_shape = np.array(frame.shape)
+            ratio = np.array([face_box[0] / img_shape[0], face_box[1] / img_shape[0],
+                              face_box[2] / img_shape[1], face_box[3] / img_shape[1]])
+            face_ver = (ratio[0] + ratio[1]) / 2
+            face_hor = (ratio[2] + ratio[3]) / 2
+
+            centers.append([face_hor, face_ver])
+            img = crop_img
+            img = fc_data_transforms['val'](img)
+            faces.append(img)
+        centers = np.stack(centers)
+        faces = torch.stack(faces).to(args.device)
+        output = fc_model(faces)
+        _, preds = torch.max(output, 1)
+        preds = preds.cpu().numpy()
+        idxs = np.where(preds == 0)[0]
+        if idxs.size == 0:
+            bbox = None
+        else:
+            centers = centers[idxs]
+            dis = np.sqrt((centers[:, 0] - hor) ** 2 + (centers[:, 1] - ver) ** 2)
+            i = np.argmin(dis)
+            # crop_img = faces[idxs[i]]
+            bbox = bboxes[idxs[i]]
+            # hor, ver = centers[i]
     else:
         # todo: improve face selection mechanism
-        face = min(bbox, key=lambda x: x[3] - x[1])  # select lowest face in image, probably belongs to kid
-        crop_img = frame[face[1]:face[1] + face[3], face[0]:face[0] + face[2]]
-    return crop_img, face
+        bbox = min(bboxes, key=lambda x: x[3] - x[1])  # select lowest face in image, probably belongs to kid
+        # crop_img = frame[bbox[1]:bbox[1] + bbox[3], bbox[0]:bbox[0] + bbox[2]]
+    return bbox
+
+
+def extract_crop(frame, bbox, opt):
+    """
+    extracts a crop from a frame using bbox, and transforms it
+    :param frame: the frame
+    :param bbox: opencv bbox 4x1
+    :param opt: command line options
+    :return: the crop and the 5x1 box features
+    """
+    if bbox is None:
+        return None, None
+    img_shape = np.array(frame.shape)
+    face_box = np.array([bbox[1], bbox[1] + bbox[3], bbox[0], bbox[0] + bbox[2]])
+    crop = frame[bbox[1]:bbox[1] + bbox[3], bbox[0]:bbox[0] + bbox[2]]
+    crop = cv2.resize(crop, (opt.image_size, opt.image_size)) * 1. / 255
+    crop = np.expand_dims(crop, axis=0)
+    crop -= np.array(opt.per_channel_mean)
+    crop /= (np.array(opt.per_channel_std) + 1e-6)
+
+    ratio = np.array([face_box[0] / img_shape[0], face_box[1] / img_shape[0],
+                      face_box[2] / img_shape[1], face_box[3] / img_shape[1]])
+    face_size = (ratio[1] - ratio[0]) * (ratio[3] - ratio[2])
+    face_ver = (ratio[0] + ratio[1]) / 2
+    face_hor = (ratio[2] + ratio[3]) / 2
+    face_height = ratio[1] - ratio[0]
+    face_width = ratio[3] - ratio[2]
+    my_box = np.array([face_size, face_ver, face_hor, face_height, face_width])
+    return crop, my_box
 
 
 def predict_from_video(opt):
@@ -67,10 +127,8 @@ def predict_from_video(opt):
     :return:
     """
     # initialize
-    import torch
     opt.frames_per_datapoint = 10
     opt.frames_stride_size = 2
-    resize_window = 100
     classes = {'away': 0, 'left': 1, 'right': 2}
     reverse_dict = {0: 'away', 1: 'left', 2: 'right'}
     sequence_length = 9
@@ -90,12 +148,16 @@ def predict_from_video(opt):
     if opt.fc_model:
         fc_args = FaceClassifierArgs(opt.device)
         fc_model, fc_input_size = face_classifier.fc_model.init_face_classifier(fc_args,
-                                                                                model_name=args.model,
+                                                                                model_name=fc_args.model,
                                                                                 num_classes=2,
                                                                                 resume_from=opt.fc_model)
+        fc_model.eval()
+        fc_model.to(opt.device)
         fc_data_transforms = face_classifier.fc_eval.get_fc_data_transforms(fc_args,
                                                                             fc_input_size)
-
+    else:
+        fc_model = None
+        fc_data_transforms = None
     # load face extractor model
     face_detector_model = cv2.dnn.readNetFromCaffe(str(config_file), str(face_detector_model_file))
     # set video source
@@ -143,43 +205,32 @@ def predict_from_video(opt):
                     "Tracks: left, right, away, codingactive, outofframe\nTime,Duration,TrackName,comment\n\n")
         # iterate over frames
         ret_val, frame = cap.read()
-        img_shape = np.array(frame.shape)
+        hor, ver = 0.5, 1
         while ret_val:
             frames.append(frame)
-            bbox = detect_face_opencv_dnn(face_detector_model, frame, 0.7)
+            cv2_bboxes = detect_face_opencv_dnn(face_detector_model, frame, 0.7)
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)  # network was trained on RGB images.
-            if not bbox:
+            if not cv2_bboxes:
                 answers.append(classes['away'])  # if face detector fails, treat as away and mark invalid
-                image = np.zeros((1, resize_window, resize_window, 3), np.float64)
+                image = np.zeros((1, opt.image_size, opt.image_size, 3), np.float64)
                 my_box = np.array([0, 0, 0, 0, 0])
                 box_sequence.append(my_box)
                 image_sequence.append((image, True))
-                face = None
             else:
-                crop_img, face = select_face(bbox, frame, fc_model, fc_data_transforms)
-                if crop_img.size == 0:
-                    answers.append(classes['away'])  # if face detector fails, treat as away and mark invalid
-                    image = np.zeros((1, resize_window, resize_window, 3), np.float64)
+                selected_bbox = select_face(cv2_bboxes, frame, fc_model, fc_data_transforms, hor, ver)
+                crop, my_box = extract_crop(frame, selected_bbox, opt)
+                if selected_bbox is None:
+                    answers.append(classes['away'])  # if extracting crop fails, treat as away and mark invalid
+                    image = np.zeros((1, opt.image_size, opt.image_size, 3), np.float64)
                     image_sequence.append((image, True))
                     my_box = np.array([0, 0, 0, 0, 0])
                     box_sequence.append(my_box)
                 else:
+                    assert crop.size != 0
                     answers.append(classes['left'])  # if face detector succeeds, treat as left and mark valid
-                    image = cv2.resize(crop_img, (resize_window, resize_window)) * 1. / 255
-                    image = np.expand_dims(image, axis=0)
-                    image -= np.array(opt.per_channel_mean)
-                    image /= (np.array(opt.per_channel_std) + 1e-6)
-                    image_sequence.append((image, False))
-                    face_box = np.array([face[1], face[1] + face[3], face[0], face[0] + face[2]])
-                    ratio = np.array([face_box[0] / img_shape[0], face_box[1] / img_shape[0],
-                                      face_box[2] / img_shape[1], face_box[3] / img_shape[1]])
-                    face_size = (ratio[1] - ratio[0]) * (ratio[3] - ratio[2])
-                    face_ver = (ratio[0] + ratio[1]) / 2
-                    face_hor = (ratio[2] + ratio[3]) / 2
-                    face_height = ratio[1] - ratio[0]
-                    face_width = ratio[3] - ratio[2]
-                    my_box = np.array([face_size, face_ver, face_hor, face_height, face_width])
+                    image_sequence.append((crop, False))
                     box_sequence.append(my_box)
+                    hor, ver = my_box[2], my_box[1]
             if len(image_sequence) == sequence_length:
                 popped_frame = frames[loc]
                 frames.pop(0)
@@ -202,12 +253,12 @@ def predict_from_video(opt):
                     class_text = "off" if class_text == "away" else "on"
                 # If show_output or output_video is true, add text label, bounding box for face, and arrow showing direction
                 if opt.show_output:
-                    prepped_frame = prep_frame(popped_frame, bbox, class_text, face)
+                    prepped_frame = prep_frame(popped_frame, my_box, class_text, selected_bbox)
                     cv2.imshow('frame', prepped_frame)
                     if cv2.waitKey(1) & 0xFF == ord('q'):
                         break
                 if opt.output_video_path:
-                    prepped_frame = prep_frame(popped_frame, bbox, class_text, face)
+                    prepped_frame = prep_frame(popped_frame, my_box, class_text, selected_bbox)
                     video_output.write(prepped_frame)
 
                 if opt.output_annotation:
