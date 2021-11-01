@@ -9,7 +9,9 @@ structure of project is as follows:
         ├── fc_train.py         # not tested yet! (copy pasted, plus fixed errors)
     ├── models                  # Put all your model files here
     ├── train.py                # Main training loop, keep as generic as possible and minimal
+    ├── test.py                 # A sandbox for testing various models performance
     ├── visualize.py            # All visualizations should go here
+    ├── parsers.py              # Various looking videos coding formats are parsed using the classes in this file
     ├── logger.py               # Logging functions should go here (including prints)
     ├── models.py               # All torch models go here
     ├── data.py                 # All torch data loaders should go here
