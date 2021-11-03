@@ -40,53 +40,11 @@ class TrivialParser(BaseParser):
             return None
 
 
-class MyParser:
-    def __init__(self):
-        self.classes = {'away': 0, 'left': 1, 'right': 2}
-
-    def parse(self, file):
-        """
-        returns a list of lists. each list contains the frame number, valid_flag, class
-        where:
-        frame number is zero indexed
-        valid_flag is 1 if this frame has valid annotation, and 0 otherwise
-        class is either away, left, right or off.
-        list should only contain frames that have changes in class (compared to previous frame)
-        i.e. if the video is labled ["away","away","away","right","right"]
-        then only frame 0 and frame 3 will appear on the output list.
-        :param file: the label file to parse.
-        :return: None if failed, else: list of lists as described above
-        """
-        print("parsing! : ", file)
-        path = "/content/drive/MyDrive/colab-sessions/gaze-coding/training/data_set_training/labels/" 
-        labels = np.genfromtxt(open(path+file+".tsv", "rb"), dtype='str', delimiter="\t", skip_header=1)
-        output = []
-        num_frames = int(labels[-1, 1])
-        last_label = "left" #arbitrary, doesn't matter until valid flag gets changed to 1
-        valid_flag = 0
-
-       
-        # for frame in range(num_frames):
-        #     if str(frame) in labels[:, 0]:
-        #         label = labels[np.where(labels[:, 0] == str(frame)), 2][0]
-        #         class_flag = self.classes[label]
-        #         valid_flag = 1
-        #         frame_label = [frame, valid_flag, class_flag]
-        #         frame_label = [frame, valid_flag, class_flag]
-        #         output.append(frame_label)
-        for entry in range(labels.shape[0]):
-            frame = int(labels[entry, 0])
-            label = labels[entry, 2]
-            class_flag = label#self.classes[label]
-            valid_flag = 1 if class_flag in self.classes else 0
-            frame_label = [frame, valid_flag, class_flag]
-            # frame_label = [frame, valid_flag, class_flag]
-            output.append(frame_label)
-            # print(frame_label)
-        return output
-
-
-class MyParserTxt:
+class PrefLookTimestampParser:
+    """
+    a parser that can parse PrefLookTimestamp as described here:
+    https://osf.io/3n97m/
+    """
     def __init__(self):
         self.classes = {'away': 0, 'left': 1, 'right': 2}
 
@@ -128,7 +86,7 @@ class MyParserTxt:
             # frame_label = [frame, valid_flag, class_flag]
             output.append(frame_label)
             # print(frame_label)
-        output.sort(key= lambda x: x[0])
+        output.sort(key=lambda x: x[0])
         if end == 0:
             end = int(output[-1][0])
         return output, start, end

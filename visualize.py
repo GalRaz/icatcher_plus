@@ -1,10 +1,10 @@
 import random
 import seaborn as sns
-from config import *
 from sklearn.metrics import confusion_matrix
 import itertools
-from parsers import MyParserTxt
+from parsers import PrefLookTimestampParser
 import os
+from config import *
 import matplotlib.pyplot as plt
 import pickle
 import numpy as np
@@ -13,23 +13,18 @@ from matplotlib.ticker import (MultipleLocator, FormatStrFormatter, AutoMinorLoc
 import csv
 import logging
 import cv2
-# from colour import Color
+from colour import Color
 from pathlib import Path
+from options import parse_arguments_for_visualizations
 
 
 ### todo: retrieve globals from command line arguments ###
 DEPLOYMENT_ROOT = Path("/home/jupyter")
-VALID_CLASSES = ["left", "right", "away"]
 GRAPH_CLASSES = ["left", "right", "away", "none"]
 ON_CLASSES = ["left", "right"]
 OFF_CLASSES = ["away"]
 LABEL_TO_COLOR = {"left": (0.5, 0.6, 0.9), "right": (0.6, 0.8, 0), "away": (0.95, 0.5, 0.4), "none": "lightgrey"}
-ICATCHER_PLUS = "iCatcher+"
-CODING_FIRST = "coding_first"
-CODING_SECOND = "coding_second"
-INFERENCE_METHODS = [CODING_SECOND, ICATCHER_PLUS]
 # logging.basicConfig(level=logging.CRITICAL)
-METRIC_SAVE_PATH = visualization_root / "iCatcherPlus.p"
 ###########################################################
 
 
@@ -38,12 +33,12 @@ def calculate_confusion_matrix(label, pred, save_path, class_num=3):
     pred = np.array(pred)
     label = np.array(label)
     acc = sum(pred == label) / len(label)
-    print('acc:{:.4f}'.format(acc))
-    print('# datapoint', len(label))
+    logging.info('acc:{:.4f}'.format(acc))
+    logging.info('# datapoint: {}'.format(len(label)))
     for i in range(class_num):
         for j in range(class_num):
             mat[i][j] = sum((label == i) & (pred == j))
-    print(mat)
+    logging.info(mat)
     mat = mat / np.sum(mat, -1, keepdims=True)
     fig, ax = plt.subplots(figsize=(3, 3))
     ax = sns.heatmap(mat, ax=ax, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues')
@@ -116,22 +111,22 @@ def frame_to_time_ms(frame, fps=30):
     return int(frame * 1000 / fps)
 
 
-def compare_files(target_path, inferred_path, ID, offset=0):
+def compare_files(human_coding_file, human_coding_file2, machine_coding_path, offset=0):
     logging.info("comparing target and inferred labels: {target_path} vs {inferred_path}")
-    parser = MyParserTxt()
+    VALID_CLASSES = ["left", "right", "away"]
+    parser = PrefLookTimestampParser()
 
-    target, start, end = parser.parse(target_path)
-    coding_second, _, _ = parser.parse(str(target_path).replace("first", "second"))
-    i_catcher_parsed = parser.parse(inferred_path)[0][:-1]
-    labels = {ICATCHER_PLUS: i_catcher_parsed,
-              CODING_SECOND: coding_second}
+    human, start, end = parser.parse(human_coding_file)
+    human2, _, _ = parser.parse(human_coding_file2)
+    machine = parser.parse(machine_coding_path)[0][:-1]
+    codings = {"machine": machine,
+               "human2": human2}
 
     total_frames = end - start
     metrics = dict()
 
-    for inference in INFERENCE_METHODS:
-
-        inferred = labels[inference]
+    for coding in codings:
+        annotation = codings[coding]
         same_count = 0
         valid_frames_target = 0
 
@@ -151,18 +146,18 @@ def compare_files(target_path, inferred_path, ID, offset=0):
         left_right_agree = 0
         left_right_total = 0
 
-        logging.info(f'There are {len(target)} labels in the human annotated data')
-        logging.info(f'There are {len(inferred)} labels in the {inference} output')
+        logging.info(f'There are {len(human)} labels in the human annotated data')
+        logging.info(f'There are {len(annotation)} labels in the {coding} annotated')
 
         valid_labels_target = set()
         valid_labels_inferred = set()
         for frame_index in range(start, end):
-            if frame_index >= target[0][0]:  # wait for first ground truth (target) label
-                target_q = [index for index, val in enumerate(target) if frame_index >= val[0]]
-                target_label = target[max(target_q)]
-                if frame_index >= inferred[0][0]:  # get the inferred label if it exists
-                    inferred_q = [index for index, val in enumerate(inferred) if frame_index >= val[0] - offset]
-                    inferred_label = inferred[max(inferred_q)]
+            if frame_index >= human[0][0]:  # wait for first ground truth (target) label
+                target_q = [index for index, val in enumerate(human) if frame_index >= val[0]]
+                target_label = human[max(target_q)]
+                if frame_index >= annotation[0][0]:  # get the inferred label if it exists
+                    inferred_q = [index for index, val in enumerate(annotation) if frame_index >= val[0] - offset]
+                    inferred_label = annotation[max(inferred_q)]
                 else:
                     inferred_label = [0, 0, "none"]
 
@@ -205,17 +200,17 @@ def compare_files(target_path, inferred_path, ID, offset=0):
         inferred_on_vs_away = (inferred_by_label[0] + inferred_by_label[1]) / sum(target_by_label)
         left_right_accuracy = left_right_agree / left_right_total
 
-        metrics[inference] = {"accuracy": accuracy,
-                              "num_target_valid": num_target_valid,
-                              "num_inferred_valid": num_inferred_valid,
-                              "target_on_vs_away": target_on_vs_away,
-                              "inferred_on_vs_away": inferred_on_vs_away,
-                              "left_right_accuracy": left_right_accuracy,
-                              "inferred_by_label": inferred_by_label,
-                              "target_by_label": target_by_label,
-                              "times_target": times_target,
-                              "times_inferred": times_inferred,
-                              "valid_range": [start, end]}
+        metrics[coding] = {"accuracy": accuracy,
+                           "num_target_valid": num_target_valid,
+                           "num_inferred_valid": num_inferred_valid,
+                           "target_on_vs_away": target_on_vs_away,
+                           "inferred_on_vs_away": inferred_on_vs_away,
+                           "left_right_accuracy": left_right_accuracy,
+                           "inferred_by_label": inferred_by_label,
+                           "target_by_label": target_by_label,
+                           "times_target": times_target,
+                           "times_inferred": times_inferred,
+                           "valid_range": [start, end]}
 
     return metrics
 
@@ -279,7 +274,7 @@ def sample_luminance(ID, start, end, num_samples=10):
     return total_luminance / sampled
 
 
-def generate_frame_comparison(sorted_IDs, all_metrics):
+def generate_frame_comparison(sorted_IDs, all_metrics, save_path):
     widths = [8, 1, 1]
     heights = [1] * len(sorted_IDs)
     gs_kw = dict(width_ratios=widths, height_ratios=heights)
@@ -302,7 +297,7 @@ def generate_frame_comparison(sorted_IDs, all_metrics):
                 times = all_metrics[target_ID][ICATCHER_PLUS]['times_target']
 
             video_label = str(i) + '-' + name
-            skip = 100 # frame comparison resolution. Increase to speed up plotting
+            skip = 100  # frame comparison resolution. Increase to speed up plotting
             for label in GRAPH_CLASSES:
                 timeline.barh(video_label, skip, left=times[label][::skip], height=1, label=label,
                               color=LABEL_TO_COLOR[label])
@@ -325,10 +320,11 @@ def generate_frame_comparison(sorted_IDs, all_metrics):
         sample_frame.imshow(get_frame_from_video(target_ID, sample_frame_index))
         sample_frame.set_title(f'Sample frame from video at time {int(sample_frame_index)}')
     plt.subplots_adjust(left=0.075, bottom=0.075, right=0.925, top=0.925, wspace=0.2, hspace=0.8)
-    plt.savefig('/home/jupyter/frame_by_frame_all.png')
+    plt.savefig(save_path / 'frame_by_frame_all.png')
 
 
-def generate_plot_set(sorted_IDs, all_metrics, inference):
+def generate_plot_set(sorted_IDs, all_metrics, inference, save_path):
+    VALID_CLASSES = ["left", "right", "away"]
     fig, axs = plt.subplots(3, 2, figsize=(10, 12))
     accuracy_bar = axs[0, 0]
     axs[0, 1].axis('off')
@@ -425,10 +421,10 @@ def generate_plot_set(sorted_IDs, all_metrics, inference):
     label_bar.set_xlabel('Video')
     plt.subplots_adjust(left=0.1, bottom=0.075, right=0.9, top=0.925, wspace=0.2, hspace=0.5)
     plt.suptitle(f'{inference} evaluation', fontsize=24)
-    plt.savefig(visualization_root / f'{inference}.png')
+    plt.savefig(save_path / f'{inference}.png')
 
 
-def plot_inference_accuracy_vs_human_agreement(sorted_IDs, all_metrics):
+def plot_inference_accuracy_vs_human_agreement(sorted_IDs, all_metrics, save_path):
     plt.scatter([all_metrics[id][CODING_SECOND]["accuracy"] for id in sorted_IDs],
                 [all_metrics[id][ICATCHER_PLUS]["accuracy"] for id in sorted_IDs])
     plt.xlim([0, 1])
@@ -436,10 +432,10 @@ def plot_inference_accuracy_vs_human_agreement(sorted_IDs, all_metrics):
     plt.xlabel("Human agreement")
     plt.ylabel(f'{ICATCHER_PLUS} accuracy')
     plt.title(f'Inference accuracy versus human agreement for the {len(all_metrics)} doubly coded videos')
-    plt.savefig(visualization_root / 'iCatcher_acc_vs_certainty.png')
+    plt.savefig(save_path / 'iCatcher_acc_vs_certainty.png')
 
 
-def plot_luminance_vs_accuracy(sorted_IDs, all_metrics):
+def plot_luminance_vs_accuracy(sorted_IDs, all_metrics, save_path):
     plt.scatter([sample_luminance(id, *all_metrics[id][ICATCHER_PLUS]['valid_range']) for id in sorted_IDs],
                 [all_metrics[id][ICATCHER_PLUS]["accuracy"] for id in sorted_IDs])
     # plt.xlim([0, 1])
@@ -447,51 +443,71 @@ def plot_luminance_vs_accuracy(sorted_IDs, all_metrics):
     plt.xlabel("Luminance")
     plt.ylabel(f'{ICATCHER_PLUS} accuracy')
     plt.title(f'Inference accuracy versus mean video luminance for {len(all_metrics)} doubly coded videos')
-    plt.savefig(visualization_root / 'iCatcher_lum_vs_acc.png')
+    plt.savefig(save_path / 'iCatcher_lum_vs_acc.png')
 
 
-def regenerate_saved_metrics():
-    inferreds = []
-    targets = []
-    inferred_root = inference_output / "iCatcherPlus/training_labels/"
+def create_cache_metrics(args, force_create=False):
+    """
+    creates cache that can be used instead of parsing the annotation files from scratch each time
+    :return:
+    """
+    metric_save_path = args.output_folder / "iCatcherPlus.p"
+    if metric_save_path.is_file() and not force_create:
+        all_metrics = pickle.load(open(metric_save_path, "rb"))
+    else:
+        machine_annotation = []
+        human_annotation = []
+        human_annotation2 = []
+        # target_root = label_folder
+        # coding_first = set([x.name for x in Path(label_folder).glob("*")])
+        # coding_second = set([x.name for x in Path(label2_folder).glob("*")])
+        # coding_intersect = coding_first.intersection(coding_second)
 
-    target_root = label_folder
-    coding_first = set([f for s, d, f in os.walk(label_folder)][0])
-    coding_second = set([f for s, d, f in os.walk(label2_folder)][0])
-    coding_intersect = coding_first.intersection(coding_second)
+        # Get a list of all machine annotation files
+        for file in Path(args.human_annotation_folder).glob("*"):
+            human_annotation.append(file.name)
+        for file in Path(args.human_annotation_folder2).glob("*"):
+            human_annotation2.append(file.name)
+        for file in Path(args.machine_annotation_folder).glob("*"):
+            machine_annotation.append(file.name)
+        coding_intersect = set(human_annotation2).intersection(set(human_annotation))
+        coding_intersect = coding_intersect.intersection(set(machine_annotation))
+        # for subdir, dirs, files in os.walk(annotation_folder):
+        #     for filename in files:
+        #         machine_annotation.append(os.path.abspath(annotation_folder / filename))
 
-    # Get a list of all iCatcher data files
-    for subdir, dirs, files in os.walk(inferred_root):
-        for filename in files:
-            if "checkpoint" not in filename:
-                inferreds.append(os.path.abspath(inferred_root / filename))
+        # Get a list of all human annotation files
+        # for subdir, dirs, files in os.walk(target_root):
+        #     for filename in files:
+        #         logging.info("found label file {target_root}{filename}")
+        #         if filename in coding_intersect:
+        #             human_annotation.append(target_root / filename)
 
-    # Get a list of all target (human annotated) data files
-    for subdir, dirs, files in os.walk(target_root):
-        for filename in files:
-            logging.info("found label file {target_root}{filename}")
-            if "checkpoint" not in filename:
-                if filename in coding_intersect:
-                    targets.append(target_root / filename)
+        # sort the file paths alphabetically to pair them up
 
-    # sort the file paths alphabetically to pair them up
-    targets.sort()
-    inferreds.sort()
-    targets = targets[:2] #Uncomment this to pilot a new plot type
-    all_metrics = {}
-    # regenerate = False
-    # if regenerate:
-    for i, target in enumerate(tqdm(targets)):
-        for j, inferred in enumerate(inferreds):
-            target_id = str(target).split("/")[-1].split("-")[0]
-            inferred_id = str(inferred).split("/")[-1].split("_")[1]
-            if inferred_id in str(target):
-                all_metrics[target_id] = compare_files(target, inferred, target_id)
-                all_metrics[target_id][ICATCHER_PLUS]['filename'] = inferred.split("/")[-1]
-                break
+        coding_intersect = sorted(list(coding_intersect))
+        all_metrics = {}
+        for code_file in coding_intersect:
+            machine_coding_file = Path(args.machine_annotation_folder / code_file)
+            human_coding_file = Path(args.human_annotation_folder / code_file)
+            human_coding_file2 = Path(args.human_annotation_folder2 / code_file)
+            all_metrics[human_coding_file] = compare_files(human_coding_file, human_coding_file2, machine_coding_file)
+            # all_metrics[human_coding_file][ICATCHER_PLUS]['filename'] = machine_coding_file.name
 
-    # Store the intermediate results so we can access them without regenerating everything:
-    pickle.dump(all_metrics, open(METRIC_SAVE_PATH, "wb"))
+
+        # all_metrics = {}
+        # for i, h_coding in enumerate(tqdm(human_annotation)):
+        #     for j, m_coding in enumerate(machine_annotation):
+        #         human_coding_id = h_coding.stem
+        #         machine_coding_id = m_coding.stem
+        #         if machine_coding_id in human_coding_id:
+        #             all_metrics[human_coding_id] = compare_files(h_coding, m_coding)
+        #             all_metrics[human_coding_id][ICATCHER_PLUS]['filename'] = m_coding.name
+        #             break
+
+        # Store the intermediate results so we can access them without regenerating everything:
+        pickle.dump(all_metrics, open(metric_save_path, "wb"))
+    return all_metrics
 
 
 def put_text(img, class_name):
@@ -559,15 +575,29 @@ def put_rectangle(popped_frame, face):
 
 
 if __name__ == "__main__":
-    # regenerate_saved_metrics()  # uncomment if you made any changes to how metrics are calculated!
+    args = parse_arguments_for_visualizations()
+    if args.log:
+        args.log.parent.mkdir(parents=True, exist_ok=True)
+        logging.basicConfig(filename=args.log, filemode='w', level=args.verbosity.upper())
+    else:
+        logging.basicConfig(level=args.verbosity.upper())
 
-    all_metrics = pickle.load(open(METRIC_SAVE_PATH, "rb"))
+    args.human_codings_folder = Path("/disk3/yotam/icatcher+/datasets/lookit/coding_first")
+    args.human2_codings_folder = Path("/disk3/yotam/icatcher+/datasets/lookit/coding_second")
+    args.machine_codings_folder = Path("/disk3/yotam/icatcher+/datasets/lookit/coding_machine")
+    args.output_folder = Path("/disk3/yotam/icatcher+/runs/vanilla/output")
+
+    all_metrics = create_cache_metrics(args, force_create=False)
     sorted_ids = sorted(list(all_metrics.keys()),
                         key=lambda x: all_metrics[x][ICATCHER_PLUS]['accuracy'])  # sort by accuracy
     # sorted_ids = sorted(list(all_metrics.keys()))  # sort alphabetically
+    ICATCHER_PLUS = "iCatcher+"
+    CODING_FIRST = "coding_first"
+    CODING_SECOND = "coding_second"
+    INFERENCE_METHODS = [CODING_SECOND, ICATCHER_PLUS]
     for inference in INFERENCE_METHODS:
         # save_metrics_csv(sorted_ids, all_metrics, inference)
-        generate_plot_set(sorted_ids, all_metrics, inference)
-    generate_frame_comparison(random.sample(sorted_ids, min(len(sorted_ids), 8)), all_metrics)
-    plot_inference_accuracy_vs_human_agreement(sorted_ids, all_metrics)
-    plot_luminance_vs_accuracy(sorted_ids, all_metrics)
+        generate_plot_set(sorted_ids, all_metrics, inference, args.output_folder)
+    generate_frame_comparison(random.sample(sorted_ids, min(len(sorted_ids), 8)), all_metrics, args.output_folder)
+    plot_inference_accuracy_vs_human_agreement(sorted_ids, all_metrics, args.output_folder)
+    plot_luminance_vs_accuracy(sorted_ids, all_metrics, args.output_folder)

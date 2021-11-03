@@ -197,7 +197,7 @@ def predict_from_video(opt):
             my_video_path = Path(opt.output_video_path, video_path.stem + "_output{}".format(my_suffix))
             video_output = cv2.VideoWriter(str(my_video_path), fourcc, framerate, resolution, True)
         if opt.output_annotation:
-            my_output_file_path = Path(opt.output_annotation, video_path.stem + "_annotation.txt")
+            my_output_file_path = Path(opt.output_annotation, video_path.stem + ".txt")
             output_file = open(my_output_file_path, "w", newline="")
             if opt.output_format == "PrefLookTimestamp":
                 # Write header

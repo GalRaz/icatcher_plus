@@ -80,7 +80,7 @@ def parse_arguments_for_testing():
                         type=float, help="supply custom per-channel std of data for normalization")
     parser.add_argument("--gpu_id", type=int, default=-1, help="GPU id to use, use -1 for CPU.")
     parser.add_argument("--log",
-                        help="If present, writes training log to this path")
+                        help="If present, writes log to this path")
     parser.add_argument("-v", "--verbosity", type=str, choices=["debug", "info", "warning"], default="info",
                         help="Selects verbosity level")
     args = parser.parse_args()
@@ -112,4 +112,29 @@ def parse_arguments_for_testing():
         import os
         os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
         args.device = "cuda:{}".format(0)
+    return args
+
+
+def parse_arguments_for_visualizations():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("comparison_name", type=str,
+                        help="name of comparison (all results will be in output_folder/comparison_name)")
+    parser.add_argument("output_folder", type=str, default="output", help="path to output results.")
+    parser.add_argument("human_codings_folder", type=str, help="the codings from human1")
+    parser.add_argument("human2_codings_folder", type=str, help="the codings from human12")
+    parser.add_argument("machine_codings_folder", type=str, help="the codings from machine")
+    parser.add_argument("--log", help="If present, writes log to this path")
+    parser.add_argument("-v", "--verbosity", type=str, choices=["debug", "info", "warning"], default="info",
+                        help="Selects verbosity level")
+    args = parser.parse_args()
+    args.root = Path(args.output_folder)
+    args.root.mkdir(parents=True, exist_ok=True)
+    args.comparison_name = Path(args.root, args.comparison_name)
+    args.comparison_name.mkdir(parents=True, exist_ok=True)
+    args.human_codings_folder = Path(args.human_codings_folder)
+    assert args.human_codings_folder.is_dir()
+    args.human2_codings_folder = Path(args.human2_codings_folder)
+    assert args.human2_codings_folder.is_dir()
+    args.machine_codings_folder = Path(args.machine_codings_folder)
+    assert args.machine_codings_folder.is_dir()
     return args
