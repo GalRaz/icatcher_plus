@@ -111,22 +111,26 @@ def frame_to_time_ms(frame, fps=30):
     return int(frame * 1000 / fps)
 
 
-def compare_files(human_coding_file, human_coding_file2, machine_coding_path, offset=0):
+def compare_files(human_coding_file, human_coding_file2, machine_coding_file, offset=0):
     logging.info("comparing target and inferred labels: {target_path} vs {inferred_path}")
-    VALID_CLASSES = ["left", "right", "away"]
+    # VALID_CLASSES = ["left", "right", "away"]
     parser = PrefLookTimestampParser()
 
     human, start, end = parser.parse(human_coding_file)
+    human_np = np.array([x[0] for x in human])
     human2, _, _ = parser.parse(human_coding_file2)
-    machine = parser.parse(machine_coding_path)[0][:-1]
-    codings = {"machine": machine,
-               "human2": human2}
+    human2_np = np.array([x[0] for x in human2])
+    machine, _, _ = parser.parse(machine_coding_file)
+    machine_np = np.array([x[0] for x in machine])
+    machine = machine[:-1]
+    codings = {"machine": [machine, machine_np],
+               "human2": [human2, human2_np]}
 
     total_frames = end - start
     metrics = dict()
 
     for coding in codings:
-        annotation = codings[coding]
+        annotation = codings[coding][0]
         same_count = 0
         valid_frames_target = 0
 
@@ -146,34 +150,38 @@ def compare_files(human_coding_file, human_coding_file2, machine_coding_path, of
         left_right_agree = 0
         left_right_total = 0
 
-        logging.info(f'There are {len(human)} labels in the human annotated data')
-        logging.info(f'There are {len(annotation)} labels in the {coding} annotated')
+        logging.info(f'There are {len(human)} labels in the human codings')
+        logging.info(f'There are {len(annotation)} labels in the {coding} codings')
 
         valid_labels_target = set()
         valid_labels_inferred = set()
         for frame_index in range(start, end):
             if frame_index >= human[0][0]:  # wait for first ground truth (target) label
-                target_q = [index for index, val in enumerate(human) if frame_index >= val[0]]
-                target_label = human[max(target_q)]
+                target_q_np = np.nonzero(frame_index >= human_np)[0][-1]
+                # target_q = [index for index, val in enumerate(human) if frame_index >= val[0]]
+                # assert target_q_np==max(target_q)
+                target_label = human[target_q_np]
                 if frame_index >= annotation[0][0]:  # get the inferred label if it exists
-                    inferred_q = [index for index, val in enumerate(annotation) if frame_index >= val[0] - offset]
-                    inferred_label = annotation[max(inferred_q)]
+                    inferred_q_np = np.nonzero(frame_index >= (codings[coding][1] - offset))[0][-1]
+                    # inferred_q = [index for index, val in enumerate(annotation) if frame_index >= val[0] - offset]
+                    # assert inferred_q_np==max(inferred_q)
+                    inferred_label = annotation[inferred_q_np]
                 else:
                     inferred_label = [0, 0, "none"]
 
-                if target_label[2] in VALID_CLASSES:
+                if target_label[2] in classes.keys():
                     times_target[target_label[2]].append(frame_index)
                 else:
                     times_target["none"].append(frame_index)
 
-                if inferred_label[2] in VALID_CLASSES:
+                if inferred_label[2] in classes.keys():
                     times_inferred[inferred_label[2]].append(frame_index)
                 else:
                     times_inferred["none"].append(frame_index)
 
                 # only consider frames where the target label is valid:
                 if target_label[1] == 1:
-                    if target_label[2] not in VALID_CLASSES:
+                    if target_label[2] not in classes.keys():
                         logging.critical("thats weird: {target_label}")
                     valid_labels_target.add(target_label[0])
                     valid_labels_inferred.add(inferred_label[0])
@@ -182,10 +190,11 @@ def compare_files(human_coding_file, human_coding_file2, machine_coding_path, of
                     if target_label[2] == inferred_label[2]:
                         same_count += 1
 
-                    if target_label[2] in VALID_CLASSES:
-                        target_by_label[VALID_CLASSES.index(target_label[2])] += 1
-                    if inferred_label[2] in VALID_CLASSES:
-                        inferred_by_label[VALID_CLASSES.index(inferred_label[2])] += 1
+                    if target_label[2] in classes.keys():
+                        target_by_label[classes[target_label[2]]] += 1
+                    if inferred_label[2] in classes.keys():
+
+                        inferred_by_label[classes[inferred_label[2]]] += 1
 
                     if target_label[2] in ON_CLASSES:
                         if target_label[2] == inferred_label[2]:
@@ -256,7 +265,7 @@ def sample_luminance(ID, start, end, num_samples=10):
     sampled = 0
     for subdir, dirs, files in os.walk(video_folder):
         for filename in files:
-            if ID in filename:
+            if ID.stem in filename.stem:
                 video_path = video_folder / filename
                 cap = cv2.VideoCapture(str(video_path))
                 fps = cap.get(cv2.CAP_PROP_FPS)
@@ -284,17 +293,17 @@ def generate_frame_comparison(sorted_IDs, all_metrics, save_path):
     color_gradient = list(Color("red").range_to(Color("green"), 100))
 
     for i, target_ID in enumerate(tqdm(sorted_IDs)):
-        timeline, accuracy, sample_frame = axs[i, :]
+        timeline, accuracy, sample_frame = axs
 
-        start, end = all_metrics[target_ID][ICATCHER_PLUS]["valid_range"]
+        start, end = all_metrics[target_ID]["machine"]["valid_range"]
         # end = start + 5000
         timeline.set_title("Video ID: " + str(target_ID) + " (Times " + str(start) + "-" + str(end) + " milliseconds)",
                            fontsize=14)
-        for name in ["coding_first", "coding_second", ICATCHER_PLUS]:
+        for name in ["coding_first", "coding_second", "machine"]:
             if name in INFERENCE_METHODS:  # iCatcher or openGaze
                 times = all_metrics[target_ID][name]['times_inferred']
             else:  # human data
-                times = all_metrics[target_ID][ICATCHER_PLUS]['times_target']
+                times = all_metrics[target_ID]["machine"]['times_target']
 
             video_label = str(i) + '-' + name
             skip = 100  # frame comparison resolution. Increase to speed up plotting
@@ -303,7 +312,7 @@ def generate_frame_comparison(sorted_IDs, all_metrics, save_path):
                               color=LABEL_TO_COLOR[label])
             timeline.set_xlabel("Time (ms)")
 
-            if i == 0 and name == ICATCHER_PLUS:
+            if i == 0 and name == "machine":
                 timeline.legend(loc='upper right')
                 accuracy.set_title("Frame by frame accuracy for each model")
         accuracies = [all_metrics[target_ID][inference]['accuracy'] for inference in INFERENCE_METHODS]
@@ -320,11 +329,11 @@ def generate_frame_comparison(sorted_IDs, all_metrics, save_path):
         sample_frame.imshow(get_frame_from_video(target_ID, sample_frame_index))
         sample_frame.set_title(f'Sample frame from video at time {int(sample_frame_index)}')
     plt.subplots_adjust(left=0.075, bottom=0.075, right=0.925, top=0.925, wspace=0.2, hspace=0.8)
-    plt.savefig(save_path / 'frame_by_frame_all.png')
+    plt.savefig(Path(save_path, 'frame_by_frame_all.png'))
 
 
 def generate_plot_set(sorted_IDs, all_metrics, inference, save_path):
-    VALID_CLASSES = ["left", "right", "away"]
+    # VALID_CLASSES = ["left", "right", "away"]
     fig, axs = plt.subplots(3, 2, figsize=(10, 12))
     accuracy_bar = axs[0, 0]
     axs[0, 1].axis('off')
@@ -388,7 +397,7 @@ def generate_plot_set(sorted_IDs, all_metrics, inference, save_path):
     on_away_scatter.set_title(
         f'Portion of left and right labels compared to\ntotal number of left, right, and away labels\nfor {inference} vs Human data')
 
-    for i, label in enumerate(VALID_CLASSES):
+    for i, label in enumerate(sorted(classes.keys())):
         x_labels = [y[i] / sum(y) for y in [all_metrics[ID][inference]['inferred_by_label'] for ID in sorted_IDs]]
         y_labels = [y[i] / sum(y) for y in [all_metrics[ID][inference]['target_by_label'] for ID in sorted_IDs]]
         label_scatter.scatter(x_labels, y_labels, color=LABEL_TO_COLOR[label], label=label)
@@ -402,7 +411,7 @@ def generate_plot_set(sorted_IDs, all_metrics, inference, save_path):
 
     bottoms_inf = np.zeros(shape=(len(sorted_IDs)))
     bottoms_tar = np.zeros(shape=(len(sorted_IDs)))
-    for i, label in enumerate(VALID_CLASSES):
+    for i, label in enumerate(sorted(classes.keys())):
         label_counts_inf = [y[i] / sum(y) for y in
                             [all_metrics[ID][inference]['inferred_by_label'] for ID in sorted_IDs]]
         label_counts_tar = [y[i] / sum(y) for y in [all_metrics[ID][inference]['target_by_label'] for ID in sorted_IDs]]
@@ -421,29 +430,29 @@ def generate_plot_set(sorted_IDs, all_metrics, inference, save_path):
     label_bar.set_xlabel('Video')
     plt.subplots_adjust(left=0.1, bottom=0.075, right=0.9, top=0.925, wspace=0.2, hspace=0.5)
     plt.suptitle(f'{inference} evaluation', fontsize=24)
-    plt.savefig(save_path / f'{inference}.png')
+    plt.savefig(Path(save_path, "{}.png".format(inference)))
 
 
 def plot_inference_accuracy_vs_human_agreement(sorted_IDs, all_metrics, save_path):
-    plt.scatter([all_metrics[id][CODING_SECOND]["accuracy"] for id in sorted_IDs],
-                [all_metrics[id][ICATCHER_PLUS]["accuracy"] for id in sorted_IDs])
+    plt.scatter([all_metrics[id]["human2"]["accuracy"] for id in sorted_IDs],
+                [all_metrics[id]["machine"]["accuracy"] for id in sorted_IDs])
     plt.xlim([0, 1])
     plt.ylim([0, 1])
     plt.xlabel("Human agreement")
-    plt.ylabel(f'{ICATCHER_PLUS} accuracy')
+    plt.ylabel(f'{"machine"} accuracy')
     plt.title(f'Inference accuracy versus human agreement for the {len(all_metrics)} doubly coded videos')
-    plt.savefig(save_path / 'iCatcher_acc_vs_certainty.png')
+    plt.savefig(Path(save_path, 'iCatcher_acc_vs_certainty.png'))
 
 
 def plot_luminance_vs_accuracy(sorted_IDs, all_metrics, save_path):
-    plt.scatter([sample_luminance(id, *all_metrics[id][ICATCHER_PLUS]['valid_range']) for id in sorted_IDs],
-                [all_metrics[id][ICATCHER_PLUS]["accuracy"] for id in sorted_IDs])
+    plt.scatter([sample_luminance(id, *all_metrics[id]["machine"]['valid_range']) for id in sorted_IDs],
+                [all_metrics[id]["machine"]["accuracy"] for id in sorted_IDs])
     # plt.xlim([0, 1])
     # plt.ylim([0, 1])
     plt.xlabel("Luminance")
-    plt.ylabel(f'{ICATCHER_PLUS} accuracy')
+    plt.ylabel(f'{"machine"} accuracy')
     plt.title(f'Inference accuracy versus mean video luminance for {len(all_metrics)} doubly coded videos')
-    plt.savefig(save_path / 'iCatcher_lum_vs_acc.png')
+    plt.savefig(Path(save_path, 'iCatcher_lum_vs_acc.png'))
 
 
 def create_cache_metrics(args, force_create=False):
@@ -451,7 +460,7 @@ def create_cache_metrics(args, force_create=False):
     creates cache that can be used instead of parsing the annotation files from scratch each time
     :return:
     """
-    metric_save_path = args.output_folder / "iCatcherPlus.p"
+    metric_save_path = Path(args.output_folder, "metrics.p")
     if metric_save_path.is_file() and not force_create:
         all_metrics = pickle.load(open(metric_save_path, "rb"))
     else:
@@ -464,11 +473,11 @@ def create_cache_metrics(args, force_create=False):
         # coding_intersect = coding_first.intersection(coding_second)
 
         # Get a list of all machine annotation files
-        for file in Path(args.human_annotation_folder).glob("*"):
+        for file in Path(args.human_codings_folder).glob("*"):
             human_annotation.append(file.name)
-        for file in Path(args.human_annotation_folder2).glob("*"):
+        for file in Path(args.human2_codings_folder).glob("*"):
             human_annotation2.append(file.name)
-        for file in Path(args.machine_annotation_folder).glob("*"):
+        for file in Path(args.machine_codings_folder).glob("*"):
             machine_annotation.append(file.name)
         coding_intersect = set(human_annotation2).intersection(set(human_annotation))
         coding_intersect = coding_intersect.intersection(set(machine_annotation))
@@ -488,9 +497,9 @@ def create_cache_metrics(args, force_create=False):
         coding_intersect = sorted(list(coding_intersect))
         all_metrics = {}
         for code_file in coding_intersect:
-            machine_coding_file = Path(args.machine_annotation_folder / code_file)
-            human_coding_file = Path(args.human_annotation_folder / code_file)
-            human_coding_file2 = Path(args.human_annotation_folder2 / code_file)
+            human_coding_file = Path(args.human_codings_folder / code_file)
+            human_coding_file2 = Path(args.human2_codings_folder / code_file)
+            machine_coding_file = Path(args.machine_codings_folder / code_file)
             all_metrics[human_coding_file] = compare_files(human_coding_file, human_coding_file2, machine_coding_file)
             # all_metrics[human_coding_file][ICATCHER_PLUS]['filename'] = machine_coding_file.name
 
@@ -582,19 +591,16 @@ if __name__ == "__main__":
     else:
         logging.basicConfig(level=args.verbosity.upper())
 
-    args.human_codings_folder = Path("/disk3/yotam/icatcher+/datasets/lookit/coding_first")
-    args.human2_codings_folder = Path("/disk3/yotam/icatcher+/datasets/lookit/coding_second")
-    args.machine_codings_folder = Path("/disk3/yotam/icatcher+/datasets/lookit/coding_machine")
-    args.output_folder = Path("/disk3/yotam/icatcher+/runs/vanilla/output")
+    # args.human_codings_folder = Path("/disk3/yotam/icatcher+/datasets/lookit/coding_first")
+    # args.human2_codings_folder = Path("/disk3/yotam/icatcher+/datasets/lookit/coding_second")
+    # args.machine_codings_folder = Path("/disk3/yotam/icatcher+/datasets/lookit/coding_machine")
+    # args.output_folder = Path("/disk3/yotam/icatcher+/runs/vanilla/output")
 
     all_metrics = create_cache_metrics(args, force_create=False)
     sorted_ids = sorted(list(all_metrics.keys()),
-                        key=lambda x: all_metrics[x][ICATCHER_PLUS]['accuracy'])  # sort by accuracy
+                        key=lambda x: all_metrics[x]["machine"]["accuracy"])  # sort by accuracy
     # sorted_ids = sorted(list(all_metrics.keys()))  # sort alphabetically
-    ICATCHER_PLUS = "iCatcher+"
-    CODING_FIRST = "coding_first"
-    CODING_SECOND = "coding_second"
-    INFERENCE_METHODS = [CODING_SECOND, ICATCHER_PLUS]
+    INFERENCE_METHODS = ["human2", "machine"]
     for inference in INFERENCE_METHODS:
         # save_metrics_csv(sorted_ids, all_metrics, inference)
         generate_plot_set(sorted_ids, all_metrics, inference, args.output_folder)

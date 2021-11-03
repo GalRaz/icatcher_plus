@@ -126,7 +126,11 @@ def parse_arguments_for_visualizations():
     parser.add_argument("--log", help="If present, writes log to this path")
     parser.add_argument("-v", "--verbosity", type=str, choices=["debug", "info", "warning"], default="info",
                         help="Selects verbosity level")
-    args = parser.parse_args()
+    cmd = "test /disk3/yotam/icatcher+/runs/vanilla/output " \
+          "/disk3/yotam/icatcher+/datasets/lookit/coding_first " \
+          "/disk3/yotam/icatcher+/datasets/lookit/coding_second " \
+          "/disk3/yotam/icatcher+/datasets/lookit/coding_machine".split()
+    args = parser.parse_args(cmd)
     args.root = Path(args.output_folder)
     args.root.mkdir(parents=True, exist_ok=True)
     args.comparison_name = Path(args.root, args.comparison_name)
