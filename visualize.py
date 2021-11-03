@@ -73,7 +73,8 @@ def confusion_mat(targets, preds, classes, normalize=False, plot=False, title="C
         plt.ylabel('True label')
         plt.xlabel('Predicted label')
         plt.savefig(title + ".png")
-        plt.show()
+        plt.cla()
+        plt.clf()
 
     return cm
 
@@ -88,6 +89,7 @@ def plot_learning_curve(train_perfs, val_perfs, save_dir, isLoss=False):
     plt.title(metric_name, fontsize=16, y=1.002)
     plt.legend()
     plt.savefig(os.path.join(save_dir, 'learning_curve_%s.png' % metric_name))
+    plt.cla()
     plt.clf()
 
 
@@ -239,46 +241,42 @@ def save_metrics_csv(sorted_IDs, all_metrics, inference):
 
 
 def get_frame_from_video(ID, time_in_ms):
-    for subdir, dirs, files in os.walk(video_folder):
-        for filename in files:
-            if ID in filename:
-                video_path = video_folder / filename
-                cap = cv2.VideoCapture(str(video_path))
-                fps = cap.get(cv2.CAP_PROP_FPS)
-                frame_no = int(time_in_ms / 1000 * fps)
-                cap.set(cv2.CAP_PROP_FRAME_COUNT, frame_no - 1)
+    for video_file in Path(video_folder).glob("*"):
+        if ID.stem in video_file.name:
+            cap = cv2.VideoCapture(str(video_file))
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            frame_no = int(time_in_ms / 1000 * fps)
+            cap.set(cv2.CAP_PROP_FRAME_COUNT, frame_no - 1)
+            ret, frame = cap.read()
+            x = 0
+            for i in range(frame_no):
+                x = i
                 ret, frame = cap.read()
-                x = 0
-                for i in range(frame_no):
-                    x = i
-                    ret, frame = cap.read()
-                if ret:
-                    # first convert color mode to RGB
-                    b, g, r = cv2.split(frame)
-                    rgb_img = cv2.merge([r, g, b])
-                    return rgb_img
+            if ret:
+                # first convert color mode to RGB
+                b, g, r = cv2.split(frame)
+                rgb_img = cv2.merge([r, g, b])
+                return rgb_img
     return np.ones(shape=(255, 255))
 
 
 def sample_luminance(ID, start, end, num_samples=10):
     total_luminance = 0
     sampled = 0
-    for subdir, dirs, files in os.walk(video_folder):
-        for filename in files:
-            if ID.stem in filename.stem:
-                video_path = video_folder / filename
-                cap = cv2.VideoCapture(str(video_path))
-                fps = cap.get(cv2.CAP_PROP_FPS)
-                frame_no = int(start / 1000 * fps)
+    for video_file in video_folder.glob("*"):
+        if ID.stem in video_file.stem:
+            cap = cv2.VideoCapture(str(video_file))
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            frame_no = int(start / 1000 * fps)
 
-                for i in range(num_samples):
-                    cap.set(cv2.CAP_PROP_FRAME_COUNT, frame_no - 1)
-                    ret, frame = cap.read()
-                    b, g, r = cv2.split(frame)
+            for i in range(num_samples):
+                cap.set(cv2.CAP_PROP_FRAME_COUNT, frame_no - 1)
+                ret, frame = cap.read()
+                b, g, r = cv2.split(frame)
 
-                    total_luminance += 0.2126 * np.sum(r) + 0.7152 * np.sum(g) + 0.0722 * np.sum(b)
-                    sampled += 1
-                    frame_no += (((end - start) / num_samples) / 1000 * fps)
+                total_luminance += 0.2126 * np.sum(r) + 0.7152 * np.sum(g) + 0.0722 * np.sum(b)
+                sampled += 1
+                frame_no += (((end - start) / num_samples) / 1000 * fps)
 
     return total_luminance / sampled
 
@@ -330,6 +328,8 @@ def generate_frame_comparison(sorted_IDs, all_metrics, save_path):
         sample_frame.set_title(f'Sample frame from video at time {int(sample_frame_index)}')
     plt.subplots_adjust(left=0.075, bottom=0.075, right=0.925, top=0.925, wspace=0.2, hspace=0.8)
     plt.savefig(Path(save_path, 'frame_by_frame_all.png'))
+    plt.cla()
+    plt.clf()
 
 
 def generate_plot_set(sorted_IDs, all_metrics, inference, save_path):
@@ -431,9 +431,11 @@ def generate_plot_set(sorted_IDs, all_metrics, inference, save_path):
     plt.subplots_adjust(left=0.1, bottom=0.075, right=0.9, top=0.925, wspace=0.2, hspace=0.5)
     plt.suptitle(f'{inference} evaluation', fontsize=24)
     plt.savefig(Path(save_path, "{}.png".format(inference)))
+    plt.cla()
+    plt.clf()
 
+def plot_inference_accuracy_vs_human_agreement(sorted_IDs, all_metrics, args):
 
-def plot_inference_accuracy_vs_human_agreement(sorted_IDs, all_metrics, save_path):
     plt.scatter([all_metrics[id]["human2"]["accuracy"] for id in sorted_IDs],
                 [all_metrics[id]["machine"]["accuracy"] for id in sorted_IDs])
     plt.xlim([0, 1])
@@ -441,10 +443,11 @@ def plot_inference_accuracy_vs_human_agreement(sorted_IDs, all_metrics, save_pat
     plt.xlabel("Human agreement")
     plt.ylabel(f'{"machine"} accuracy')
     plt.title(f'Inference accuracy versus human agreement for the {len(all_metrics)} doubly coded videos')
-    plt.savefig(Path(save_path, 'iCatcher_acc_vs_certainty.png'))
+    plt.savefig(Path(args.output_folder, 'iCatcher_acc_vs_certainty.png'))
+    plt.cla()
+    plt.clf()
 
-
-def plot_luminance_vs_accuracy(sorted_IDs, all_metrics, save_path):
+def plot_luminance_vs_accuracy(sorted_IDs, all_metrics, args):
     plt.scatter([sample_luminance(id, *all_metrics[id]["machine"]['valid_range']) for id in sorted_IDs],
                 [all_metrics[id]["machine"]["accuracy"] for id in sorted_IDs])
     # plt.xlim([0, 1])
@@ -452,8 +455,9 @@ def plot_luminance_vs_accuracy(sorted_IDs, all_metrics, save_path):
     plt.xlabel("Luminance")
     plt.ylabel(f'{"machine"} accuracy')
     plt.title(f'Inference accuracy versus mean video luminance for {len(all_metrics)} doubly coded videos')
-    plt.savefig(Path(save_path, 'iCatcher_lum_vs_acc.png'))
-
+    plt.savefig(Path(args.output_folder, 'iCatcher_lum_vs_acc.png'))
+    plt.cla()
+    plt.clf()
 
 def create_cache_metrics(args, force_create=False):
     """
@@ -605,5 +609,5 @@ if __name__ == "__main__":
         # save_metrics_csv(sorted_ids, all_metrics, inference)
         generate_plot_set(sorted_ids, all_metrics, inference, args.output_folder)
     generate_frame_comparison(random.sample(sorted_ids, min(len(sorted_ids), 8)), all_metrics, args.output_folder)
-    plot_inference_accuracy_vs_human_agreement(sorted_ids, all_metrics, args.output_folder)
-    plot_luminance_vs_accuracy(sorted_ids, all_metrics, args.output_folder)
+    plot_inference_accuracy_vs_human_agreement(sorted_ids, all_metrics, args)
+    plot_luminance_vs_accuracy(sorted_ids, all_metrics, args)

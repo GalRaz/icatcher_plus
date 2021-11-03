@@ -7,7 +7,7 @@ config_file = Path("models", "config.prototxt")
 # replace these values with your folder structure !
 raw_dataset_folder = Path("datasets", "lookit_raw")
 processed_data_set_folder = Path("datasets", "lookit")
-video_folder = raw_dataset_folder / "raw_videos"
+video_folder = processed_data_set_folder / "raw_videos"
 
 # using jupyter
 # raw_dataset_folder = Path("/home/jupyter/data/lookIt_raw")

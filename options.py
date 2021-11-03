@@ -117,8 +117,6 @@ def parse_arguments_for_testing():
 
 def parse_arguments_for_visualizations():
     parser = argparse.ArgumentParser()
-    parser.add_argument("comparison_name", type=str,
-                        help="name of comparison (all results will be in output_folder/comparison_name)")
     parser.add_argument("output_folder", type=str, default="output", help="path to output results.")
     parser.add_argument("human_codings_folder", type=str, help="the codings from human1")
     parser.add_argument("human2_codings_folder", type=str, help="the codings from human12")
@@ -126,15 +124,13 @@ def parse_arguments_for_visualizations():
     parser.add_argument("--log", help="If present, writes log to this path")
     parser.add_argument("-v", "--verbosity", type=str, choices=["debug", "info", "warning"], default="info",
                         help="Selects verbosity level")
-    cmd = "test /disk3/yotam/icatcher+/runs/vanilla/output " \
+    cmd = "/disk3/yotam/icatcher+/runs/vanilla/output " \
           "/disk3/yotam/icatcher+/datasets/lookit/coding_first " \
           "/disk3/yotam/icatcher+/datasets/lookit/coding_second " \
           "/disk3/yotam/icatcher+/datasets/lookit/coding_machine".split()
     args = parser.parse_args(cmd)
-    args.root = Path(args.output_folder)
-    args.root.mkdir(parents=True, exist_ok=True)
-    args.comparison_name = Path(args.root, args.comparison_name)
-    args.comparison_name.mkdir(parents=True, exist_ok=True)
+    args.output_folder = Path(args.output_folder)
+    args.output_folder.mkdir(parents=True, exist_ok=True)
     args.human_codings_folder = Path(args.human_codings_folder)
     assert args.human_codings_folder.is_dir()
     args.human2_codings_folder = Path(args.human2_codings_folder)
