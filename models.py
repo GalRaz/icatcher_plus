@@ -3,6 +3,7 @@ import copy
 from pathlib import Path
 import torch.nn.functional as F
 from torchvision.models.resnet import resnet18
+from collections import OrderedDict
 
 
 class MyModel:
@@ -97,7 +98,16 @@ class MyModel:
         state_dict = torch.load(load_path, map_location=str(self.opt.device))
         if hasattr(state_dict, '_metadata'):
             del state_dict._metadata
-        net.load_state_dict(state_dict)
+        try:
+            net.load_state_dict(state_dict)
+        except RuntimeError:  # deal with old models that were encapsulated with "net"
+            new_dict = OrderedDict()
+            for i in range(len(state_dict)):
+                k, v = state_dict.popitem(False)
+                new_k = '.'.join(k.split(".")[1:])
+                new_dict[new_k] = v
+            net.load_state_dict(new_dict)
+
 
     def save_network(self, which_epoch):
         """
