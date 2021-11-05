@@ -105,7 +105,7 @@ def predict_on_preprocessed(args):
     val_acc_total = (running_corrects / num_datapoints) * 100
     # logging.info("validation loss: {}".format(val_loss_total))
     logging.info("validation acc: {}".format(val_acc_total))
-    logging.info("per class acc: {}".format(mat.diag()))
+    logging.info("per class acc: {}".format(mat.diagonal()))
     logging.info("confusion matrix (normalized): {}".format(mat))
 
 
