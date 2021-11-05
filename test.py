@@ -1,13 +1,13 @@
 import cv2
 from pathlib import Path
 import numpy as np
-from models import GazeCodingModel
 from preprocess import detect_face_opencv_dnn
-from options import parse_arguments_for_testing
+import options
 import visualize
 import logging
 import face_classifier
 import torch
+import models
 
 
 class FaceClassifierArgs:
@@ -138,7 +138,7 @@ def predict_from_video(opt):
     face_detector_model_file = Path("models", "face_model.caffemodel")
     config_file = Path("models", "config.prototxt")
     path_to_primary_model = opt.model
-    primary_model = GazeCodingModel(opt).to(opt.device)
+    primary_model = models.GazeCodingModel(opt).to(opt.device)
     if opt.device == 'cpu':
         primary_model.load_state_dict(torch.load(str(path_to_primary_model), map_location=torch.device(opt.device)))
     else:
@@ -288,7 +288,7 @@ def predict_from_video(opt):
 
 
 if __name__ == '__main__':
-    args = parse_arguments_for_testing()
+    args = options.parse_arguments_for_testing()
     if args.log:
         args.log.parent.mkdir(parents=True, exist_ok=True)
         logging.basicConfig(filename=args.log, filemode='w', level=args.verbosity.upper())

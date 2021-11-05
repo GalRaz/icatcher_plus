@@ -297,7 +297,7 @@ def visualize_human_confusion_matrix():
             preds.extend(list(gaze_labels_second[idxs]))
     human_dir = Path('plots', 'human')
     human_dir.mkdir(exist_ok=True, parents=True)
-    visualize.calculate_confusion_matrix(labels, preds, human_dir / 'conf.pdf')
+    _, _ = visualize.calculate_confusion_matrix(labels, preds, human_dir / 'conf.pdf')
 
 
 def gen_lookit_multi_face_subset(force_create=False):
@@ -351,17 +351,19 @@ def process_lookit_dataset(model_path, force_create=False):
     :param force_create: forces creation of files even if they exist
     :return:
     """
-    val_infant_files = [f.stem for f in (face_data_folder / 'val' / 'infant').glob('*.png')]
-    val_others_files = [f.stem for f in (face_data_folder / 'val' / 'others').glob('*.png')]
-    num_correct = 0
-    total = len(val_infant_files) + len(val_others_files)
-    for f in val_infant_files:
-        if f[-1] == f[-3]:
-            num_correct += 1
-    for f in val_others_files:
-        if f[-1] != f[-3]:
-            num_correct += 1
-    logging.info("\n[process_lkt] {}, {}, {}".format(num_correct, total, num_correct / total))
+
+    ## todo: remove test code from here
+    # val_infant_files = [f.stem for f in (face_data_folder / 'val' / 'infant').glob('*.png')]
+    # val_others_files = [f.stem for f in (face_data_folder / 'val' / 'others').glob('*.png')]
+    # num_correct = 0
+    # total = len(val_infant_files) + len(val_others_files)
+    # for f in val_infant_files:
+    #     if f[-1] == f[-3]:
+    #         num_correct += 1
+    # for f in val_others_files:
+    #     if f[-1] != f[-3]:
+    #         num_correct += 1
+    # logging.info("\n[process_lkt] {}, {}, {}".format(num_correct, total, num_correct / total))
 
     # emulate command line arguments
     # replace with what was used to train the face classifier!
@@ -381,24 +383,25 @@ def process_lookit_dataset(model_path, force_create=False):
     args = Args()
     model, input_size = face_classifier.fc_model.init_face_classifier(args, model_name=args.model, num_classes=2, resume_from=model_path)
     data_transforms = face_classifier.fc_eval.get_fc_data_transforms(args, input_size)
-    dataloaders = face_classifier.fc_data.get_dataset_dataloaders(args, input_size, 64, False)
-    criterion = face_classifier.fc_model.get_loss()
+    ## todo: remove test code from here
+    # dataloaders = face_classifier.fc_data.get_dataset_dataloaders(args, input_size, 64, False)
+    # criterion = face_classifier.fc_model.get_loss()
+    # model.to(args.device)
+    #
+    # val_loss, val_top1, val_labels, val_probs, val_target_labels = face_classifier.fc_eval.evaluate(args,
+    #                                                                                                 model,
+    #                                                                                                 dataloaders['val'],
+    #                                                                                                 criterion,
+    #                                                                                                 return_prob=False,
+    #                                                                                                 is_labelled=True,
+    #                                                                                                 generate_labels=True)
+    #
+    # logging.info("\n[val] Failed images:\n")
+    # err_idxs = np.where(np.array(val_labels) != np.array(val_target_labels))[0]
+    # visualize.print_data_img_name(dataloaders, 'val', err_idxs)
+    # logging.info('val_loss: {:.4f}, val_top1: {:.4f}'.format(val_loss, val_top1))
     model.to(args.device)
-
-    val_loss, val_top1, val_labels, val_probs, val_target_labels = face_classifier.fc_eval.evaluate(args,
-                                                                                                    model,
-                                                                                                    dataloaders['val'],
-                                                                                                    criterion,
-                                                                                                    return_prob=False,
-                                                                                                    is_labelled=True,
-                                                                                                    generate_labels=True)
-
-    logging.info("\n[val] Failed images:\n")
-    err_idxs = np.where(np.array(val_labels) != np.array(val_target_labels))[0]
-    visualize.print_data_img_name(dataloaders, 'val', err_idxs)
-    logging.info('val_loss: {:.4f}, val_top1: {:.4f}'.format(val_loss, val_top1))
-
-    video_files = list(video_folder.glob("*.mp4"))
+    video_files = sorted(list(video_folder.glob("*.mp4")))
     for video_file in tqdm(video_files):
         face_labels_fc_filename = Path.joinpath(faces_folder, video_file.stem, 'face_labels_fc.npy')
         if not face_labels_fc_filename.is_file() or force_create:

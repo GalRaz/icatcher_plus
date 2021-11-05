@@ -5,6 +5,7 @@ from PIL import Image
 import copy
 from pathlib import Path
 import logging
+import csv
 
 
 class DataTransforms:
@@ -35,6 +36,10 @@ class LookItDataset:
         self.args = args
         self.transforms = DataTransforms(args.image_size).transformations
         self.img_processor = self.transforms[args.phase]
+        if self.args.filter_validation and self.args.phase == "val":
+            self.file_filter = self.parse_filter_file()
+        else:
+            self.file_filter = None
         self.paths = self.collect_paths("face_labels")  # change to "face_labels_fc" if you trained face classifier
 
     def __len__(self):
@@ -51,6 +56,16 @@ class LookItDataset:
                 return False
         return True
 
+    def parse_filter_file(self):
+        validation_videos = []
+        disjoint = "FALSE" if self.args.use_disjoint else "TRUE"
+        with open(self.args.filter_validation, newline='') as csvfile:
+            my_reader = csv.reader(csvfile, delimiter=',', quotechar='|')
+            for row in my_reader:
+                if row[0] == "test" and row[-1] == disjoint:
+                    validation_videos.append(Path(row[1]).stem)
+        return validation_videos
+
     def collect_paths(self, face_label_name):
         """
         process dataset into tuples of frames
@@ -63,11 +78,15 @@ class LookItDataset:
         all_names = [f.stem for f in all_names_path.glob('*.txt')]
         test_names = [f.stem for f in test_names_path.glob('*.txt')]
         my_list = []
-        logging.info("collecting paths for dataloader...")
+        logging.info("Collecting paths for dataloader...")
+        video_counter = 0
         for name in all_names:
             if self.args.phase == "val":
                 if name not in test_names:
                     continue
+                if self.file_filter:
+                    if name not in self.file_filter:
+                        continue
             elif self.args.phase == "train":
                 if name in test_names:
                     continue
@@ -94,6 +113,9 @@ class LookItDataset:
                     my_list.append((img_files_seg, box_files_seg, class_seg))
             if not my_list:
                 logging.info("The video {} has no annotations".format(name))
+                continue
+            video_counter += 1
+        logging.info("Used {} videos, for a total of {} datapoints".format(video_counter, len(my_list)))
         return my_list
 
     def __getitem__(self, index):

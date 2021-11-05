@@ -4,8 +4,8 @@ import logger
 import data
 import models
 import torch
-import numpy as np
 from pathlib import Path
+from visualize import calculate_confusion_matrix
 
 
 def train_loop(args):
@@ -77,6 +77,36 @@ def train_loop(args):
             model.scheduler.step(val_loss_total)
         else:
             model.scheduler.step()
+
+
+def predict_on_preprocessed(args):
+    args.phase = "val"
+    val_dataset = data.MyDataLoader(args)
+    model = models.MyModel(args)
+    confusion_matrix = torch.zeros(3, 3)
+    with torch.no_grad():
+        # running_loss = 0.0
+        running_corrects = 0
+        num_datapoints = 0
+        for i, batch in enumerate(val_dataset):
+            logging.info("batch: {} / {}".format(i, len(val_dataset) // args.batch_size))
+            output = model.network(batch)
+            # val_loss = model.loss_fn(output, batch["label"])
+            _, predictions = torch.max(output, 1)
+            for t, p in zip(batch["label"].cpu().view(-1), predictions.cpu().view(-1)):
+                confusion_matrix[t.long(), p.long()] += 1
+            num_datapoints += batch["label"].shape[0]
+            # running_loss += val_loss.item() * batch["label"].shape[0]
+            running_corrects += torch.sum(torch.eq(predictions, batch["label"])).item()
+    mat, total_acc = calculate_confusion_matrix(None, None,
+                                                Path(args.experiment_path, "conf_{}.png".format(args.use_disjoint)),
+                                                confusion_matrix.numpy())
+    # val_loss_total = running_loss / num_datapoints
+    val_acc_total = (running_corrects / num_datapoints) * 100
+    # logging.info("validation loss: {}".format(val_loss_total))
+    logging.info("validation acc: {}".format(val_acc_total))
+    logging.info("per class acc: {}".format(mat.diag()))
+    logging.info("confusion matrix (normalized): {}".format(mat))
 
 
 if __name__ == "__main__":
