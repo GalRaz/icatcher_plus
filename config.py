@@ -20,5 +20,3 @@ label2_folder = processed_data_set_folder / "coding_second"
 multi_face_folder = processed_data_set_folder / "multi_face"
 face_data_folder = processed_data_set_folder / "infant_vs_others"
 face_classifier_model_file = Path("models", "face_classifier_weights_best.pt")
-visualization_root = Path("/home/jupyter/deployment")
-inference_output = Path("/home/jupyter/inference_output")
