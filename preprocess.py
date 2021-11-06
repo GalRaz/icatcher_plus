@@ -401,6 +401,7 @@ def process_lookit_dataset(model_path, force_create=False):
     # visualize.print_data_img_name(dataloaders, 'val', err_idxs)
     # logging.info('val_loss: {:.4f}, val_top1: {:.4f}'.format(val_loss, val_top1))
     model.to(args.device)
+    model.eval()
     video_files = sorted(list(video_folder.glob("*.mp4")))
     for video_file in tqdm(video_files):
         face_labels_fc_filename = Path.joinpath(faces_folder, video_file.stem, 'face_labels_fc.npy')
@@ -430,7 +431,6 @@ def process_lookit_dataset(model_path, force_create=False):
                         idx += 1
                     centers = np.stack(centers)
                     faces = torch.stack(faces).to(args.device)
-                    model.eval()
                     output = model(faces)
                     _, preds = torch.max(output, 1)
                     preds = preds.cpu().numpy()

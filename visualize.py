@@ -48,6 +48,7 @@ def calculate_confusion_matrix(label, pred, save_path, mat=None, class_num=3):
             for j in range(class_num):
                 mat[i][j] = sum((label == i) & (pred == j))
     logging.info("confusion matrix:{}".format(mat))
+    total_acc = (mat.diagonal().sum() / mat.sum()) * 100
     mat = mat / np.sum(mat, -1, keepdims=True)
     fig, ax = plt.subplots(figsize=(3, 3))
     ax = sns.heatmap(mat, ax=ax, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues')
@@ -56,8 +57,7 @@ def calculate_confusion_matrix(label, pred, save_path, mat=None, class_num=3):
     plt.axis('equal')
     plt.tight_layout(pad=0.1)
     plt.savefig(save_path)
-    total_acc = mat.diagonal().sum() / class_num
-    logging.info('acc:{:.4f}'.format(total_acc))
+    logging.info('acc:{:.4f}%'.format(total_acc))
     return mat, total_acc
 
 

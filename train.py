@@ -83,6 +83,7 @@ def predict_on_preprocessed(args):
     args.phase = "val"
     val_dataset = data.MyDataLoader(args)
     model = models.MyModel(args)
+    model.network.train(mode=False)
     confusion_matrix = torch.zeros(3, 3)
     with torch.no_grad():
         # running_loss = 0.0
@@ -104,7 +105,7 @@ def predict_on_preprocessed(args):
     # val_loss_total = running_loss / num_datapoints
     val_acc_total = (running_corrects / num_datapoints) * 100
     # logging.info("validation loss: {}".format(val_loss_total))
-    logging.info("validation acc: {}".format(val_acc_total))
+    logging.info("validation acc: {}%".format(val_acc_total))
     logging.info("per class acc: {}".format(mat.diagonal()))
     logging.info("confusion matrix (normalized): {}".format(mat))
 
