@@ -4,6 +4,8 @@ import cv2
 import numpy as np
 from tqdm import tqdm
 import config
+import parsers
+from pathlib import Path
 
 """
 Script for calculating and saving video metadata as a csv
@@ -26,7 +28,8 @@ def calculate_luminance(cap, start, end, num_samples=100):
         frame_no += sample_every
         cap.set(cv2.CAP_PROP_POS_FRAMES, frame_no)
         ret, frame = cap.read()
-    return total_luminance // sampled
+    return round(total_luminance / sampled, 1)
+
 
 def lucas_kanade_method(video_path):
     # Read the video
@@ -66,7 +69,7 @@ def lucas_kanade_method(video_path):
         for i, (new, old) in enumerate(zip(good_new, good_old)):
             a, b = new.ravel()
             c, d = old.ravel()
-            a,b,c,d=int(a),int(b),int(c),int(d)
+            a, b, c, d = int(a), int(b), int(c), int(d)
             mask = cv2.line(mask, (a, b), (c, d), color[i].tolist(), 2)
             frame = cv2.circle(frame, (a, b), 5, color[i].tolist(), -1)
 
@@ -81,11 +84,12 @@ def lucas_kanade_method(video_path):
         old_gray = frame_gray.copy()
         p0 = good_new.reshape(-1, 1, 2)
 
+
 def calculate_motion_energy(video_filename, start, end):
     """
     Calculates the average motion energy over the coding active region
     """
-    lucas_kanade_method(config.video_folder/video_filename)
+    lucas_kanade_method(config.video_folder / video_filename)
 
 
 def save_csv(csv_headers, columns, csv_path):
@@ -103,8 +107,8 @@ def save_csv(csv_headers, columns, csv_path):
             csv_writer.writerow(row)
 
 
-def get_coding_active_range(label_filename):
-    labels = np.genfromtxt(open(config.label_folder / label_filename, "rb"), dtype='str', delimiter="\t", skip_header=1)
+def get_coding_active_range(label_path):
+    labels = np.genfromtxt(open(label_path, "rb"), dtype='str', delimiter="\t", skip_header=1)
     frames = set()
     for label in labels:
         frame_index = label.split(",")[0]
@@ -115,8 +119,20 @@ def get_coding_active_range(label_filename):
     return min(frames), max(frames)
 
 
-def calculate_and_save_all(ordered_video_ids, id_to_video_filename, id_to_coding_first_paths,
-                           id_to_coding_second_paths):
+def get_coding_active_range_marchman(label_filename):
+    parser = parsers.XmlParser(".vcx", config.label_folder)
+    labels = parser.parse(label_filename.replace(".vcx", ""))
+    frames = set()
+    for label in labels:
+        frame_index = label[0]
+        try:
+            frames.add(int(frame_index))
+        except ValueError:
+            pass
+    return min(frames), max(frames)
+
+
+def calculate_and_save_all(ordered_video_ids, id_to_video_filename, id_to_coding_first_paths, id_to_coding_second_paths, csv_filename='metadata'):
     csv_headers = ["video id", "video filename", "coding first filename", "coding second filename", "luminance",
                    "motion energy", "resolution", "fps", "frame count", "coding start (frame)", "coding end (frame)"]
     columns = {header: {} for header in csv_headers}
@@ -137,21 +153,24 @@ def calculate_and_save_all(ordered_video_ids, id_to_video_filename, id_to_coding
         columns[csv_headers[6]][video_id] = resolution
         columns[csv_headers[7]][video_id] = fps
         if video_id in id_to_coding_first_paths:
-            start_ms, end_ms = get_coding_active_range(id_to_coding_first_paths[video_id])
-            start_frame = start_ms / 1000 * fps
-            end_frame = end_ms / 1000 * fps
+            if config.mini_marchman:
+                start_ms, end_ms = get_coding_active_range_marchman(id_to_coding_first_paths[video_id])
+            else:
+                start_ms, end_ms = get_coding_active_range(id_to_coding_first_paths[video_id])
+            start_frame = int(start_ms / 1000 * fps)
+            end_frame = int(end_ms / 1000 * fps)
             luminance = calculate_luminance(cap, start_frame, end_frame)
 
             columns[csv_headers[4]][video_id] = luminance
-            columns[csv_headers[5]][video_id] = calculate_motion_energy(video_filename, start_frame, end_frame)
+            # columns[csv_headers[5]][video_id] = calculate_motion_energy(video_filename, start_frame, end_frame)
             columns[csv_headers[8]][video_id] = total_num_frames
             columns[csv_headers[9]][video_id] = start_frame
             columns[csv_headers[10]][video_id] = end_frame
 
-    save_csv(csv_headers, columns, csv_path="/home/jupyter/metadata.csv")
+    save_csv(csv_headers, columns, csv_path=f'/home/jupyter/{csv_filename}.csv')
 
 
-if __name__ == "__main__":
+def lookit_metadata_gen():
     ordered_video_ids = []
     id_to_video_filename = {}
     id_to_coding_first_paths = {}
@@ -179,4 +198,36 @@ if __name__ == "__main__":
                 if video_id in filename:
                     id_to_coding_second_paths[video_id] = filename
                     break
-    calculate_and_save_all(ordered_video_ids, id_to_video_filename, id_to_coding_first_paths, id_to_coding_second_paths)
+    calculate_and_save_all(ordered_video_ids, id_to_video_filename, id_to_coding_first_paths, id_to_coding_second_paths, 'lookit_metadata')
+
+
+def mini_marchman_metadata_gen():
+    for video_visit, label_visit, str_visit in [[config.video_folder_A, config.label_folder_A, 'A'],
+                                     [config.video_folder_B, config.label_folder_B, 'B']]:
+        config.video_folder = video_visit
+        config.label_folder = label_visit
+        ordered_video_ids = []
+        id_to_video_filename = {}
+        id_to_coding_first_paths = {}
+        id_to_coding_second_paths = {}
+        for _, _, filenames in os.walk(video_visit):
+            for filename in filenames:
+                video_id = str(filename).replace('-', '').replace('.mov', '')
+                ordered_video_ids.append(video_id)
+                id_to_video_filename[video_id] = filename
+
+        for _, _, filenames in os.walk(label_visit):
+            for filename in filenames:
+                for video_id in ordered_video_ids:
+                    if video_id in filename.replace('-', '').replace('.VCX', ''):
+                        id_to_coding_first_paths[video_id] = filename
+                        break
+        calculate_and_save_all(ordered_video_ids, id_to_video_filename, id_to_coding_first_paths,
+                               id_to_coding_second_paths, f'mini_marchman_metatdata_visit_{str_visit}')
+
+
+if __name__ == "__main__":
+    if config.mini_marchman:
+        mini_marchman_metadata_gen()
+    else:
+        lookit_metadata_gen()
