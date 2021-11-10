@@ -1,7 +1,7 @@
 import os
 from torch.autograd import Variable
 from torchvision import datasets, transforms
-from config import multi_face_folder
+# from config import multi_face_folder
 from data import *
 from visualize import confusion_mat
 
@@ -150,6 +150,7 @@ def predict_on_test(args, model, dataloaders, criterion):
     # TODO: modify this
     def dataset_labels_to_names(dataset_labels, dataset_name):
         # dataset_name is one of 'train','test','val'
+        # replace with multi-face-folder loc (usually under preprocessed dataset path / "multi_face")
         dataset_root = os.path.join(multi_face_folder, dataset_name)
         found_files = []
         for parentdir, subdirs, subfns in os.walk(dataset_root):

@@ -7,7 +7,7 @@ from .fc_eval import get_fc_data_transforms
 
 def get_dataset_dataloaders(args, input_size, batch_size, shuffle=True, num_workers=4):
     data_transforms = get_fc_data_transforms(args, input_size)
-
+    face_data_folder = args.dataset_folder / "infant_vs_others"
     # Create training and validation datasets
     image_datasets = {'train': datasets.ImageFolder(str(Path(face_data_folder, 'train')), data_transforms['train']),
                       'val': datasets.ImageFolder(str(Path(face_data_folder, 'val')), data_transforms['val']),

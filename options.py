@@ -138,3 +138,30 @@ def parse_arguments_for_visualizations():
     args.machine_codings_folder = Path(args.machine_codings_folder)
     assert args.machine_codings_folder.is_dir()
     return args
+
+
+def parse_arguments_for_preprocess():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("raw_dataset_path", type=str, help="path to raw dataset to preprocess")
+    parser.add_argument("output_folder", type=str, help="path to put preprocessed dataset")
+    parser.add_argument("--raw_dataset_type", type=str, choices=["lookit", "princeton"], default="lookit",
+                        help="the type of dataset to preprocess")
+    parser.add_argument("--log", help="If present, writes log to this path")
+    parser.add_argument("-v", "--verbosity", type=str, choices=["debug", "info", "warning"], default="info",
+                        help="Selects verbosity level")
+    args = parser.parse_args()
+    args.raw_dataset_path = Path(args.raw_dataset_path)
+    if not args.raw_dataset_path.is_dir():
+        raise NotADirectoryError
+    args.output_folder = Path(args.output_folder)
+    args.output_folder.mkdir(parents=True, exist_ok=True)
+    args.video_folder = args.output_folder / "raw_videos"
+    args.faces_folder = args.output_folder / "faces"
+    args.label_folder = args.output_folder / "coding_first"
+    args.label2_folder = args.output_folder / "coding_second"
+    args.multi_face_folder = args.output_folder / "multi_face"
+    args.face_data_folder = args.output_folder / "infant_vs_others"
+    args.face_classifier_model_file = Path("models", "face_classifier_weights_best.pt")
+    args.face_model_file = Path("models", "face_model.caffemodel")
+    args.config_file = Path("models", "config.prototxt")
+    return args

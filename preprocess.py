@@ -1,5 +1,5 @@
 import shutil
-from config import *
+from pathlib import Path
 import cv2
 import numpy as np
 import time
@@ -11,9 +11,11 @@ import face_classifier.fc_data
 import face_classifier.fc_eval
 import torch
 from tqdm import tqdm
+import options
+import parsers
 
 
-def preprocess_raw_lookit_dataset(force_create=False):
+def preprocess_raw_lookit_dataset(args, force_create=False):
     """
     Organizes the raw videos downloaded from the Lookit platform.
     It puts the videos with annotations into raw_videos folder and
@@ -21,19 +23,16 @@ def preprocess_raw_lookit_dataset(force_create=False):
     :param force_create: forces creation of files even if they exist
     :return:
     """
-    if not raw_dataset_folder.is_dir():
-        raise NotADirectoryError
-    processed_data_set_folder.mkdir(parents=True, exist_ok=True)
-    video_folder.mkdir(parents=True, exist_ok=True)
-    label_folder.mkdir(parents=True, exist_ok=True)
-    label2_folder.mkdir(parents=True, exist_ok=True)
-    faces_folder.mkdir(parents=True, exist_ok=True)
+    args.video_folder.mkdir(parents=True, exist_ok=True)
+    args.label_folder.mkdir(parents=True, exist_ok=True)
+    args.label2_folder.mkdir(parents=True, exist_ok=True)
+    args.faces_folder.mkdir(parents=True, exist_ok=True)
 
     # TODO: Bugs: 1 file does not have this prefix; 1 file ends with .mov
     prefix = 'cfddb63f-12e9-4e62-abd1-47534d6c4dd2_'
-    coding_first = [f.stem[:-5] for f in Path(raw_dataset_folder / 'coding_first').glob('*.txt')]
-    coding_second = [f.stem[:-5] for f in Path(raw_dataset_folder / 'coding_second').glob('*.txt')]
-    videos = [f.stem for f in Path(raw_dataset_folder / 'videos').glob(prefix+'*.mp4')]
+    coding_first = [f.stem[:-5] for f in Path(args.raw_dataset_path / 'coding_first').glob('*.txt')]
+    coding_second = [f.stem[:-5] for f in Path(args.raw_dataset_path / 'coding_second').glob('*.txt')]
+    videos = [f.stem for f in Path(args.raw_dataset_path / 'videos').glob(prefix+'*.mp4')]
 
     logging.info('[preprocess_raw] coding_first: {}'.format(len(coding_first)))
     logging.info('[preprocess_raw] coding_second: {}'.format(len(coding_second)))
@@ -55,19 +54,61 @@ def preprocess_raw_lookit_dataset(force_create=False):
     logging.info('[preprocess_raw] training set: {} validation set: {}'.format(len(training_set), len(test_set)))
 
     for filename in training_set:
-        if not Path(video_folder, (filename[len(prefix):]+'.mp4')).is_file() or force_create:
-            shutil.copyfile(raw_dataset_folder / 'videos' / (filename+'.mp4'), video_folder / (filename[len(prefix):]+'.mp4'))
-        if not Path(label_folder, (filename[len(prefix):]+'.txt')).is_file() or force_create:
-            shutil.copyfile(raw_dataset_folder / 'coding_first' / (filename[len(prefix):]+'-evts.txt'), label_folder / (filename[len(prefix):]+'.txt'))
+        if not Path(args.video_folder, (filename[len(prefix):]+'.mp4')).is_file() or force_create:
+            shutil.copyfile(args.raw_dataset_path / 'videos' / (filename+'.mp4'), args.video_folder / (filename[len(prefix):]+'.mp4'))
+        if not Path(args.label_folder, (filename[len(prefix):]+'.txt')).is_file() or force_create:
+            shutil.copyfile(args.raw_dataset_path / 'coding_first' / (filename[len(prefix):]+'-evts.txt'), args.label_folder / (filename[len(prefix):]+'.txt'))
 
     for filename in test_set:
-        if not Path(video_folder, (filename[len(prefix):] + '.mp4')).is_file() or force_create:
-            shutil.copyfile(raw_dataset_folder / 'videos' / (filename + '.mp4'), video_folder /(filename[len(prefix):]+'.mp4'))
-        if not Path(label_folder, (filename[len(prefix):] + '.txt')).is_file() or force_create:
-            shutil.copyfile(raw_dataset_folder / 'coding_first' / (filename[len(prefix):] + '-evts.txt'), label_folder / (filename[len(prefix):]+'.txt'))
-        if not Path(label2_folder, (filename[len(prefix):] + '.txt')).is_file() or force_create:
-            shutil.copyfile(raw_dataset_folder / 'coding_second' / (filename[len(prefix):] + '-evts.txt'), label2_folder / (filename[len(prefix):]+'.txt'))
+        if not Path(args.video_folder, (filename[len(prefix):] + '.mp4')).is_file() or force_create:
+            shutil.copyfile(args.raw_dataset_path / 'videos' / (filename + '.mp4'), args.video_folder /(filename[len(prefix):]+'.mp4'))
+        if not Path(args.label_folder, (filename[len(prefix):] + '.txt')).is_file() or force_create:
+            shutil.copyfile(args.raw_dataset_path / 'coding_first' / (filename[len(prefix):] + '-evts.txt'), args.label_folder / (filename[len(prefix):]+'.txt'))
+        if not Path(args.label2_folder, (filename[len(prefix):] + '.txt')).is_file() or force_create:
+            shutil.copyfile(args.raw_dataset_path / 'coding_second' / (filename[len(prefix):] + '-evts.txt'), args.label2_folder / (filename[len(prefix):]+'.txt'))
 
+
+def preprocess_raw_princeton_dataset(args, force_create=False):
+    """
+    Organizes the raw videos from marchman/princeton.
+    It puts the videos with annotations into raw_videos folder and
+    the annotation from the first and second human annotators into coding_first and coding_second folders respectively.
+    :param force_create: forces creation of files even if they exist
+    :return:
+    :param args:
+    :param force_create:
+    :return:
+    """
+    args.video_folder.mkdir(parents=True, exist_ok=True)
+    args.label_folder.mkdir(parents=True, exist_ok=True)
+    args.label2_folder.mkdir(parents=True, exist_ok=True)
+    args.faces_folder.mkdir(parents=True, exist_ok=True)
+    videos = [f.stem for f in Path(args.raw_dataset_path / 'Mov').glob("*.mov")]
+    coding_first = [f.stem for f in Path(args.raw_dataset_path / 'VCX').glob("*.vcx")]
+    coding_second = [f.stem for f in Path(args.raw_dataset_path / 'VCX2').glob("*.vcx")]
+
+    logging.info('[preprocess_raw] coding_first: {}'.format(len(coding_first)))
+    logging.info('[preprocess_raw] coding_second: {}'.format(len(coding_second)))
+    logging.info('[preprocess_raw] videos: {}'.format(len(videos)))
+
+    training_set = set(videos).intersection(set(coding_first))
+    test_set = set(videos).intersection(set(coding_first)).intersection(set(coding_second))
+    # val_percent = 20  # 20%
+    # train_factor = (100 - val_percent) / 100
+    # if i < (int(len(intersection) * train_factor)):
+    for i, file in enumerate(sorted(list(training_set))):
+        if not Path(args.video_folder, (file + '.mov')).is_file() or force_create:
+            shutil.copyfile(args.raw_dataset_path / 'Mov' / (file + '.mov'), args.video_folder / (file+'.mov'))
+        if not Path(args.label_folder, (file + '.vcx')).is_file() or force_create:
+            shutil.copyfile(args.raw_dataset_path / 'VCX' / (file + ".vcx"), args.label_folder / (file + ".vcx"))
+
+    for i, file in enumerate(sorted(list(test_set))):
+        if not Path(args.video_folder, (file + '.mov')).is_file() or force_create:
+            shutil.copyfile(args.raw_dataset_path / 'Mov' / (file + '.mov'), args.video_folder / (file+'.mov'))
+        if not Path(args.label_folder, (file + '.vcx')).is_file() or force_create:
+            shutil.copyfile(args.raw_dataset_path / 'VCX' / (file + ".vcx"), args.label_folder / (file + ".vcx"))
+        if not Path(args.label2_folder, (file + '.vcx')).is_file() or force_create:
+            shutil.copyfile(args.raw_dataset_path / 'VCX2' / (file + ".vcx"), args.label2_folder / (file + ".vcx"))
 
 def parse_lookit_label(file, fps):
     """
@@ -76,6 +117,7 @@ def parse_lookit_label(file, fps):
     :param fps: fps of the video
     :return:
     """
+    classes = {"away": 0, "left": 1, "right": 2}
     labels = np.genfromtxt(open(file, "rb"), dtype='str', delimiter=",", skip_header=3)
     output = []
     for entry in range(labels.shape[0]):
@@ -117,9 +159,9 @@ def detect_face_opencv_dnn(net, frame, conf_threshold):
     return bboxes
 
 
-def process_lookit_dataset_legacy(gaze_labels_only=False, force_create=False):
+def process_dataset_lowest_face(args, gaze_labels_only=False, force_create=False):
     """
-    process the lookit dataset using the "lowest" face mechanism
+    process the dataset using the "lowest" face mechanism
     creates:
         face crops (all recognized face crops that abide a threshold value 0.7)
         boxes (the crop parameters - area / location etc)
@@ -129,16 +171,17 @@ def process_lookit_dataset_legacy(gaze_labels_only=False, force_create=False):
     :param force_create: forces creation of files even if they exist
     :return:
     """
-    video_list = list(video_folder.glob("*.mp4"))
-    net = cv2.dnn.readNetFromCaffe(str(config_file), str(face_model_file))
+    classes = {"away": 0, "left": 1, "right": 2}
+    video_list = sorted(list(args.video_folder.glob("*")))
+    net = cv2.dnn.readNetFromCaffe(str(args.config_file), str(args.face_model_file))
     for video_file in video_list:
         st_time = time.time()
         logging.info("[process_lkt_legacy] Proccessing %s" % video_file.name)
-        cur_video_folder = Path.joinpath(faces_folder / video_file.stem)
+        cur_video_folder = Path.joinpath(args.faces_folder / video_file.stem)
         cur_video_folder.mkdir(parents=True, exist_ok=True)
-        img_folder = Path.joinpath(faces_folder, video_file.stem, 'img')
+        img_folder = Path.joinpath(args.faces_folder, video_file.stem, 'img')
         img_folder.mkdir(parents=True, exist_ok=True)
-        box_folder = Path.joinpath(faces_folder, video_file.stem, 'box')
+        box_folder = Path.joinpath(args.faces_folder, video_file.stem, 'box')
         box_folder.mkdir(parents=True, exist_ok=True)
 
         frame_counter = 0
@@ -149,7 +192,13 @@ def process_lookit_dataset_legacy(gaze_labels_only=False, force_create=False):
         face_labels = []
 
         cap = cv2.VideoCapture(str(video_file))
-        responses = parse_lookit_label(label_folder / (video_file.stem + '.txt'), cap.get(cv2.CAP_PROP_FPS))
+        if args.raw_dataset_type == "lookit":
+            responses = parse_lookit_label(args.label_folder / (video_file.stem + '.txt'), cap.get(cv2.CAP_PROP_FPS))
+        elif args.raw_dataset_type == "princeton":
+            parser = parsers.PrincetonParser(".vcx", args.label_folder)
+            responses = parser.parse(video_file.stem)
+        else:
+            raise NotImplementedError
         ret_val, frame = cap.read()
 
         while ret_val:
@@ -227,13 +276,13 @@ def process_lookit_dataset_legacy(gaze_labels_only=False, force_create=False):
             logging.info("[process_lkt_legacy] Processing frame: {}".format(frame_counter))
         # save gaze labels
         gaze_labels = np.array(gaze_labels)
-        gaze_labels_filename = Path.joinpath(faces_folder, video_file.stem, 'gaze_labels.npy')
+        gaze_labels_filename = Path.joinpath(args.faces_folder, video_file.stem, 'gaze_labels.npy')
         if not gaze_labels_filename.is_file() or force_create:
             np.save(str(gaze_labels_filename), gaze_labels)
         if not gaze_labels_only:
             # save face labels
             face_labels = np.array(face_labels)
-            face_labels_filename = Path.joinpath(faces_folder, video_file.stem, 'face_labels.npy')
+            face_labels_filename = Path.joinpath(args.faces_folder, video_file.stem, 'face_labels.npy')
             if not face_labels_filename.is_file() or force_create:
                 np.save(str(face_labels_filename), face_labels)
         logging.info(
@@ -250,13 +299,14 @@ def generate_second_gaze_labels(force_create=False, visualize_confusion=True):
     :param visualize_confusion: if true, visualizes confusion between human annotators.
     :return:
     """
-    video_list = list(video_folder.glob("*.mp4"))
+    classes = {"away": 0, "left": 1, "right": 2}
+    video_list = list(args.video_folder.glob("*.mp4"))
     for video_file in video_list:
         logging.info("[gen_2nd_labels] Video: %s" % video_file.name)
-        if (label2_folder / (video_file.stem + '.txt')).exists():
+        if (args.label2_folder / (video_file.stem + '.txt')).exists():
             cap = cv2.VideoCapture(str(video_file))
-            responses = parse_lookit_label(label2_folder / (video_file.stem + '.txt'), cap.get(cv2.CAP_PROP_FPS))
-            gaze_labels = np.load(str(Path.joinpath(faces_folder, video_file.stem, 'gaze_labels.npy')))
+            responses = parse_lookit_label(args.label2_folder / (video_file.stem + '.txt'), cap.get(cv2.CAP_PROP_FPS))
+            gaze_labels = np.load(str(Path.joinpath(args.faces_folder, video_file.stem, 'gaze_labels.npy')))
             gaze_labels_second = []
             for frame in range(gaze_labels.shape[0]):
                 if frame >= responses[0][0]:
@@ -270,7 +320,7 @@ def generate_second_gaze_labels(force_create=False, visualize_confusion=True):
                 else:
                     gaze_labels_second.append(-2)
             gaze_labels_second = np.array(gaze_labels_second)
-            gaze_labels_second_filename = Path.joinpath(faces_folder, video_file.stem, 'gaze_labels_second.npy')
+            gaze_labels_second_filename = Path.joinpath(args.faces_folder, video_file.stem, 'gaze_labels_second.npy')
             if not gaze_labels_second_filename.is_file() or force_create:
                 np.save(str(gaze_labels_second_filename), gaze_labels_second)
         else:
@@ -286,11 +336,11 @@ def visualize_human_confusion_matrix():
     """
     labels = []
     preds = []
-    video_list = list(video_folder.glob("*.mp4"))
+    video_list = list(args.video_folder.glob("*.mp4"))
     for video_file in video_list:
-        gaze_labels_second_filename = Path.joinpath(faces_folder, video_file.stem, 'gaze_labels_second.npy')
+        gaze_labels_second_filename = Path.joinpath(args.faces_folder, video_file.stem, 'gaze_labels_second.npy')
         if gaze_labels_second_filename.is_file():
-            gaze_labels = np.load(str(Path.joinpath(faces_folder, video_file.stem, 'gaze_labels.npy')))
+            gaze_labels = np.load(str(Path.joinpath(args.faces_folder, video_file.stem, 'gaze_labels.npy')))
             gaze_labels_second = np.load(str(gaze_labels_second_filename))
             idxs = np.where((gaze_labels >= 0) & (gaze_labels_second >= 0))
             labels.extend(list(gaze_labels[idxs]))
@@ -302,18 +352,18 @@ def visualize_human_confusion_matrix():
 
 def gen_lookit_multi_face_subset(force_create=False):
     """
-    Generates the face labels for each frame using the trained face classifier and the nearest patch mechanism.
+    Generates multi-face labels for training the face classifier
     :param force_create: forces creation of files even if they exist
     :return:
     """
-    multi_face_folder.mkdir()
-    names = [f.stem for f in Path(video_folder).glob('*.mp4')]
+    args.multi_face_folder.mkdir()
+    names = [f.stem for f in Path(args.video_folder).glob('*.mp4')]
     face_hist = np.zeros(10)
     total_datapoint = 0
     for name in names:
         logging.info(name)
-        src_folder = faces_folder / name
-        dst_folder = multi_face_folder / name
+        src_folder = args.faces_folder / name
+        dst_folder = args.multi_face_folder / name
         dst_folder.mkdir()
         (dst_folder / 'img').mkdir()
         (dst_folder / 'box').mkdir()
@@ -344,9 +394,9 @@ def gen_lookit_multi_face_subset(force_create=False):
     logging.info(face_hist)
 
 
-def process_lookit_dataset(model_path, force_create=False):
+def process_dataset_face_classifier(model_path, force_create=False):
     """
-    further process the lookit dataset using a trained face baby vs adult classifier
+    further process a dataset using a trained face baby vs adult classifier and nearest patch mechanism
     :param model_path: path to trained torch model file
     :param force_create: forces creation of files even if they exist
     :return:
@@ -402,16 +452,16 @@ def process_lookit_dataset(model_path, force_create=False):
     # logging.info('val_loss: {:.4f}, val_top1: {:.4f}'.format(val_loss, val_top1))
     model.to(args.device)
     model.eval()
-    video_files = sorted(list(video_folder.glob("*.mp4")))
+    video_files = sorted(list(args.video_folder.glob("*.mp4")))
     for video_file in tqdm(video_files):
-        face_labels_fc_filename = Path.joinpath(faces_folder, video_file.stem, 'face_labels_fc.npy')
+        face_labels_fc_filename = Path.joinpath(args.faces_folder, video_file.stem, 'face_labels_fc.npy')
         if not face_labels_fc_filename.is_file() or force_create:
             logging.info(video_file.stem)
-            files = list((faces_folder / video_file.stem / 'img').glob(f'*.png'))
+            files = list((args.faces_folder / video_file.stem / 'img').glob(f'*.png'))
             filenames = [f.stem for f in files]
             filenames = sorted(filenames)
             idx = 0
-            face_labels = np.load(str(Path.joinpath(faces_folder, video_file.stem, 'face_labels.npy')))
+            face_labels = np.load(str(Path.joinpath(args.faces_folder, video_file.stem, 'face_labels.npy')))
             face_labels_fc = []
             hor, ver = 0.5, 1
             for frame in tqdm(range(face_labels.shape[0])):
@@ -421,9 +471,9 @@ def process_lookit_dataset(model_path, force_create=False):
                     faces = []
                     centers = []
                     while idx < len(filenames) and (int(filenames[idx][:5]) == frame):
-                        img = Image.open(faces_folder / video_file.stem / 'img' / (filenames[idx] + '.png')).convert(
+                        img = Image.open(args.faces_folder / video_file.stem / 'img' / (filenames[idx] + '.png')).convert(
                             'RGB')
-                        box = np.load(faces_folder / video_file.stem / 'box' / (filenames[idx] + '.npy'),
+                        box = np.load(args.faces_folder / video_file.stem / 'box' / (filenames[idx] + '.npy'),
                                       allow_pickle=True).item()
                         centers.append([box['face_hor'], box['face_ver']])
                         img = data_transforms['val'](img)
@@ -454,9 +504,9 @@ def report_dataset_split():
     """
     all_videos = []
     test_videos = []
-    for path in sorted(label_folder.glob("*.txt")):
+    for path in sorted(args.label_folder.glob("*.txt")):
         all_videos.append(path.name)
-    for path in sorted(label2_folder.glob("*.txt")):
+    for path in sorted(args.label2_folder.glob("*.txt")):
         test_videos.append(path.name)
     train_videos = [x for x in all_videos if x not in test_videos]
     logging.info("train videos: [{0}]".format(', '.join(map(str, train_videos))))
@@ -465,11 +515,23 @@ def report_dataset_split():
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level="INFO")
-    preprocess_raw_lookit_dataset(force_create=False)
-    process_lookit_dataset_legacy(gaze_labels_only=False, force_create=False)
-    generate_second_gaze_labels(force_create=False)
+    args = options.parse_arguments_for_preprocess()
+    if args.log:
+        args.log.parent.mkdir(parents=True, exist_ok=True)
+        logging.basicConfig(filename=args.log, filemode='w', level=args.verbosity.upper())
+    else:
+        logging.basicConfig(level=args.verbosity.upper())
+
+    if args.raw_dataset_type == "lookit":
+        preprocess_raw_lookit_dataset(args, force_create=False)
+    elif args.raw_dataset_type == "princeton":
+        preprocess_raw_princeton_dataset(args, force_create=False)
+    else:
+        raise NotImplementedError
+
+    process_dataset_lowest_face(args, gaze_labels_only=False, force_create=False)
+    generate_second_gaze_labels(force_create=False, visualize_confusion=False)
     # report_dataset_split()
     gen_lookit_multi_face_subset(force_create=False)
     # uncomment next line if face classifier was trained:
-    process_lookit_dataset(model_path=face_classifier_model_file, force_create=False)
+    process_dataset_face_classifier(model_path=args.face_classifier_model_file, force_create=False)

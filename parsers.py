@@ -92,7 +92,7 @@ class PrefLookTimestampParser:
         return output, start, end
 
 
-class XmlParser(BaseParser):
+class PrincetonParser(BaseParser):
     """
     A parser that can parse vcx files that are used in princeton laboratories
     """
@@ -101,13 +101,13 @@ class XmlParser(BaseParser):
         self.ext = ext
         self.labels_folder = Path(labels_folder)
 
-    def parse(self, file):
+    def parse(self, file, fps=30):
         label_path = Path(self.labels_folder, file + self.ext)
         if not label_path.is_file():
             logging.warning("For the file: " + str(file) + " no matching xml was found.")
             return None
         else:
-            return self.xml_parse(label_path, 30, True)
+            return self.xml_parse(label_path, fps, True)
 
     def xml_parse(self, input_file, fps, encode=False):
         tree = ET.parse(input_file)

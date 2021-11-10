@@ -50,6 +50,7 @@ def get_args():
     parser.add_argument('--model_fp', default=None, type=str)
     # plot learning curve or not
     parser.add_argument('--plot_lrcv', default=False, action='store_true')
+    parser.add_argument("--dataset_folder", help="path to processed dataset folder (not the raw one)")
     args = parser.parse_args()
     return args
 

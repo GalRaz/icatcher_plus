@@ -13,5 +13,6 @@ dependencies:
   - tensorboard
   - tqdm
   - colour
+  - pytest
   - pip:
     - opencv-python
