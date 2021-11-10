@@ -138,9 +138,14 @@ class PrincetonParser(BaseParser):
         sorted_responses = sorted(responses)
         if encode:
             encoded_responses = []
+            response_hours = [int(x[1][6]) for x in sorted_responses]
+            if not response_hours.count(response_hours[0]) == len(response_hours):
+                logging.warning("how can the video span more than 1 hour?")
+                raise ValueError
             for response in sorted_responses:
-                frame_number = int(response[1][4]) + int(response[1][10]) * fps + int(response[1][8]) * 60 * fps + int(
-                    response[1][6]) * 60 * 60 * fps
+                # do not count hours. assumption here is no video spans more than an hour.
+                # if yes, you can use + int(response[1][6]) * 60 * 60 * fps
+                frame_number = int(response[1][4]) + int(response[1][10]) * fps + int(response[1][8]) * 60 * fps
                 encoded_responses.append([frame_number, response[1][14], response[1][16]])
             sorted_responses = encoded_responses
         # replace offs with aways, they are equivalent
