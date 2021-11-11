@@ -68,6 +68,41 @@ def preprocess_raw_lookit_dataset(args, force_create=False):
             shutil.copyfile(args.raw_dataset_path / 'coding_second' / (filename[len(prefix):] + '-evts.txt'), args.label2_folder / (filename[len(prefix):]+'.txt'))
 
 
+def preprocess_raw_generic_dataset(args, force_create=False):
+    args.video_folder.mkdir(parents=True, exist_ok=True)
+    args.label_folder.mkdir(parents=True, exist_ok=True)
+    args.label2_folder.mkdir(parents=True, exist_ok=True)
+    args.faces_folder.mkdir(parents=True, exist_ok=True)
+
+    raw_videos_path = Path(args.raw_dataset_path / 'videos')
+    raw_coding_first_path = Path(args.raw_dataset_path / 'coding_first')
+    raw_coding_second_path = Path(args.raw_dataset_path / 'coding_second')
+
+    videos = [f.stem for f in raw_videos_path.glob("*.mp4")]
+    coding_first = [f.stem for f in raw_coding_first_path.glob("*.txt")]
+    coding_second = [f.stem for f in raw_coding_second_path.glob("*.txt")]
+
+    logging.info('[preprocess_raw] coding_first: {}'.format(len(coding_first)))
+    logging.info('[preprocess_raw] coding_second: {}'.format(len(coding_second)))
+    logging.info('[preprocess_raw] videos: {}'.format(len(videos)))
+
+    training_set = set(videos).intersection(set(coding_first))
+    test_set = set(videos).intersection(set(coding_first)).intersection(set(coding_second))
+    for i, file in enumerate(sorted(list(training_set))):
+        if not Path(args.video_folder, (file + '.mp4')).is_file() or force_create:
+            shutil.copyfile(raw_videos_path / (file + '.mp4'), args.video_folder / (file + '.mp4'))
+        if not Path(args.label_folder, (file + '.txt')).is_file() or force_create:
+            shutil.copyfile(raw_coding_first_path / (file + ".txt"), args.label_folder / (file + ".txt"))
+
+    for i, file in enumerate(sorted(list(test_set))):
+        if not Path(args.video_folder, (file + '.mp4')).is_file() or force_create:
+            shutil.copyfile(raw_videos_path / (file + '.mp4'), args.video_folder / (file + '.mp4'))
+        if not Path(args.label_folder, (file + '.txt')).is_file() or force_create:
+            shutil.copyfile(raw_coding_first_path / (file + ".txt"), args.label_folder / (file + ".txt"))
+        if not Path(args.label2_folder, (file + '.txt')).is_file() or force_create:
+            shutil.copyfile(raw_coding_second_path / (file + ".txt"), args.label2_folder / (file + ".txt"))
+
+
 def preprocess_raw_princeton_dataset(args, force_create=False):
     """
     Organizes the raw videos from marchman/princeton.
@@ -110,6 +145,7 @@ def preprocess_raw_princeton_dataset(args, force_create=False):
         if not Path(args.label2_folder, (file + '.vcx')).is_file() or force_create:
             shutil.copyfile(args.raw_dataset_path / 'VCX2' / (file + ".vcx"), args.label2_folder / (file + ".vcx"))
 
+
 def parse_lookit_label(file, fps):
     """
     Parses a label file from the lookit dataset
@@ -151,11 +187,13 @@ def detect_face_opencv_dnn(net, frame, conf_threshold):
     for i in range(detections.shape[2]):
         confidence = detections[0, 0, i, 2]
         if confidence > conf_threshold:
-            x1 = max(int(detections[0, 0, i, 3] * frameWidth), 0)
-            y1 = max(int(detections[0, 0, i, 4] * frameHeight), 0)
-            x2 = max(int(detections[0, 0, i, 5] * frameWidth), 0)
-            y2 = max(int(detections[0, 0, i, 6] * frameHeight), 0)
-            bboxes.append([x1, y1, x2-x1, y2-y1])
+            x1 = max(int(detections[0, 0, i, 3] * frameWidth), 0)  # left side of box
+            y1 = max(int(detections[0, 0, i, 4] * frameHeight), 0)  # top side of box
+            if x1 > frameWidth or y1 > frameHeight:  # if they are larger than image size, bbox is invalid
+                continue
+            x2 = min(int(detections[0, 0, i, 5] * frameWidth), frameWidth)  # either right side of box or frame width
+            y2 = min(int(detections[0, 0, i, 6] * frameHeight), frameHeight)  # either the bottom side of box of frame height
+            bboxes.append([x1, y1, x2-x1, y2-y1])  # (left, top, width, height)
     return bboxes
 
 
@@ -192,7 +230,7 @@ def process_dataset_lowest_face(args, gaze_labels_only=False, force_create=False
         face_labels = []
 
         cap = cv2.VideoCapture(str(video_file))
-        if args.raw_dataset_type == "lookit":
+        if args.raw_dataset_type == "lookit" or args.raw_dataset_type == "generic":
             responses = parse_lookit_label(args.label_folder / (video_file.stem + '.txt'), cap.get(cv2.CAP_PROP_FPS))
         elif args.raw_dataset_type == "princeton":
             parser = parsers.PrincetonParser(".vcx", args.label_folder)
@@ -526,12 +564,14 @@ if __name__ == "__main__":
         preprocess_raw_lookit_dataset(args, force_create=False)
     elif args.raw_dataset_type == "princeton":
         preprocess_raw_princeton_dataset(args, force_create=False)
+    elif args.raw_dataset_type == "generic":
+        preprocess_raw_generic_dataset(args, force_create=False)
     else:
         raise NotImplementedError
 
     process_dataset_lowest_face(args, gaze_labels_only=False, force_create=False)
     generate_second_gaze_labels(force_create=False, visualize_confusion=False)
     # report_dataset_split()
-    gen_lookit_multi_face_subset(force_create=False)
+    # gen_lookit_multi_face_subset(force_create=False)
     # uncomment next line if face classifier was trained:
     process_dataset_face_classifier(model_path=args.face_classifier_model_file, force_create=False)

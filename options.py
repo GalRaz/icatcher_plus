@@ -144,7 +144,7 @@ def parse_arguments_for_preprocess():
     parser = argparse.ArgumentParser()
     parser.add_argument("raw_dataset_path", type=str, help="path to raw dataset to preprocess")
     parser.add_argument("output_folder", type=str, help="path to put preprocessed dataset")
-    parser.add_argument("--raw_dataset_type", type=str, choices=["lookit", "princeton"], default="lookit",
+    parser.add_argument("--raw_dataset_type", type=str, choices=["lookit", "princeton", "generic"], default="lookit",
                         help="the type of dataset to preprocess")
     parser.add_argument("--log", help="If present, writes log to this path")
     parser.add_argument("-v", "--verbosity", type=str, choices=["debug", "info", "warning"], default="info",
