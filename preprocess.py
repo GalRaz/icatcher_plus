@@ -189,7 +189,7 @@ def detect_face_opencv_dnn(net, frame, conf_threshold):
         if confidence > conf_threshold:
             x1 = max(int(detections[0, 0, i, 3] * frameWidth), 0)  # left side of box
             y1 = max(int(detections[0, 0, i, 4] * frameHeight), 0)  # top side of box
-            if x1 > frameWidth or y1 > frameHeight:  # if they are larger than image size, bbox is invalid
+            if x1 >= frameWidth or y1 >= frameHeight:  # if they are larger than image size, bbox is invalid
                 continue
             x2 = min(int(detections[0, 0, i, 5] * frameWidth), frameWidth)  # either right side of box or frame width
             y2 = min(int(detections[0, 0, i, 6] * frameHeight), frameHeight)  # either the bottom side of box of frame height
