@@ -146,6 +146,7 @@ def parse_arguments_for_preprocess():
     parser.add_argument("output_folder", type=str, help="path to put preprocessed dataset")
     parser.add_argument("--raw_dataset_type", type=str, choices=["lookit", "princeton", "generic"], default="lookit",
                         help="the type of dataset to preprocess")
+    parser.add_argument("--gpu_id", type=int, default=-1, help="Which GPU to use (or -1 for cpu)")
     parser.add_argument("--log", help="If present, writes log to this path")
     parser.add_argument("-v", "--verbosity", type=str, choices=["debug", "info", "warning"], default="info",
                         help="Selects verbosity level")
@@ -164,4 +165,10 @@ def parse_arguments_for_preprocess():
     args.face_classifier_model_file = Path("models", "face_classifier_weights_best.pt")
     args.face_model_file = Path("models", "face_model.caffemodel")
     args.config_file = Path("models", "config.prototxt")
+    if args.gpu_id == -1:
+        args.device = "cpu"
+    else:
+        import os
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
+        args.device = "cuda:{}".format(0)
     return args

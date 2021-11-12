@@ -432,10 +432,10 @@ def gen_lookit_multi_face_subset(force_create=False):
     logging.info(face_hist)
 
 
-def process_dataset_face_classifier(model_path, force_create=False):
+def process_dataset_face_classifier(args, force_create=False):
     """
     further process a dataset using a trained face baby vs adult classifier and nearest patch mechanism
-    :param model_path: path to trained torch model file
+    :param args: comman line arguments
     :param force_create: forces creation of files even if they exist
     :return:
     """
@@ -468,9 +468,9 @@ def process_dataset_face_classifier(model_path, force_create=False):
             self.model = "vgg16"
             self.dropout = 0.0
 
-    args = Args()
-    model, input_size = face_classifier.fc_model.init_face_classifier(args, model_name=args.model, num_classes=2, resume_from=model_path)
-    data_transforms = face_classifier.fc_eval.get_fc_data_transforms(args, input_size)
+    fc_args = Args()
+    model, input_size = face_classifier.fc_model.init_face_classifier(fc_args, model_name=fc_args.model, num_classes=2, resume_from=args.face_classifier_model_file)
+    data_transforms = face_classifier.fc_eval.get_fc_data_transforms(fc_args, input_size)
     ## todo: remove test code from here
     # dataloaders = face_classifier.fc_data.get_dataset_dataloaders(args, input_size, 64, False)
     # criterion = face_classifier.fc_model.get_loss()
@@ -574,4 +574,4 @@ if __name__ == "__main__":
     # report_dataset_split()
     # gen_lookit_multi_face_subset(force_create=False)
     # uncomment next line if face classifier was trained:
-    process_dataset_face_classifier(model_path=args.face_classifier_model_file, force_create=False)
+    process_dataset_face_classifier(args, force_create=False)
