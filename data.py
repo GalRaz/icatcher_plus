@@ -40,7 +40,7 @@ class LookItDataset:
             self.file_filter = self.parse_filter_file()
         else:
             self.file_filter = None
-        self.paths = self.collect_paths("face_labels")  # change to "face_labels_fc" if you trained face classifier
+        self.paths = self.collect_paths("face_labels_fc")  # change to "face_labels" if face classifier wasn't trained
 
     def __len__(self):
         return len(self.paths)
@@ -150,7 +150,7 @@ class LookItDatasetStreamed:
         self.args = args
         self.transforms = DataTransforms(args.image_size).transformations
         self.img_processor = self.transforms[args.phase]
-        self.streams = self.collect_streams("face_labels")  # change to "face_labels_fc" if you trained face classifier
+        self.streams = self.collect_streams("face_labels_fc")  # change to "face_labels" if face classifier wasn't trained
 
     def __len__(self):
         return len(self.streams[0])
