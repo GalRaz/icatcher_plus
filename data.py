@@ -6,7 +6,7 @@ import copy
 from pathlib import Path
 import logging
 import csv
-
+import visualize
 
 class DataTransforms:
     def __init__(self, img_size):
@@ -75,8 +75,8 @@ class LookItDataset:
         all_names_path = Path(self.args.dataset_folder, "coding_first")
         test_names_path = Path(self.args.dataset_folder, "coding_second")
         dataset_folder_path = Path(self.args.dataset_folder, "faces")
-        all_names = [f.stem for f in all_names_path.glob('*.txt')]
-        test_names = [f.stem for f in test_names_path.glob('*.txt')]
+        all_names = [f.stem for f in all_names_path.glob('*')]
+        test_names = [f.stem for f in test_names_path.glob('*')]
         my_list = []
         logging.info("Collecting paths for dataloader...")
         video_counter = 0
@@ -251,6 +251,8 @@ class MyDataLoader:
             shuffle=shuffle,
             num_workers=int(opt.num_threads)
         )
+        if self.opt.phase == "train":
+            self.plot_sample_collage()
 
     def __len__(self):
         return len(self.dataset)
@@ -258,3 +260,20 @@ class MyDataLoader:
     def __iter__(self):
         for i, data in enumerate(self.dataloader):
             yield data
+
+    def plot_sample_collage(self):
+        condition = True
+        iterator = iter(self.dataloader)
+        while condition:
+            batch_data = next(iterator)
+            if torch.count_nonzero(batch_data["label"] == 0) >= 9:
+                condition = False
+        batch_imgs = batch_data["imgs"][:, 2, ...]
+        batch_labels = batch_data["label"]
+        classes = {0: "away", 1: "left", 2: "right"}
+        for class_id in classes.keys():
+            imgs = batch_imgs[torch.where(batch_labels == class_id)]
+            imgs = imgs[:9, ...].permute(0, 2, 3, 1).cpu().numpy()
+            imgs = (imgs - np.min(imgs, axis=(1, 2, 3), keepdims=True)) / (np.max(imgs, axis=(1, 2, 3), keepdims=True) - np.min(imgs, axis=(1, 2, 3), keepdims=True))
+            save_path = Path(self.opt.experiment_path, "collage_{}.png".format(classes[class_id]))
+            visualize.make_gallery(imgs, save_path, ncols=3)

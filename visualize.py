@@ -573,6 +573,19 @@ def put_rectangle(popped_frame, face):
     return popped_frame
 
 
+def make_gallery(array, save_path, ncols=3):
+    nindex, height, width, intensity = array.shape
+    nrows = nindex//ncols
+    assert nindex == nrows*ncols
+    # want result.shape = (height*nrows, width*ncols, intensity)
+    result = (array.reshape(nrows, ncols, height, width, intensity)
+              .swapaxes(1,2)
+              .reshape(height*nrows, width*ncols, intensity))
+    plt.imshow(result)
+    plt.savefig(save_path)
+    plt.cla()
+    plt.clf()
+
 # def get_open_gaze_label(time_ms, ID):
 #     for video_path, label_list in OPEN_GAZE_LABELS.items():
 #         if ID in video_path:
