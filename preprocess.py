@@ -146,27 +146,7 @@ def preprocess_raw_princeton_dataset(args, force_create=False):
             shutil.copyfile(args.raw_dataset_path / 'VCX2' / (file + ".vcx"), args.label2_folder / (file + ".vcx"))
 
 
-def parse_lookit_label(file, fps):
-    """
-    Parses a label file from the lookit dataset
-    :param file: the file to parse
-    :param fps: fps of the video
-    :return:
-    """
-    classes = {"away": 0, "left": 1, "right": 2}
-    labels = np.genfromtxt(open(file, "rb"), dtype='str', delimiter=",", skip_header=3)
-    output = []
-    for entry in range(labels.shape[0]):
-        frame = int(int(labels[entry, 0]) * fps / 1000)
-        class_name = labels[entry, 2]
-        valid_flag = 1 if class_name in classes else 0
-        frame_label = [frame, valid_flag, class_name]
-        output.append(frame_label)
-    output.sort(key=lambda x: x[0])
-    if len(output):
-        return output
-    else:
-        return None
+
 
 
 def detect_face_opencv_dnn(net, frame, conf_threshold):
@@ -212,6 +192,15 @@ def process_dataset_lowest_face(args, gaze_labels_only=False, force_create=False
     classes = {"away": 0, "left": 1, "right": 2}
     video_list = sorted(list(args.video_folder.glob("*")))
     net = cv2.dnn.readNetFromCaffe(str(args.config_file), str(args.face_model_file))
+    # todo: are there videos where target fps!=30 ?
+    if args.raw_dataset_type == "princeton":
+        parser = parsers.PrincetonParser(".vcx",
+                                         args.label_folder,
+                                         fps=30)
+    elif args.raw_dataset_type == "lookit" or args.raw_dataset_type == "generic":
+        parser = parsers.PrefLookTimestampParser2(args.label_folder, ".txt", fps=30)
+    else:
+        raise NotImplementedError
     for video_file in video_list:
         st_time = time.time()
         logging.info("[process_lkt_legacy] Proccessing %s" % video_file.name)
@@ -230,15 +219,10 @@ def process_dataset_lowest_face(args, gaze_labels_only=False, force_create=False
         face_labels = []
 
         cap = cv2.VideoCapture(str(video_file))
-        if args.raw_dataset_type == "lookit" or args.raw_dataset_type == "generic":
-            responses = parse_lookit_label(args.label_folder / (video_file.stem + '.txt'), cap.get(cv2.CAP_PROP_FPS))
-        elif args.raw_dataset_type == "princeton":
-            parser = parsers.PrincetonParser(".vcx", args.label_folder)
-            responses = parser.parse(video_file.stem)
-        else:
-            raise NotImplementedError
+        responses = parser.parse(video_file.stem)
         ret_val, frame = cap.read()
-
+        # make sure target fps is around 30
+        assert np.abs(cap.get(cv2.CAP_PROP_FPS) - 30) < 0.1
         while ret_val:
             if responses:
                 if frame_counter >= responses[0][0]:  # skip until reaching first annotated frame
@@ -339,11 +323,14 @@ def generate_second_gaze_labels(force_create=False, visualize_confusion=True):
     """
     classes = {"away": 0, "left": 1, "right": 2}
     video_list = list(args.video_folder.glob("*.mp4"))
+    parser = parsers.PrefLookTimestampParser2(args.label2_folder, ".txt", fps=30)
     for video_file in video_list:
         logging.info("[gen_2nd_labels] Video: %s" % video_file.name)
         if (args.label2_folder / (video_file.stem + '.txt')).exists():
             cap = cv2.VideoCapture(str(video_file))
-            responses = parse_lookit_label(args.label2_folder / (video_file.stem + '.txt'), cap.get(cv2.CAP_PROP_FPS))
+            # make sure target fps is around 30
+            assert np.abs(cap.get(cv2.CAP_PROP_FPS) - 30) < 0.1
+            responses = parser.parse(video_file.stem)
             gaze_labels = np.load(str(Path.joinpath(args.faces_folder, video_file.stem, 'gaze_labels.npy')))
             gaze_labels_second = []
             for frame in range(gaze_labels.shape[0]):
@@ -490,7 +477,7 @@ def process_dataset_face_classifier(args, force_create=False):
     # logging.info('val_loss: {:.4f}, val_top1: {:.4f}'.format(val_loss, val_top1))
     model.to(args.device)
     model.eval()
-    video_files = sorted(list(args.video_folder.glob("*.mp4")))
+    video_files = sorted(list(args.video_folder.glob("*")))
     for video_file in tqdm(video_files):
         face_labels_fc_filename = Path.joinpath(args.faces_folder, video_file.stem, 'face_labels_fc.npy')
         if not face_labels_fc_filename.is_file() or force_create:

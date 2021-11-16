@@ -2,6 +2,7 @@ import xml.etree.ElementTree as ET
 import logging
 from pathlib import Path
 import numpy as np
+import csv
 
 
 class BaseParser:
@@ -44,6 +45,7 @@ class PrefLookTimestampParser:
     """
     a parser that can parse PrefLookTimestamp as described here:
     https://osf.io/3n97m/
+    written by Peter
     """
     def __init__(self):
         self.classes = {'away': 0, 'left': 1, 'right': 2}
@@ -92,24 +94,74 @@ class PrefLookTimestampParser:
         return output, start, end
 
 
+class PrefLookTimestampParser2(BaseParser):
+    """
+    a parser that can parse PrefLookTimestamp as described here:
+    https://osf.io/3n97m/
+    written by Xincheng & Peng
+    todo: assert this returns same values as peter's version
+    """
+    def __init__(self, labels_folder, ext, fps):
+        super().__init__()
+        self.ext = ext
+        self.labels_folder = Path(labels_folder)
+        self.fps = fps
+
+    def parse(self, file):
+        """
+        Parses a label file from the lookit dataset
+        :param file: the file to parse
+        :return:
+        """
+        classes = {"away": 0, "left": 1, "right": 2}
+        label_path = Path(self.labels_folder, file + self.ext)
+        labels = np.genfromtxt(open(label_path, "rb"), dtype='str', delimiter=",", skip_header=3)
+        output = []
+        for entry in range(labels.shape[0]):
+            frame = int(int(labels[entry, 0]) * self.fps / 1000)
+            class_name = labels[entry, 2]
+            valid_flag = 1 if class_name in classes else 0
+            frame_label = [frame, valid_flag, class_name]
+            output.append(frame_label)
+        output.sort(key=lambda x: x[0])
+        if len(output):
+            return output
+        else:
+            return None
+
+
 class PrincetonParser(BaseParser):
     """
     A parser that can parse vcx files that are used in princeton laboratories
     """
-    def __init__(self, ext, labels_folder):
+    def __init__(self, ext, labels_folder, fps=30, start_time_file=None):
         super().__init__()
         self.ext = ext
         self.labels_folder = Path(labels_folder)
+        self.fps = fps
+        self.start_times = None
+        if start_time_file:
+            self.start_times = self.process_start_times(start_time_file)
 
-    def parse(self, file, fps=30):
+    def process_start_times(self, start_time_file):
+        start_times = {}
+        with open(start_time_file, newline='') as csvfile:
+            my_reader = csv.reader(csvfile, delimiter=',')
+            next(my_reader, None)  # skip the headers
+            for row in my_reader:
+                numbers = [int(x) for x in row[1].split(":")]
+                time_Stamp = numbers[0]*60*60*self.fps + numbers[1]*60*self.fps + numbers[2]*self.fps + numbers[3]
+                start_times[Path(row[0]).stem] = time_Stamp
+        return start_times
+
+    def parse(self, file):
         label_path = Path(self.labels_folder, file + self.ext)
         if not label_path.is_file():
             logging.warning("For the file: " + str(file) + " no matching xml was found.")
             return None
-        else:
-            return self.xml_parse(label_path, fps, True)
+        return self.xml_parse(label_path, True)
 
-    def xml_parse(self, input_file, fps, encode=False):
+    def xml_parse(self, input_file, encode=False):
         tree = ET.parse(input_file)
         root = tree.getroot()
         counter = 0
@@ -138,14 +190,18 @@ class PrincetonParser(BaseParser):
         sorted_responses = sorted(responses)
         if encode:
             encoded_responses = []
-            response_hours = [int(x[1][6]) for x in sorted_responses]
-            if not response_hours.count(response_hours[0]) == len(response_hours):
-                logging.warning("how can the video span more than 1 hour?")
-                raise ValueError
+            # response_hours = [int(x[1][6]) for x in sorted_responses]
+            # if not response_hours.count(response_hours[0]) == len(response_hours):
+            #     logging.warning("response")
             for response in sorted_responses:
-                # do not count hours. assumption here is no video spans more than an hour.
-                # if yes, you can use + int(response[1][6]) * 60 * 60 * fps
-                frame_number = int(response[1][4]) + int(response[1][10]) * fps + int(response[1][8]) * 60 * fps
+                frame_number = int(response[1][4]) +\
+                               int(response[1][10]) * self.fps +\
+                               int(response[1][8]) * 60 * self.fps +\
+                               int(response[1][6]) * 60 * 60 * self.fps
+                if self.start_times:
+                    start_time = self.start_times[input_file.stem]
+                    frame_number -= start_time
+                assert frame_number < 60 * 60 * self.fps
                 encoded_responses.append([frame_number, response[1][14], response[1][16]])
             sorted_responses = encoded_responses
         # replace offs with aways, they are equivalent
