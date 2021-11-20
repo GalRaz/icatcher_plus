@@ -8,6 +8,8 @@ import logging
 import face_classifier
 import torch
 import models
+import data
+from PIL import Image
 
 
 class FaceClassifierArgs:
@@ -103,11 +105,14 @@ def extract_crop(frame, bbox, opt):
     img_shape = np.array(frame.shape)
     face_box = np.array([bbox[1], bbox[1] + bbox[3], bbox[0], bbox[0] + bbox[2]])
     crop = frame[bbox[1]:bbox[1] + bbox[3], bbox[0]:bbox[0] + bbox[2]]
-    crop = cv2.resize(crop, (opt.image_size, opt.image_size)) * 1. / 255
-    crop = np.expand_dims(crop, axis=0)
-    crop -= np.array(opt.per_channel_mean)
-    crop /= (np.array(opt.per_channel_std) + 1e-6)
 
+    test_transforms = data.DataTransforms(opt.image_size).transformations["test"]
+    # crop2 = cv2.resize(crop, (opt.image_size, opt.image_size)) * 1. / 255
+    # crop2 = np.expand_dims(crop2, axis=0)
+    # crop2 -= np.array(opt.per_channel_mean)
+    # crop2 /= (np.array(opt.per_channel_std) + 1e-6)
+    crop = test_transforms(Image.fromarray(crop))
+    crop = crop.permute(1, 2, 0).unsqueeze(0).numpy()
     ratio = np.array([face_box[0] / img_shape[0], face_box[1] / img_shape[0],
                       face_box[2] / img_shape[1], face_box[3] / img_shape[1]])
     face_size = (ratio[1] - ratio[0]) * (ratio[3] - ratio[2])
@@ -129,10 +134,10 @@ def predict_from_video(opt):
     # initialize
     opt.frames_per_datapoint = 10
     opt.frames_stride_size = 2
-    classes = {'away': 0, 'left': 1, 'right': 2}
-    reverse_dict = {0: 'away', 1: 'left', 2: 'right'}
     sequence_length = 9
     loc = -5
+    classes = {'away': 0, 'left': 1, 'right': 2}
+    reverse_classes = {0: 'away', 1: 'left', 2: 'right'}
     logging.info("using the following values for per-channel mean: {}".format(opt.per_channel_mean))
     logging.info("using the following values for per-channel std: {}".format(opt.per_channel_std))
     face_detector_model_file = Path("models", "face_model.caffemodel")
@@ -253,7 +258,7 @@ def predict_from_video(opt):
                     answers[loc] = int32_pred
                 image_sequence.pop(0)
                 box_sequence.pop(0)
-                class_text = reverse_dict[answers[-sequence_length]]
+                class_text = reverse_classes[answers[loc]]
                 if opt.on_off:
                     class_text = "off" if class_text == "away" else "on"
                 # If show_output or output_video is true, add text label, bounding box for face, and arrow showing direction
@@ -268,15 +273,15 @@ def predict_from_video(opt):
                 # handle writing output to file
                 if opt.output_annotation:
                     if opt.output_format == "raw_output":
-                        output_file.write("{}, {}\n".format(frame_count, class_text))
+                        output_file.write("{}, {}\n".format(frame_count + loc + 1, class_text))
                     elif opt.output_format == "PrefLookTimestamp":
                         if class_text != last_class_text: # Record "event" for change of direction if code has changed
-                            frame_ms = int(1000. / framerate * frame_count)
+                            frame_ms = int((frame_count + loc + 1) * (1000. / framerate))
                             output_file.write("{},0,{}\n".format(frame_ms, class_text))
                             last_class_text = class_text
                     else:
                         raise NotImplementedError
-                logging.info("frame: {}, class: {}".format(str(frame_count - sequence_length + 1), class_text))
+                logging.info("frame: {}, class: {}".format(str(frame_count + loc + 1), class_text))
             ret_val, frame = cap.read()
             frame_count += 1
         # finished processing a video file, cleanup
@@ -286,8 +291,9 @@ def predict_from_video(opt):
             video_output.release()
         if opt.output_annotation:  # write footer to file
             if opt.output_format == "PrefLookTimestamp":
-                frame_ms = int(1000. / framerate * frame_count)
-                output_file.write("0,{},codingactive\n".format(frame_ms))
+                start_ms = int((1000. / framerate) * (sequence_length // 2))
+                end_ms = int((1000. / framerate) * frame_count)
+                output_file.write("{},{},codingactive\n".format(start_ms, end_ms))
                 output_file.close()
         cap.release()
 

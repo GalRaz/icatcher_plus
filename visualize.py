@@ -118,6 +118,7 @@ def time_ms_to_frame(time_ms, fps=30):
 def frame_to_time_ms(frame, fps=30):
     return int(frame * 1000 / fps)
 
+
 def compare_two_coding_files(coding1, coding2):
     """
     given two codings in the format described below, returns some relevant metrics in a dictionary
@@ -139,6 +140,7 @@ def compare_two_coding_files(coding1, coding2):
     classes = {"away": 0, "left": 1, "right": 2}
     ON_CLASSES = ["left", "right"]
     same_count = 0
+    diff_count = 0
     times_coding1 = {"left": [],
                     "right": [],
                     "away": [],
@@ -196,9 +198,12 @@ def compare_two_coding_files(coding1, coding2):
         if coding2_label[2] != "none":
             assert coding2_label[2] in classes.keys()
             coding2_by_label[classes[coding2_label[2]]] += 1
-        if coding1_label[2] == coding2_label[2] and coding1_label[2] != "none":
+        if coding1_label[2] != "none" and coding2_label[2] != "none":
             assert coding1_label[2] in classes.keys()
-            same_count += 1
+            if coding1_label[2] == coding2_label[2]:
+                same_count += 1
+            else:
+                diff_count += 1
         if coding1_label[2] in ON_CLASSES:
             if coding1_label[2] == coding2_label[2]:
                 left_right_agree += 1
@@ -206,8 +211,7 @@ def compare_two_coding_files(coding1, coding2):
         if coding2_label[2] in ON_CLASSES:
             c2_left_right_total += 1
 
-    accuracy_coding1 = 100 * same_count / valid_labels_coding1
-    accuracy_coding2 = 100 * same_count / valid_labels_coding2
+    accuracy = 100 * same_count / (same_count + diff_count)
     num_coding1_valid = 100 * (valid_labels_coding1 / total_frames_coding1)
     num_coding2_valid = 100 * (valid_labels_coding2 / total_frames_coding2)
 
@@ -216,8 +220,7 @@ def compare_two_coding_files(coding1, coding2):
     c1_left_right_accuracy = left_right_agree / c1_left_right_total
     c2_left_right_accuracy = left_right_agree / c2_left_right_total
 
-    metrics = {"accuracy_coding1": accuracy_coding1,
-               "accuracy_coding2": accuracy_coding2,
+    metrics = {"accuracy": accuracy,
                "num_coding1_valid": num_coding1_valid,
                "num_coding2_valid": num_coding2_valid,
                "coding1_on_vs_away": coding1_on_vs_away,
@@ -274,17 +277,14 @@ def save_metrics_csv(sorted_IDs, all_metrics, inference):
             csv_writer.writerow(row)
 
 
-def get_frame_from_video(ID, time_in_ms, video_folder):
+def get_frame_from_video(ID, frame_no, video_folder):
     for video_file in Path(video_folder).glob("*"):
         if ID.stem in video_file.name:
             cap = cv2.VideoCapture(str(video_file))
-            fps = cap.get(cv2.CAP_PROP_FPS)
-            frame_no = int(time_in_ms / 1000 * fps)
-            cap.set(cv2.CAP_PROP_FRAME_COUNT, frame_no - 1)
+            frame_no = int(frame_no)
+            # cap.set(cv2.CAP_PROP_FRAME_COUNT, frame_no - 1)
             ret, frame = cap.read()
-            x = 0
             for i in range(frame_no):
-                x = i
                 ret, frame = cap.read()
             if ret:
                 # first convert color mode to RGB
@@ -321,8 +321,8 @@ def generate_frame_comparison(sorted_IDs, all_metrics, args):
     heights = [1] * len(sorted_IDs)
     gs_kw = dict(width_ratios=widths, height_ratios=heights)
     fig, axs = plt.subplots(len(sorted_IDs), 3, figsize=(30, 45), gridspec_kw=gs_kw)
-    plt.suptitle(f'Frame by frame comparison of {" ".join(INFERENCE_METHODS)} and human labels', fontsize=40)
-    color_gradient = list(Color("red").range_to(Color("green"), 100))
+    plt.suptitle(f'Frame by frame comparisons per video', fontsize=40)
+    # color_gradient = list(Color("red").range_to(Color("green"), 100))
 
     for i, target_ID in enumerate(tqdm(sorted_IDs)):
         timeline, accuracy, sample_frame = axs[i, :]  # won't work with single video...
@@ -331,28 +331,26 @@ def generate_frame_comparison(sorted_IDs, all_metrics, args):
         start2, end2 = all_metrics[target_ID]["human1_vs_machine"]["valid_range_coding2"]
         start = min(start1, start2)
         end = max(end1, end2)
-        # end = start + 5000
-        timeline.set_title("Video ID: " + str(target_ID.stem) + " (Times " + str(start) + "-" + str(end) + " milliseconds)",
-                           fontsize=14)
-        for name in INFERENCE_METHODS:
-            times = all_metrics[target_ID][name]['times_coding2']
-            video_label = str(i) + '-' + name
-            skip = 100  # frame comparison resolution. Increase to speed up plotting
+        timeline.set_title("Video ID: {}, frames: {} - {}".format(target_ID.stem, str(start), str(end)), fontsize=14)
+        for j, name in enumerate(["times_coding1", "times_coding2"]):
+            times = all_metrics[target_ID]["human1_vs_machine"][name]
+            video_label = "human" if j==0 else "machine"
+            skip = 10  # frame comparison resolution. Increase to speed up plotting
             for label in GRAPH_CLASSES:
-                timeline.barh(video_label, skip, left=times[label][::skip], height=1, label=label,
+                timeline.barh(video_label, skip, left=times[label][::skip],
+                              height=1, label=label,
                               color=LABEL_TO_COLOR[label])
-            timeline.set_xlabel("Time (ms)")
-
-            if i == 0 and name == "machine":
+            timeline.set_xlabel("Frame #")
+            if i == 0 and j == 0:
                 timeline.legend(loc='upper right')
-                accuracy.set_title("Frame by frame accuracy for each model")
-        accuracies = [all_metrics[target_ID][inference]['accuracy_coding2'] for inference in INFERENCE_METHODS]
+                accuracy.set_title("Frame by frame accuracy")
+        accuracies = [all_metrics[target_ID][inference]['accuracy'] for inference in INFERENCE_METHODS]
         # colors = [color_gradient[int(acc * 100)].rgb for acc in accuracies]
 
         accuracy.bar(range(len(INFERENCE_METHODS)), accuracies, color="black")
         accuracy.set_xticks(range(len(INFERENCE_METHODS)))
-        accuracy.set_xticklabels(INFERENCE_METHODS)
-        accuracy.set_ylim([0, 1])
+        accuracy.set_xticklabels(INFERENCE_METHODS, rotation=45, ha="right")
+        accuracy.set_ylim([0, 100])
         accuracy.set_ylabel("Accuracy")
         # sample_frame_index = min(
         #     [all_metrics[target_ID][ICATCHER]['times_target'][label][0] for label in VALID_CLASSES])
@@ -366,6 +364,7 @@ def generate_frame_comparison(sorted_IDs, all_metrics, args):
 
 
 def generate_plot_set(sorted_IDs, all_metrics, inference, save_path):
+    inf_target = inference.split("_")[-1]
     classes = {"away": 0, "left": 1, "right": 2}
     fig, axs = plt.subplots(3, 2, figsize=(10, 12))
     accuracy_bar = axs[0, 0]
@@ -384,19 +383,16 @@ def generate_plot_set(sorted_IDs, all_metrics, inference, save_path):
             ax.set_xlim([0, 1])
             ax.set_ylim([0, 1])
         ax.plot([0, 1], [0, 1], transform=ax.transAxes, color="black", label="Ideal trend")
-
-    ticks = range(len(sorted_IDs))
     x = np.arange(len(sorted_IDs))
-
     labels = range(len(sorted_IDs))
     ticks = range(len(sorted_IDs))
-    accuracies = [all_metrics[ID][inference]['accuracy_coding2'] for ID in sorted_IDs]
+    accuracies = [all_metrics[ID][inference]['accuracy'] for ID in sorted_IDs]
     accuracy_bar.bar(x, accuracies, color='purple')
     mean = np.mean(accuracies)
     accuracy_bar.axhline(y=mean, color='black', linestyle='-', label="mean (" + str(mean)[:4] + ")")
 
-    accuracy_bar.set_title('Video accuracy (over valid frames)')
-    accuracy_bar.set_ylim([0, 1])
+    accuracy_bar.set_title('iCatcher accuracy (over mutually valid frames)')
+    accuracy_bar.set_ylim([0, 100])
     accuracy_bar.set_xticks(ticks)
     accuracy_bar.set_xticklabels(labels, rotation='vertical', fontsize=8)
     accuracy_bar.set_xlabel('Video')
@@ -408,16 +404,16 @@ def generate_plot_set(sorted_IDs, all_metrics, inference, save_path):
     # ID_index.table(cell_text, loc='center', fontsize=18)
     # ID_index.set_title("Video index to ID")
 
-    x_target_valid = [all_metrics[ID][inference]['num_coding1_valid'] for ID in sorted_IDs]
-    y_target_valid = [all_metrics[ID][inference]['num_coding2_valid'] for ID in sorted_IDs]
+    x_target_valid = [all_metrics[ID][inference]['num_coding1_valid']/100 for ID in sorted_IDs]
+    y_target_valid = [all_metrics[ID][inference]['num_coding2_valid']/100 for ID in sorted_IDs]
     target_valid_scatter.scatter(x_target_valid, y_target_valid)
     for i in range(len(sorted_IDs)):
         target_valid_scatter.annotate(i, (x_target_valid[i], y_target_valid[i]))
     target_valid_scatter.set_xlabel("Human annotated labels")
-    target_valid_scatter.set_xlabel(f'{inference} labels')
+    target_valid_scatter.set_xlabel(f'{inf_target} labels')
 
     target_valid_scatter.set_title(
-        f'Number of distinct look events\n(\"left, right, away\") per second\nfor {inference} vs human data')
+        f'Number of distinct look events per second\nfor human1 vs {inf_target}')
 
     x_target_away = [all_metrics[ID][inference]['coding1_on_vs_away'] for ID in sorted_IDs]
     y_target_away = [all_metrics[ID][inference]['coding2_on_vs_away'] for ID in sorted_IDs]
@@ -426,9 +422,9 @@ def generate_plot_set(sorted_IDs, all_metrics, inference, save_path):
         on_away_scatter.annotate(i, (x_target_away[i], y_target_away[i]))
 
     on_away_scatter.set_xlabel("Human annotated labels")
-    on_away_scatter.set_xlabel(f'{inference} labels')
+    on_away_scatter.set_xlabel(f'{inf_target} labels')
     on_away_scatter.set_title(
-        f'Portion of left and right labels compared to\ntotal number of left, right, and away labels\nfor {inference} vs Human data')
+        f'ratio between left-right and left-right-away\n for {inf_target} vs human data')
 
     for i, label in enumerate(sorted(classes.keys())):
         x_labels = [y[i] / sum(y) for y in [all_metrics[ID][inference]['coding2_by_label'] for ID in sorted_IDs]]
@@ -436,10 +432,10 @@ def generate_plot_set(sorted_IDs, all_metrics, inference, save_path):
         label_scatter.scatter(x_labels, y_labels, color=LABEL_TO_COLOR[label], label=label)
         for n in range(len(sorted_IDs)):
             label_scatter.annotate(n, (x_labels[n], y_labels[n]))
-    label_scatter.set_xlabel(f'{inference} label proportion')
-    label_scatter.set_ylabel('human annotated\nlabel proportion')
+    label_scatter.set_xlabel(f'{inf_target} label proportion')
+    label_scatter.set_ylabel('human1 label proportion')
     label_scatter.set_title(
-        f'Normalized number of left, right, and away\nevents for human data vs {inference} inference')
+        f'label distribution for human data vs {inf_target}')
     label_scatter.legend(loc='upper center')
 
     bottoms_inf = np.zeros(shape=(len(sorted_IDs)))
@@ -458,8 +454,8 @@ def generate_plot_set(sorted_IDs, all_metrics, inference, save_path):
         bottoms_tar += label_counts_tar
     label_bar.xaxis.set_major_locator(MultipleLocator(1))
     label_bar.set_xticks(ticks)
-    label_bar.set_title('Portion of each label\ntype for each video\n(left is inferred)')
-    label_bar.set_ylabel('Portion of total')
+    label_bar.set_title('Percent of each label\ntype for each video\n(left side is predictions)')
+    label_bar.set_ylabel('Percent')
     label_bar.set_xlabel('Video')
     plt.subplots_adjust(left=0.1, bottom=0.075, right=0.9, top=0.925, wspace=0.2, hspace=0.5)
     plt.suptitle(f'{inference} evaluation', fontsize=24)
@@ -469,27 +465,28 @@ def generate_plot_set(sorted_IDs, all_metrics, inference, save_path):
 
 
 def plot_inference_accuracy_vs_human_agreement(sorted_IDs, all_metrics, args):
-
-    plt.scatter([all_metrics[id]["human1_vs_human2"]["accuracy_coding2"] for id in sorted_IDs],
-                [all_metrics[id]["human1_vs_machine"]["accuracy_coding2"] for id in sorted_IDs])
-    plt.xlim([0, 1])
-    plt.ylim([0, 1])
-    plt.xlabel("Human agreement")
-    plt.ylabel(f'{"machine"} accuracy')
-    plt.title(f'Inference accuracy versus human agreement for the {len(all_metrics)} doubly coded videos')
-    plt.savefig(Path(args.output_folder, 'iCatcher_acc_vs_certainty.png'))
+    plt.figure(figsize=(8.0, 6.0))
+    plt.scatter([all_metrics[id]["human1_vs_human2"]["accuracy"] for id in sorted_IDs],
+                [all_metrics[id]["human1_vs_machine"]["accuracy"] for id in sorted_IDs])
+    plt.xlim([0, 100])
+    plt.ylim([0, 100])
+    plt.xlabel("Human accuracy")
+    plt.ylabel("iCatcher accuracy")
+    plt.title("iCatcher accuracy vs human accuracy for all doubly coded videos")
+    plt.savefig(Path(args.output_folder, 'iCatcher_acc_vs_human_acc.png'))
     plt.cla()
     plt.clf()
 
 
 def plot_luminance_vs_accuracy(sorted_IDs, all_metrics, args):
+    plt.figure(figsize=(8.0, 6.0))
     plt.scatter([sample_luminance(id, args, *all_metrics[id]["human1_vs_machine"]['valid_range_coding2']) for id in sorted_IDs],
-                [all_metrics[id]["human1_vs_machine"]["accuracy_coding2"] for id in sorted_IDs])
+                [all_metrics[id]["human1_vs_machine"]["accuracy"] for id in sorted_IDs])
     # plt.xlim([0, 1])
     # plt.ylim([0, 1])
     plt.xlabel("Luminance")
-    plt.ylabel(f'{"machine"} accuracy')
-    plt.title(f'Inference accuracy versus mean video luminance for {len(all_metrics)} doubly coded videos')
+    plt.ylabel("iCatcher accuracy")
+    plt.title("iCatcher accuracy versus mean video luminance for all doubly coded videos")
     plt.savefig(Path(args.output_folder, 'iCatcher_lum_vs_acc.png'))
     plt.cla()
     plt.clf()
@@ -652,7 +649,7 @@ if __name__ == "__main__":
 
     all_metrics = create_cache_metrics(args, force_create=False)
     sorted_ids = sorted(list(all_metrics.keys()),
-                        key=lambda x: all_metrics[x]["human1_vs_machine"]["accuracy_coding2"])  # sort by accuracy
+                        key=lambda x: all_metrics[x]["human1_vs_machine"]["accuracy"])  # sort by accuracy
     # sorted_ids = sorted(list(all_metrics.keys()))  # sort alphabetically
     INFERENCE_METHODS = ["human1_vs_human2", "human1_vs_machine"]
     for inference in INFERENCE_METHODS:

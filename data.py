@@ -8,6 +8,7 @@ import logging
 import csv
 import visualize
 
+
 class DataTransforms:
     def __init__(self, img_size):
         self.transformations = {
@@ -40,7 +41,7 @@ class LookItDataset:
             self.file_filter = self.parse_filter_file()
         else:
             self.file_filter = None
-        self.paths = self.collect_paths("face_labels_fc")  # change to "face_labels" if face classifier wasn't trained
+        self.paths = self.collect_paths("face_labels_fc")  # change to "face_labels" if face classifier wasn't used
 
     def __len__(self):
         return len(self.paths)
@@ -78,7 +79,7 @@ class LookItDataset:
         all_names = [f.stem for f in all_names_path.glob('*')]
         test_names = [f.stem for f in test_names_path.glob('*')]
         my_list = []
-        logging.info("Collecting paths for dataloader...")
+        logging.info("{}: Collecting paths for dataloader".format(self.args.phase))
         video_counter = 0
         for name in all_names:
             if self.args.phase == "val":
