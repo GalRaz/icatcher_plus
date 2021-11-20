@@ -64,8 +64,9 @@ def parse_arguments_for_testing():
                                                      "which crop should we select from every frame")
     parser.add_argument("--source_type", type=str, default="file", choices=["file", "webcam"],
                         help="selects source of stream to use.")
-    parser.add_argument("--video_filter_file", type=str,
-                        help="if provided, a list of files to use when processing a folder of videos")
+    parser.add_argument("--video_filter", type=str,
+                        help="either a file consisting of a list of files used to filter videos in a folder,"
+                             " or a folder of files to filter the videos with")
     parser.add_argument("--output_annotation", type=str, help="folder to output annotations to")
     parser.add_argument("--on_off", action="store_true",
                         help="left/right/away annotations will be swapped with on/off (only works with icatcher+)")
@@ -93,9 +94,9 @@ def parse_arguments_for_testing():
     args = parser.parse_args()
     args.model = Path(args.model)
     assert args.model.is_file()
-    if args.video_filter_file:
-        args.video_filter_file = Path(args.video_filter_file)
-        assert args.video_filter_file.is_file()
+    if args.video_filter:
+        args.video_filter = Path(args.video_filter)
+        assert args.video_filter.is_file() or args.video_filter.is_dir()
     if args.output_annotation:
         args.output_filepath = Path(args.output_annotation)
         if not args.output_filepath.is_dir():

@@ -145,9 +145,19 @@ def predict_from_video(opt):
     path_to_primary_model = opt.model
     primary_model = models.GazeCodingModel(opt).to(opt.device)
     if opt.device == 'cpu':
-        primary_model.load_state_dict(torch.load(str(path_to_primary_model), map_location=torch.device(opt.device)))
+        state_dict = torch.load(str(path_to_primary_model), map_location=torch.device(opt.device))
     else:
-        primary_model.load_state_dict(torch.load(str(path_to_primary_model)))
+        state_dict = torch.load(str(path_to_primary_model))
+    try:
+        primary_model.load_state_dict(state_dict)
+    except RuntimeError:  # deal with old models that were encapsulated with "net"
+        from collections import OrderedDict
+        new_dict = OrderedDict()
+        for i in range(len(state_dict)):
+            k, v = state_dict.popitem(False)
+            new_k = '.'.join(k.split(".")[1:])
+            new_dict[new_k] = v
+        primary_model.load_state_dict(new_dict)
     primary_model.eval()
 
     if opt.fc_model:
@@ -171,11 +181,14 @@ def predict_from_video(opt):
         if video_path.is_dir():
             logging.warning("Video folder provided as source. Make sure it contains video files only.")
             video_paths = list(video_path.glob("*"))
-            if opt.video_filter_file:
-                with open(opt.video_filter_file, "r") as f:
-                    filter_files = f.readlines()
-                    filter_files = [line.rstrip() for line in filter_files]
-                video_paths = [x for x in video_paths if x.name in filter_files]
+            if opt.video_filter:
+                if opt.video_filter.is_file():
+                    with open(opt.video_filter_file, "r") as f:
+                        filter_files = f.readlines()
+                        filter_files = [Path(line.rstrip()).stem for line in filter_files]
+                else:  # directory
+                    filter_files = [x.stem for x in opt.video_filter.glob("*")]
+                video_paths = [x for x in video_paths if x.stem in filter_files]
             video_paths = [str(x) for x in video_paths]
         elif video_path.is_file():
             video_paths = [str(video_path)]

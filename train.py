@@ -100,7 +100,7 @@ def predict_on_preprocessed(args):
             # running_loss += val_loss.item() * batch["label"].shape[0]
             running_corrects += torch.sum(torch.eq(predictions, batch["label"])).item()
     mat, total_acc = calculate_confusion_matrix(None, None,
-                                                Path(args.experiment_path, "conf_{}.png".format(args.use_disjoint)),
+                                                Path(args.experiment_path, "confusion_matrix_{}.png".format(args.use_disjoint)),
                                                 confusion_matrix.numpy())
     # val_loss_total = running_loss / num_datapoints
     val_acc_total = (running_corrects / num_datapoints) * 100
