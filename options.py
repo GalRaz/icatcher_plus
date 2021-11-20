@@ -64,12 +64,15 @@ def parse_arguments_for_testing():
                                                      "which crop should we select from every frame")
     parser.add_argument("--source_type", type=str, default="file", choices=["file", "webcam"],
                         help="selects source of stream to use.")
+    parser.add_argument("--video_filter_file", type=str,
+                        help="if provided, a list of files to use when processing a folder of videos")
     parser.add_argument("--output_annotation", type=str, help="folder to output annotations to")
     parser.add_argument("--on_off", action="store_true",
                         help="left/right/away annotations will be swapped with on/off (only works with icatcher+)")
     # Set up text output file, using https://osf.io/3n97m/ - PrefLookTimestamp coding standard
     parser.add_argument("--output_format", type=str, default="PrefLookTimestamp", choices=["PrefLookTimestamp",
                                                                                            "raw_output"])
+    parser.add_argument("--output_file_suffix", type=str, default=".txt", help="the output file suffix")
     parser.add_argument("--architecture", type=str, choices=["fc", "icatcher_vanilla", "icatcher+", "rnn"],
                         default="icatcher+",
                         help="Selects architecture to use")
@@ -90,6 +93,9 @@ def parse_arguments_for_testing():
     args = parser.parse_args()
     args.model = Path(args.model)
     assert args.model.is_file()
+    if args.video_filter_file:
+        args.video_filter_file = Path(args.video_filter_file)
+        assert args.video_filter_file.is_file()
     if args.output_annotation:
         args.output_filepath = Path(args.output_annotation)
         if not args.output_filepath.is_dir():
@@ -125,6 +131,17 @@ def parse_arguments_for_visualizations():
     parser.add_argument("human_codings_folder", type=str, help="the codings from human1")
     parser.add_argument("human2_codings_folder", type=str, help="the codings from human12")
     parser.add_argument("machine_codings_folder", type=str, help="the codings from machine")
+    parser.add_argument("raw_video_folder", type=str, help="path to raw video folder")
+    parser.add_argument("--human_coding_format",
+                        type=str,
+                        default="PrefLookTimestamp",
+                        choices=["PrefLookTimestamp",
+                                 "princeton"])
+    parser.add_argument("--machine_coding_format",
+                        type=str,
+                        default="PrefLookTimestamp",
+                        choices=["PrefLookTimestamp",
+                                 "princeton"])
     parser.add_argument("--log", help="If present, writes log to this path")
     parser.add_argument("-v", "--verbosity", type=str, choices=["debug", "info", "warning"], default="info",
                         help="Selects verbosity level")
@@ -137,6 +154,8 @@ def parse_arguments_for_visualizations():
     assert args.human2_codings_folder.is_dir()
     args.machine_codings_folder = Path(args.machine_codings_folder)
     assert args.machine_codings_folder.is_dir()
+    args.raw_video_folder = Path(args.raw_video_folder)
+    assert args.raw_video_folder.is_dir()
     return args
 
 

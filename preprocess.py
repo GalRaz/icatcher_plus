@@ -194,11 +194,11 @@ def process_dataset_lowest_face(args, gaze_labels_only=False, force_create=False
     net = cv2.dnn.readNetFromCaffe(str(args.config_file), str(args.face_model_file))
     # todo: are there videos where target fps!=30 ?
     if args.raw_dataset_type == "princeton":
-        parser = parsers.PrincetonParser(".vcx",
-                                         args.label_folder,
-                                         fps=30)
+        parser = parsers.PrincetonParser(30,
+                                         ".vcx",
+                                         args.label_folder)
     elif args.raw_dataset_type == "lookit" or args.raw_dataset_type == "generic":
-        parser = parsers.PrefLookTimestampParser2(args.label_folder, ".txt", fps=30)
+        parser = parsers.PrefLookTimestampParser(30, args.label_folder, ".txt")
     else:
         raise NotImplementedError
     for video_file in video_list:
@@ -219,7 +219,7 @@ def process_dataset_lowest_face(args, gaze_labels_only=False, force_create=False
         face_labels = []
 
         cap = cv2.VideoCapture(str(video_file))
-        responses = parser.parse(video_file.stem)
+        responses, _, _ = parser.parse(video_file.stem)
         ret_val, frame = cap.read()
         # make sure target fps is around 30
         assert np.abs(cap.get(cv2.CAP_PROP_FPS) - 30) < 0.1
@@ -323,14 +323,14 @@ def generate_second_gaze_labels(force_create=False, visualize_confusion=True):
     """
     classes = {"away": 0, "left": 1, "right": 2}
     video_list = list(args.video_folder.glob("*.mp4"))
-    parser = parsers.PrefLookTimestampParser2(args.label2_folder, ".txt", fps=30)
+    parser = parsers.PrefLookTimestampParser(30, args.label2_folder, ".txt")
     for video_file in video_list:
         logging.info("[gen_2nd_labels] Video: %s" % video_file.name)
         if (args.label2_folder / (video_file.stem + '.txt')).exists():
             cap = cv2.VideoCapture(str(video_file))
             # make sure target fps is around 30
             assert np.abs(cap.get(cv2.CAP_PROP_FPS) - 30) < 0.1
-            responses = parser.parse(video_file.stem)
+            responses, _, _ = parser.parse(video_file.stem)
             gaze_labels = np.load(str(Path.joinpath(args.faces_folder, video_file.stem, 'gaze_labels.npy')))
             gaze_labels_second = []
             for frame in range(gaze_labels.shape[0]):
@@ -456,7 +456,10 @@ def process_dataset_face_classifier(args, force_create=False):
             self.dropout = 0.0
 
     fc_args = Args()
-    model, input_size = face_classifier.fc_model.init_face_classifier(fc_args, model_name=fc_args.model, num_classes=2, resume_from=args.face_classifier_model_file)
+    model, input_size = face_classifier.fc_model.init_face_classifier(fc_args,
+                                                                      model_name=fc_args.model,
+                                                                      num_classes=2,
+                                                                      resume_from=args.face_classifier_model_file)
     data_transforms = face_classifier.fc_eval.get_fc_data_transforms(fc_args, input_size)
     ## todo: remove test code from here
     # dataloaders = face_classifier.fc_data.get_dataset_dataloaders(args, input_size, 64, False)

@@ -22,14 +22,14 @@ class BaseParser:
         then only frame 0 and frame 3 will appear on the output list.
 
         :param file: the label file to parse.
-        :return: None if failed, else: list of lists as described above
+        :return: None if failed, else: list of lists as described above, the frame which codings starts, and frame at which it ends
         """
         raise NotImplementedError
 
 
 class TrivialParser(BaseParser):
     """
-    A trivial parser that labels all video as "left" if input "file" is not None
+    A trivial toy parser that labels all video as "left" if input "file" is not None
     """
     def __init__(self):
         super().__init__()
@@ -41,91 +41,54 @@ class TrivialParser(BaseParser):
             return None
 
 
-class PrefLookTimestampParser:
+class PrefLookTimestampParser(BaseParser):
     """
     a parser that can parse PrefLookTimestamp as described here:
     https://osf.io/3n97m/
-    written by Peter
+    todo: assert this returns same values as peter's version
     """
-    def __init__(self):
-        self.classes = {'away': 0, 'left': 1, 'right': 2}
+    def __init__(self, fps, labels_folder=None, ext=None):
+        super().__init__()
+        self.fps = fps
+        if ext:
+            self.ext = ext
+        if labels_folder:
+            self.labels_folder = Path(labels_folder)
 
-    def parse(self, file, fps=1000):
+    def parse(self, file, file_is_fullpath=False):
         """
-        returns a list of lists. each list contains the frame number, valid_flag, class
-        where:
-        frame number is zero indexed
-        valid_flag is 1 if this frame has valid annotation, and 0 otherwise
-        class is either away, left, right or off.
-        list should only contain frames that have changes in class (compared to previous frame)
-        i.e. if the video is labled ["away","away","away","right","right"]
-        then only frame 0 and frame 3 will appear on the output list.
-        :param file: the label file to parse.
-        :return: None if failed, else: list of lists as described above
+        Parses a label file from the lookit dataset, see base class for output format
+        :param file: the file to parse
+        :param file_is_fullpath: if true, the file represents a full path and extension,
+         else uses the initial values provided.
+        :return:
         """
-
-        labels = np.genfromtxt(open(file, "rb"), dtype='str', delimiter=",", skip_header=3)
+        codingactive_counter = 0
+        classes = {"away": 0, "left": 1, "right": 2}
+        if file_is_fullpath:
+            label_path = Path(file)
+        else:
+            label_path = Path(self.labels_folder, file + self.ext)
+        labels = np.genfromtxt(open(label_path, "rb"), dtype='str', delimiter=",", skip_header=3)
         output = []
-        num_frames = int(labels[-1, 1])
-        last_label = "left" #arbitrary, doesn't matter until valid flag gets changed to 1
-        valid_flag = 0
         start, end = 0, 0
-        time_to_frame = lambda time: int(time * fps / 1000.0)
-
         for entry in range(labels.shape[0]):
-            
-            frame = time_to_frame(int(labels[entry, 0]))
-            label = labels[entry, 2]
-                
-            class_flag = label#self.classes[label]
-            valid_flag = 1 if class_flag in self.classes else 0
-            if label == "codingactive":
-                start, end = time_to_frame(int(labels[entry, 0])), time_to_frame(int(labels[entry, 1]))
-                frame = int(labels[entry, 1])
-            frame_label = [frame, valid_flag, class_flag]
-            
-        
-            # frame_label = [frame, valid_flag, class_flag]
+            frame = int(int(labels[entry, 0]) * self.fps / 1000)
+            dur = int(int(labels[entry, 1]) * self.fps / 1000)
+            class_name = labels[entry, 2]
+            valid_flag = 1 if class_name in classes else 0
+            if class_name == "codingactive":  # indicates the period of video when coding was actually performed
+                codingactive_counter += 1
+                start, end = frame, dur
+                frame = dur  # if codingactive: add another annotation signaling invalid frames from now on
+            frame_label = [frame, valid_flag, class_name]
             output.append(frame_label)
-            # print(frame_label)
+        assert codingactive_counter <= 1  # current parser doesnt support multiple coding active periods
         output.sort(key=lambda x: x[0])
         if end == 0:
             end = int(output[-1][0])
-        return output, start, end
-
-
-class PrefLookTimestampParser2(BaseParser):
-    """
-    a parser that can parse PrefLookTimestamp as described here:
-    https://osf.io/3n97m/
-    written by Xincheng & Peng
-    todo: assert this returns same values as peter's version
-    """
-    def __init__(self, labels_folder, ext, fps):
-        super().__init__()
-        self.ext = ext
-        self.labels_folder = Path(labels_folder)
-        self.fps = fps
-
-    def parse(self, file):
-        """
-        Parses a label file from the lookit dataset
-        :param file: the file to parse
-        :return:
-        """
-        classes = {"away": 0, "left": 1, "right": 2}
-        label_path = Path(self.labels_folder, file + self.ext)
-        labels = np.genfromtxt(open(label_path, "rb"), dtype='str', delimiter=",", skip_header=3)
-        output = []
-        for entry in range(labels.shape[0]):
-            frame = int(int(labels[entry, 0]) * self.fps / 1000)
-            class_name = labels[entry, 2]
-            valid_flag = 1 if class_name in classes else 0
-            frame_label = [frame, valid_flag, class_name]
-            output.append(frame_label)
-        output.sort(key=lambda x: x[0])
-        if len(output):
-            return output
+        if len(output) > 0:
+            return output, start, end
         else:
             return None
 
@@ -134,11 +97,13 @@ class PrincetonParser(BaseParser):
     """
     A parser that can parse vcx files that are used in princeton laboratories
     """
-    def __init__(self, ext, labels_folder, fps=30, start_time_file=None):
+    def __init__(self, fps, ext=None, labels_folder=None, start_time_file=None):
         super().__init__()
-        self.ext = ext
-        self.labels_folder = Path(labels_folder)
         self.fps = fps
+        if ext:
+            self.ext = ext
+        if labels_folder:
+            self.labels_folder = Path(labels_folder)
         self.start_times = None
         if start_time_file:
             self.start_times = self.process_start_times(start_time_file)
@@ -154,8 +119,17 @@ class PrincetonParser(BaseParser):
                 start_times[Path(row[0]).stem] = time_Stamp
         return start_times
 
-    def parse(self, file):
-        label_path = Path(self.labels_folder, file + self.ext)
+    def parse(self, file, file_is_fullpath=False):
+        """
+        parse a coding file, see base class for output format
+        :param file: coding file to parse
+        :param file_is_fullpath: if true, the file is a full path with extension, else uses values from initialization
+        :return:
+        """
+        if file_is_fullpath:
+            label_path = Path(file)
+        else:
+            label_path = Path(self.labels_folder, file + self.ext)
         if not label_path.is_file():
             logging.warning("For the file: " + str(file) + " no matching xml was found.")
             return None
@@ -209,4 +183,6 @@ class PrincetonParser(BaseParser):
             if item[2] == 'off':
                 item[2] = 'away'
                 sorted_responses[i] = item
-        return sorted_responses
+        start = sorted_responses[0][0]
+        end = sorted_responses[-1][0]
+        return sorted_responses, start, end

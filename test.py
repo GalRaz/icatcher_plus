@@ -166,6 +166,11 @@ def predict_from_video(opt):
         if video_path.is_dir():
             logging.warning("Video folder provided as source. Make sure it contains video files only.")
             video_paths = list(video_path.glob("*"))
+            if opt.video_filter_file:
+                with open(opt.video_filter_file, "r") as f:
+                    filter_files = f.readlines()
+                    filter_files = [line.rstrip() for line in filter_files]
+                video_paths = [x for x in video_paths if x.name in filter_files]
             video_paths = [str(x) for x in video_paths]
         elif video_path.is_file():
             video_paths = [str(video_path)]
@@ -197,7 +202,7 @@ def predict_from_video(opt):
             my_video_path = Path(opt.output_video_path, video_path.stem + "_output{}".format(my_suffix))
             video_output = cv2.VideoWriter(str(my_video_path), fourcc, framerate, resolution, True)
         if opt.output_annotation:
-            my_output_file_path = Path(opt.output_annotation, video_path.stem + ".txt")
+            my_output_file_path = Path(opt.output_annotation, video_path.stem + opt.output_file_suffix)
             output_file = open(my_output_file_path, "w", newline="")
             if opt.output_format == "PrefLookTimestamp":
                 # Write header
