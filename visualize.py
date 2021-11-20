@@ -321,6 +321,8 @@ def generate_frame_comparison(sorted_IDs, all_metrics, args):
     heights = [1] * len(sorted_IDs)
     gs_kw = dict(width_ratios=widths, height_ratios=heights)
     fig, axs = plt.subplots(len(sorted_IDs), 3, figsize=(30, 45), gridspec_kw=gs_kw)
+    if len(axs.shape) == 1:
+        axs = np.expand_dims(axs, axis=0)
     plt.suptitle(f'Frame by frame comparisons per video', fontsize=40)
     # color_gradient = list(Color("red").range_to(Color("green"), 100))
 
