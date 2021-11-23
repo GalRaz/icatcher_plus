@@ -291,9 +291,8 @@ def select_frames_from_video(ID, video_folder, start, end):
         if ID in video_file.name:
             imgs = []
             cap = cv2.VideoCapture(str(video_file))
-            frame_selections = np.random.choice(np.arange(start, end), size=9, replace=False)
-            cur_frame = 0
-            for i in range(start, end):
+            frame_selections = np.random.choice(np.arange(start, end//2), size=9, replace=False)
+            for i in range(start, end//2):  # to avoid end of video
                 ret, frame = cap.read()
                 if i in frame_selections:
                     imgs.append(frame[..., ::-1])
@@ -562,23 +561,25 @@ def create_cache_metrics(args, force_create=False):
 
         # Get a list of all machine annotation files
         for file in Path(args.human_codings_folder).glob("*"):
-            human_annotation.append(file.name)
+            human_annotation.append(file.stem)
+            human_ext = file.suffix
         for file in Path(args.human2_codings_folder).glob("*"):
-            human_annotation2.append(file.name)
+            human_annotation2.append(file.stem)
+            human2_ext = file.suffix
         for file in Path(args.machine_codings_folder).glob("*"):
-            machine_annotation.append(file.name)
+            machine_annotation.append(file.stem)
+            machine_ext = file.suffix
+
         coding_intersect = set(human_annotation2).intersection(set(human_annotation))
         coding_intersect = coding_intersect.intersection(set(machine_annotation))
-
         # sort the file paths alphabetically to pair them up
-
         coding_intersect = sorted(list(coding_intersect))
         assert len(coding_intersect) > 0
         all_metrics = {}
         for code_file in coding_intersect:
-            human_coding_file = Path(args.human_codings_folder / code_file)
-            human_coding_file2 = Path(args.human2_codings_folder / code_file)
-            machine_coding_file = Path(args.machine_codings_folder / code_file)
+            human_coding_file = Path(args.human_codings_folder, code_file + human_ext)
+            human_coding_file2 = Path(args.human2_codings_folder, code_file + human2_ext)
+            machine_coding_file = Path(args.machine_codings_folder, code_file + machine_ext)
             all_metrics[human_coding_file.stem] = compare_coding_files(human_coding_file, human_coding_file2, machine_coding_file, args)
 
         # calc face densities
