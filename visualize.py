@@ -212,8 +212,8 @@ def compare_two_coding_files(coding1, coding2):
             c2_left_right_total += 1
 
     accuracy = 100 * same_count / (same_count + diff_count)
-    num_coding1_valid = 100 * (valid_labels_coding1 / total_frames_coding1)
-    num_coding2_valid = 100 * (valid_labels_coding2 / total_frames_coding2)
+    num_coding1_valid = valid_labels_coding1 / total_frames_coding1
+    num_coding2_valid = valid_labels_coding2 / total_frames_coding2
 
     coding1_on_vs_away = (coding1_by_label[0] + coding1_by_label[1]) / sum(coding1_by_label)
     coding2_on_vs_away = (coding2_by_label[0] + coding2_by_label[1]) / sum(coding2_by_label)
@@ -398,8 +398,8 @@ def generate_plot_set(sorted_IDs, all_metrics, inference, save_path):
     for ax in scatter_plots:
         if ax == target_valid_scatter:
             #             pass
-            ax.set_xlim([0, 3])
-            ax.set_ylim([0, 3])
+            ax.set_xlim([0, 100])
+            ax.set_ylim([0, 100])
         else:
             ax.set_xlim([0, 1])
             ax.set_ylim([0, 1])
@@ -425,16 +425,16 @@ def generate_plot_set(sorted_IDs, all_metrics, inference, save_path):
     # ID_index.table(cell_text, loc='center', fontsize=18)
     # ID_index.set_title("Video index to ID")
 
-    x_target_valid = [all_metrics[ID][inference]['num_coding1_valid']/100 for ID in sorted_IDs]
-    y_target_valid = [all_metrics[ID][inference]['num_coding2_valid']/100 for ID in sorted_IDs]
+    x_target_valid = [all_metrics[ID][inference]['num_coding1_valid']*100 for ID in sorted_IDs]
+    y_target_valid = [all_metrics[ID][inference]['num_coding2_valid']*100 for ID in sorted_IDs]
     target_valid_scatter.scatter(x_target_valid, y_target_valid)
     for i in range(len(sorted_IDs)):
         target_valid_scatter.annotate(i, (x_target_valid[i], y_target_valid[i]))
     target_valid_scatter.set_xlabel("Human annotated labels")
-    target_valid_scatter.set_xlabel(f'{inf_target} labels')
+    target_valid_scatter.set_ylabel(f'{inf_target} labels')
 
     target_valid_scatter.set_title(
-        f'Number of distinct look events per second\nfor human1 vs {inf_target}')
+        f'Percent of valid frames\nfor human1 vs {inf_target}')
 
     x_target_away = [all_metrics[ID][inference]['coding1_on_vs_away'] for ID in sorted_IDs]
     y_target_away = [all_metrics[ID][inference]['coding2_on_vs_away'] for ID in sorted_IDs]
@@ -442,8 +442,8 @@ def generate_plot_set(sorted_IDs, all_metrics, inference, save_path):
     for i in range(len(sorted_IDs)):
         on_away_scatter.annotate(i, (x_target_away[i], y_target_away[i]))
 
-    on_away_scatter.set_xlabel("Human annotated labels")
-    on_away_scatter.set_xlabel(f'{inf_target} labels')
+    on_away_scatter.set_xlabel("Human1 valid frames percent")
+    on_away_scatter.set_ylabel(f'{inf_target} valid frames percent')
     on_away_scatter.set_title(
         f'ratio between left-right and left-right-away\n for {inf_target} vs human data')
 
