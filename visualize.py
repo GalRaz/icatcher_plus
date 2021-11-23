@@ -15,7 +15,7 @@ import cv2
 from colour import Color
 from pathlib import Path
 from options import parse_arguments_for_visualizations
-
+import textwrap
 
 ### todo: retrieve globals from command line arguments ###
 LABEL_TO_COLOR = {"left": (0.5, 0.6, 0.9), "right": (0.6, 0.8, 0), "away": (0.95, 0.5, 0.4), "none": "lightgrey"}
@@ -277,28 +277,38 @@ def save_metrics_csv(sorted_IDs, all_metrics, inference):
             csv_writer.writerow(row)
 
 
-def get_frame_from_video(ID, frame_no, video_folder):
+def select_frames_from_video(ID, video_folder, start, end):
+    """
+    selects 9 random frames from a video for display
+    :param ID: the video id (no extension)
+    :param video_folder: the raw video folder
+    :param start: where annotation begins
+    :param end: where annotation ends
+    :return: an image grid of 9 frames and the corresponding frame numbers
+    """
+    imgs_np = np.ones((480*3, 640*3, 3))
     for video_file in Path(video_folder).glob("*"):
-        if ID.stem in video_file.name:
+        if ID in video_file.name:
+            imgs = []
             cap = cv2.VideoCapture(str(video_file))
-            frame_no = int(frame_no)
-            # cap.set(cv2.CAP_PROP_FRAME_COUNT, frame_no - 1)
-            ret, frame = cap.read()
-            for i in range(frame_no):
+            frame_selections = np.random.choice(np.arange(start, end), size=9, replace=False)
+            cur_frame = 0
+            for i in range(start, end):
                 ret, frame = cap.read()
-            if ret:
-                # first convert color mode to RGB
-                b, g, r = cv2.split(frame)
-                rgb_img = cv2.merge([r, g, b])
-                return rgb_img
-    return np.ones(shape=(255, 255))
+                if i in frame_selections:
+                    imgs.append(frame[..., ::-1])
+                    if len(imgs) >= 9:
+                        break
+            imgs_np = np.array(imgs)
+            imgs_np = make_gridview(imgs_np)
+    return imgs_np, frame_selections
 
 
 def sample_luminance(ID, args, start, end, num_samples=10):
     total_luminance = 0
     sampled = 0
     for video_file in args.raw_video_folder.glob("*"):
-        if ID.stem in video_file.stem:
+        if ID in video_file.stem:
             cap = cv2.VideoCapture(str(video_file))
             fps = cap.get(cv2.CAP_PROP_FPS)
             frame_no = int(start / 1000 * fps)
@@ -315,25 +325,28 @@ def sample_luminance(ID, args, start, end, num_samples=10):
     return total_luminance / sampled
 
 
-def generate_frame_comparison(sorted_IDs, all_metrics, args):
+def generate_frame_by_frame_comparisons(sorted_IDs, all_metrics, args):
     GRAPH_CLASSES = ["left", "right", "away", "none"]
-    widths = [8, 1, 1]
-    heights = [1] * len(sorted_IDs)
+    INFERENCE_METHODS = ["human1_vs_human2", "human1_vs_machine"]
+    widths = [20, 1, 5]
+    heights = [1]
     gs_kw = dict(width_ratios=widths, height_ratios=heights)
-    fig, axs = plt.subplots(len(sorted_IDs), 3, figsize=(30, 45), gridspec_kw=gs_kw)
-    if len(axs.shape) == 1:
-        axs = np.expand_dims(axs, axis=0)
-    plt.suptitle(f'Frame by frame comparisons per video', fontsize=40)
+    # fig, axs = plt.subplots(len(sorted_IDs), 3, figsize=(30, 45), gridspec_kw=gs_kw)
+    # if len(axs.shape) == 1:
+    #     axs = np.expand_dims(axs, axis=0)
+    # plt.suptitle(f'Frame by frame comparisons per video', fontsize=40)
     # color_gradient = list(Color("red").range_to(Color("green"), 100))
-
+    frame_by_frame_path = Path(args.output_folder, "frame_by_frame")
+    frame_by_frame_path.mkdir(exist_ok=True, parents=True)
     for i, target_ID in enumerate(tqdm(sorted_IDs)):
-        timeline, accuracy, sample_frame = axs[i, :]  # won't work with single video...
-
+        fig, axs = plt.subplots(1, 3, figsize=(24.0, 8.0), gridspec_kw=gs_kw)
+        timeline, accuracy, sample_frame = axs  # won't work with single video...
+        plt.suptitle('Frame by frame comparisons: {}'.format(target_ID + ".mp4"))
         start1, end1 = all_metrics[target_ID]["human1_vs_machine"]["valid_range_coding1"]
         start2, end2 = all_metrics[target_ID]["human1_vs_machine"]["valid_range_coding2"]
         start = min(start1, start2)
         end = max(end1, end2)
-        timeline.set_title("Video ID: {}, frames: {} - {}".format(target_ID.stem, str(start), str(end)), fontsize=14)
+        timeline.set_title("Frames: {} - {}".format(str(start), str(end)))
         for j, name in enumerate(["times_coding1", "times_coding2"]):
             times = all_metrics[target_ID]["human1_vs_machine"][name]
             video_label = "human" if j==0 else "machine"
@@ -345,7 +358,7 @@ def generate_frame_comparison(sorted_IDs, all_metrics, args):
             timeline.set_xlabel("Frame #")
             if i == 0 and j == 0:
                 timeline.legend(loc='upper right')
-                accuracy.set_title("Frame by frame accuracy")
+                accuracy.set_title("Accuracy")
         accuracies = [all_metrics[target_ID][inference]['accuracy'] for inference in INFERENCE_METHODS]
         # colors = [color_gradient[int(acc * 100)].rgb for acc in accuracies]
 
@@ -356,13 +369,20 @@ def generate_frame_comparison(sorted_IDs, all_metrics, args):
         accuracy.set_ylabel("Accuracy")
         # sample_frame_index = min(
         #     [all_metrics[target_ID][ICATCHER]['times_target'][label][0] for label in VALID_CLASSES])
-        sample_frame_index = (end - start) / 2.0
-        sample_frame.imshow(get_frame_from_video(target_ID, sample_frame_index, args.raw_video_folder))
-        sample_frame.set_title(f'Sample frame from video at time {int(sample_frame_index)}')
-    plt.subplots_adjust(left=0.075, bottom=0.075, right=0.925, top=0.925, wspace=0.2, hspace=0.8)
-    plt.savefig(Path(args.output_folder, 'frame_by_frame_all.png'))
-    plt.cla()
-    plt.clf()
+        imgs, times = select_frames_from_video(target_ID, args.raw_video_folder, start, end)
+        sample_frame.imshow(imgs)
+        sample_frame.set_axis_off()
+        # sample_frame_index = (end - start) / 2.0
+        # sample_frame.imshow(get_frame_from_video(target_ID, sample_frame_index, args.raw_video_folder))
+        longstring = 'Sample frames from video at frames: {}'.format(times)
+        formatted_longstring = "\n".join(textwrap.wrap(longstring, 40))
+        sample_frame.set_title(formatted_longstring)
+        plt.tight_layout()
+
+        plt.savefig(Path(frame_by_frame_path, 'frame_by_frame_{}.png'.format(target_ID + ".mp4")))
+    # plt.subplots_adjust(left=0.075, bottom=0.075, right=0.925, top=0.925, wspace=0.2, hspace=0.8)
+        plt.cla()
+        plt.clf()
 
 
 def generate_plot_set(sorted_IDs, all_metrics, inference, save_path):
@@ -494,6 +514,39 @@ def plot_luminance_vs_accuracy(sorted_IDs, all_metrics, args):
     plt.clf()
 
 
+def get_face_pixel_density(id, faces_folder):
+    """
+    given a video id, calculates the average face area in pixels using pre-procesed crops
+    :param ids: video id
+    :param faces_folder: the folder containing all crops and their meta data as created by "preprocess.py"
+    :return:
+    """
+    face_areas = []
+    face_labels = np.load(Path(faces_folder, id, 'face_labels_fc.npy'))
+    for i, face_id in enumerate(face_labels):
+        if face_id >= 0:
+            box_file = Path(faces_folder, id, "box", "{:05d}_{:01d}.npy".format(i, face_id))
+            '{name}/box/{frame_number + i:05d}_{face_label_seg[i]:01d}.npy.format()'
+            box = np.load(box_file, allow_pickle=True).item()
+            face_area = (box['face_box'][1] - box['face_box'][0]) * (box['face_box'][3] - box['face_box'][2])
+            face_areas.append(face_area)
+    return np.mean(face_areas)
+
+
+def plot_face_pixel_density_vs_accuracy(sorted_IDs, all_metrics, args):
+    plt.figure(figsize=(8.0, 6.0))
+    densities = [all_metrics[x]["stats"]["avg_face_pixel_density"] for x in sorted_IDs]
+    plt.scatter(densities, [all_metrics[id]["human1_vs_machine"]["accuracy"] for id in sorted_IDs])
+    # plt.xlim([0, 1])
+    # plt.ylim([0, 1])
+    plt.xlabel("Face pixel denisty")
+    plt.ylabel("iCatcher accuracy")
+    plt.title("iCatcher accuracy versus average face pixel density per video")
+    plt.savefig(Path(args.output_folder, 'iCatcher_face_density_acc.png'))
+    plt.cla()
+    plt.clf()
+
+
 def create_cache_metrics(args, force_create=False):
     """
     creates cache that can be used instead of parsing the annotation files from scratch each time
@@ -506,10 +559,6 @@ def create_cache_metrics(args, force_create=False):
         machine_annotation = []
         human_annotation = []
         human_annotation2 = []
-        # target_root = label_folder
-        # coding_first = set([x.name for x in Path(label_folder).glob("*")])
-        # coding_second = set([x.name for x in Path(label2_folder).glob("*")])
-        # coding_intersect = coding_first.intersection(coding_second)
 
         # Get a list of all machine annotation files
         for file in Path(args.human_codings_folder).glob("*"):
@@ -520,16 +569,6 @@ def create_cache_metrics(args, force_create=False):
             machine_annotation.append(file.name)
         coding_intersect = set(human_annotation2).intersection(set(human_annotation))
         coding_intersect = coding_intersect.intersection(set(machine_annotation))
-        # for subdir, dirs, files in os.walk(annotation_folder):
-        #     for filename in files:
-        #         machine_annotation.append(os.path.abspath(annotation_folder / filename))
-
-        # Get a list of all human annotation files
-        # for subdir, dirs, files in os.walk(target_root):
-        #     for filename in files:
-        #         logging.info("found label file {target_root}{filename}")
-        #         if filename in coding_intersect:
-        #             human_annotation.append(target_root / filename)
 
         # sort the file paths alphabetically to pair them up
 
@@ -540,21 +579,13 @@ def create_cache_metrics(args, force_create=False):
             human_coding_file = Path(args.human_codings_folder / code_file)
             human_coding_file2 = Path(args.human2_codings_folder / code_file)
             machine_coding_file = Path(args.machine_codings_folder / code_file)
-            all_metrics[human_coding_file] = compare_coding_files(human_coding_file, human_coding_file2, machine_coding_file, args)
-            # all_metrics[human_coding_file][ICATCHER_PLUS]['filename'] = machine_coding_file.name
+            all_metrics[human_coding_file.stem] = compare_coding_files(human_coding_file, human_coding_file2, machine_coding_file, args)
 
-
-        # all_metrics = {}
-        # for i, h_coding in enumerate(tqdm(human_annotation)):
-        #     for j, m_coding in enumerate(machine_annotation):
-        #         human_coding_id = h_coding.stem
-        #         machine_coding_id = m_coding.stem
-        #         if machine_coding_id in human_coding_id:
-        #             all_metrics[human_coding_id] = compare_files(h_coding, m_coding)
-        #             all_metrics[human_coding_id][ICATCHER_PLUS]['filename'] = m_coding.name
-        #             break
-
-        # Store the intermediate results so we can access them without regenerating everything:
+        # calc face densities
+        for key in all_metrics.keys():
+            all_metrics[key]["stats"] = {}
+            all_metrics[key]["stats"]["avg_face_pixel_density"] = get_face_pixel_density(key, args.faces_folder)
+        # Store in disk for faster access next time:
         pickle.dump(all_metrics, open(metric_save_path, "wb"))
     return all_metrics
 
@@ -611,6 +642,51 @@ def make_gallery(array, save_path, ncols=3):
     plt.cla()
     plt.clf()
 
+
+def make_gridview(array, ncols=3):
+    nindex, height, width, intensity = array.shape
+    nrows = nindex//ncols
+    assert nindex == nrows*ncols
+    # want result.shape = (height*nrows, width*ncols, intensity)
+    result = (array.reshape(nrows, ncols, height, width, intensity)
+              .swapaxes(1,2)
+              .reshape(height*nrows, width*ncols, intensity))
+    return result
+
+
+def sandbox(metrics):
+    for key in metrics.keys():
+        acc_human = metrics[key]["human1_vs_human2"]["accuracy"]
+        if acc_human >= 100.0:
+            print("{}, human accuracy: {}".format(key.stem + ".mp4", acc_human))
+        acc_machine = metrics[key]["human1_vs_machine"]["accuracy"]
+        if acc_machine <= 60.0:
+            print("{}, machine accuracy: {}".format(key.stem + ".mp4", acc_machine))
+
+
+if __name__ == "__main__":
+    args = parse_arguments_for_visualizations()
+    if args.log:
+        args.log.parent.mkdir(parents=True, exist_ok=True)
+        logging.basicConfig(filename=args.log, filemode='w', level=args.verbosity.upper())
+    else:
+        logging.basicConfig(level=args.verbosity.upper())
+
+    all_metrics = create_cache_metrics(args, force_create=False)
+    # sort by accuracy
+    sorted_ids = sorted(list(all_metrics.keys()),
+                        key=lambda x: all_metrics[x]["human1_vs_machine"]["accuracy"])
+    INFERENCE_METHODS = ["human1_vs_human2", "human1_vs_machine"]
+    # sandbox(all_metrics)
+    for inference in INFERENCE_METHODS:
+        generate_plot_set(sorted_ids, all_metrics, inference, args.output_folder)
+    # generate_frame_comparison(random.sample(sorted_ids, min(len(sorted_ids), 8)), all_metrics, args)
+    generate_frame_by_frame_comparisons(sorted_ids, all_metrics, args)
+    plot_inference_accuracy_vs_human_agreement(sorted_ids, all_metrics, args)
+    plot_face_pixel_density_vs_accuracy(sorted_ids, all_metrics, args)
+    plot_luminance_vs_accuracy(sorted_ids, all_metrics, args)
+
+
 # def get_open_gaze_label(time_ms, ID):
 #     for video_path, label_list in OPEN_GAZE_LABELS.items():
 #         if ID in video_path:
@@ -634,29 +710,3 @@ def make_gallery(array, save_path, ncols=3):
 #             return labels
 #     return
 #     raise ValueError("ID not found in opengaze labels")
-
-
-if __name__ == "__main__":
-    args = parse_arguments_for_visualizations()
-    if args.log:
-        args.log.parent.mkdir(parents=True, exist_ok=True)
-        logging.basicConfig(filename=args.log, filemode='w', level=args.verbosity.upper())
-    else:
-        logging.basicConfig(level=args.verbosity.upper())
-
-    # args.human_codings_folder = Path("/disk3/yotam/icatcher+/datasets/lookit/coding_first")
-    # args.human2_codings_folder = Path("/disk3/yotam/icatcher+/datasets/lookit/coding_second")
-    # args.machine_codings_folder = Path("/disk3/yotam/icatcher+/datasets/lookit/coding_machine")
-    # args.output_folder = Path("/disk3/yotam/icatcher+/runs/vanilla/output")
-
-    all_metrics = create_cache_metrics(args, force_create=False)
-    sorted_ids = sorted(list(all_metrics.keys()),
-                        key=lambda x: all_metrics[x]["human1_vs_machine"]["accuracy"])  # sort by accuracy
-    # sorted_ids = sorted(list(all_metrics.keys()))  # sort alphabetically
-    INFERENCE_METHODS = ["human1_vs_human2", "human1_vs_machine"]
-    for inference in INFERENCE_METHODS:
-        # save_metrics_csv(sorted_ids, all_metrics, inference)
-        generate_plot_set(sorted_ids, all_metrics, inference, args.output_folder)
-    generate_frame_comparison(random.sample(sorted_ids, min(len(sorted_ids), 8)), all_metrics, args)
-    plot_inference_accuracy_vs_human_agreement(sorted_ids, all_metrics, args)
-    plot_luminance_vs_accuracy(sorted_ids, all_metrics, args)

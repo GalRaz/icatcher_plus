@@ -129,10 +129,10 @@ def parse_arguments_for_testing():
 def parse_arguments_for_visualizations():
     parser = argparse.ArgumentParser()
     parser.add_argument("output_folder", type=str, default="output", help="path to output results.")
+    parser.add_argument("dataset_folder", type=str, help="path to preprocessed dataset folder")
     parser.add_argument("human_codings_folder", type=str, help="the codings from human1")
     parser.add_argument("human2_codings_folder", type=str, help="the codings from human12")
     parser.add_argument("machine_codings_folder", type=str, help="the codings from machine")
-    parser.add_argument("raw_video_folder", type=str, help="path to raw video folder")
     parser.add_argument("--human_coding_format",
                         type=str,
                         default="PrefLookTimestamp",
@@ -149,14 +149,18 @@ def parse_arguments_for_visualizations():
     args = parser.parse_args()
     args.output_folder = Path(args.output_folder)
     args.output_folder.mkdir(parents=True, exist_ok=True)
+    args.dataset_folder = Path(args.dataset_folder)
+    assert args.dataset_folder.is_dir()
     args.human_codings_folder = Path(args.human_codings_folder)
     assert args.human_codings_folder.is_dir()
     args.human2_codings_folder = Path(args.human2_codings_folder)
     assert args.human2_codings_folder.is_dir()
     args.machine_codings_folder = Path(args.machine_codings_folder)
     assert args.machine_codings_folder.is_dir()
-    args.raw_video_folder = Path(args.raw_video_folder)
+    args.raw_video_folder = Path(args.dataset_folder, "raw_videos")
     assert args.raw_video_folder.is_dir()
+    args.faces_folder = Path(args.dataset_folder, "faces")
+    assert args.faces_folder.is_dir()
     return args
 
 
