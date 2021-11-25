@@ -95,12 +95,16 @@ class LookItDataset:
                 raise NotImplementedError
             gaze_labels = np.load(str(Path.joinpath(dataset_folder_path, name, f'gaze_labels.npy')))
             face_labels = np.load(str(Path.joinpath(dataset_folder_path, name, f'{face_label_name}.npy')))
+            cur_video_counter = 0
+            cur_fail_counter = 0
+            cur_video_total = len(gaze_labels)
             for frame_number in range(gaze_labels.shape[0]):
                 gaze_label_seg = gaze_labels[frame_number:frame_number + self.args.frames_per_datapoint]
                 face_label_seg = face_labels[frame_number:frame_number + self.args.frames_per_datapoint]
                 if len(gaze_label_seg) != self.args.frames_per_datapoint:
                     break
-                if sum(face_label_seg < 0):
+                if any(face_label_seg < 0):  # a tidy bit too strict?...we can basically afford 1 or two missing labels
+                    cur_fail_counter += 1
                     continue
                 if not self.args.eliminate_transitions or self.check_all_same(gaze_label_seg):
                     class_seg = gaze_label_seg[self.args.frames_per_datapoint // 2]
@@ -112,6 +116,11 @@ class LookItDataset:
                     img_files_seg = img_files_seg[::self.args.frames_stride_size]
                     box_files_seg = box_files_seg[::self.args.frames_stride_size]
                     my_list.append((img_files_seg, box_files_seg, class_seg))
+                    cur_video_counter += 1
+            logging.info("The video {} has {}/{} usable datapoints with {} face-detection failures".format(name,
+                                                                                                           cur_video_counter,
+                                                                                                           cur_video_total,
+                                                                                                           cur_fail_counter))
             if not my_list:
                 logging.info("The video {} has no annotations".format(name))
                 continue

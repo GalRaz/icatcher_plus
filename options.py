@@ -170,6 +170,7 @@ def parse_arguments_for_preprocess():
     parser.add_argument("output_folder", type=str, help="path to put preprocessed dataset")
     parser.add_argument("--raw_dataset_type", type=str, choices=["lookit", "princeton", "generic"], default="lookit",
                         help="the type of dataset to preprocess")
+    parser.add_argument("--face_detector_confidence", type=float, default=0.7, help="confidence threshold for face detector")
     parser.add_argument("--gpu_id", type=int, default=-1, help="Which GPU to use (or -1 for cpu)")
     parser.add_argument("--log", help="If present, writes log to this path")
     parser.add_argument("-v", "--verbosity", type=str, choices=["debug", "info", "warning"], default="info",

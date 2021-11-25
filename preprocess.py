@@ -225,6 +225,7 @@ def process_dataset_lowest_face(args, gaze_labels_only=False, force_create=False
         assert np.abs(cap.get(cv2.CAP_PROP_FPS) - 30) < 0.1
         while ret_val:
             if responses:
+                logging.info("[process_lkt_legacy] Processing frame: {}".format(frame_counter))
                 if frame_counter >= responses[0][0]:  # skip until reaching first annotated frame
                     # find closest (previous) response this frame belongs to
                     q = [index for index, val in enumerate(responses) if frame_counter >= val[0]]
@@ -233,7 +234,7 @@ def process_dataset_lowest_face(args, gaze_labels_only=False, force_create=False
                         gaze_class = responses[response_index][2]
                         gaze_labels.append(classes[gaze_class])
                         if not gaze_labels_only:
-                            bbox = detect_face_opencv_dnn(net, frame, 0.7)
+                            bbox = detect_face_opencv_dnn(net, frame, args.face_detector_confidence)
                             if not bbox:
                                 no_face_counter += 1
                                 face_labels.append(-2)
@@ -295,7 +296,6 @@ def process_dataset_lowest_face(args, gaze_labels_only=False, force_create=False
                 logging.info("[process_lkt_legacy] Skipping frame since parser reported no annotation")
             ret_val, frame = cap.read()
             frame_counter += 1
-            logging.info("[process_lkt_legacy] Processing frame: {}".format(frame_counter))
         # save gaze labels
         gaze_labels = np.array(gaze_labels)
         gaze_labels_filename = Path.joinpath(args.faces_folder, video_file.stem, 'gaze_labels.npy')
