@@ -98,6 +98,14 @@ class LookItDataset:
             cur_video_counter = 0
             cur_fail_counter = 0
             cur_video_total = len(gaze_labels)
+            cur_video_fc_fail = np.count_nonzero(face_labels == -1)
+            cur_video_fd_fail = np.count_nonzero(face_labels == -2)
+            logging.info("Video: {}".format(name))
+            logging.info("fc didn't find a face {} frames,"
+                         " {} frames were not labeld for other reasons,"
+                         " {} total labeled frames".format(cur_video_fc_fail,
+                                                           cur_video_fd_fail,
+                                                           cur_video_total))
             for frame_number in range(gaze_labels.shape[0]):
                 gaze_label_seg = gaze_labels[frame_number:frame_number + self.args.frames_per_datapoint]
                 face_label_seg = face_labels[frame_number:frame_number + self.args.frames_per_datapoint]
@@ -117,10 +125,9 @@ class LookItDataset:
                     box_files_seg = box_files_seg[::self.args.frames_stride_size]
                     my_list.append((img_files_seg, box_files_seg, class_seg))
                     cur_video_counter += 1
-            logging.info("The video {} has {}/{} usable datapoints with {} face-detection failures".format(name,
-                                                                                                           cur_video_counter,
-                                                                                                           cur_video_total,
-                                                                                                           cur_fail_counter))
+            logging.info("{}/{} usable datapoints with {} failures".format(cur_video_counter,
+                                                                           cur_video_total,
+                                                                           cur_fail_counter))
             if not my_list:
                 logging.info("The video {} has no annotations".format(name))
                 continue

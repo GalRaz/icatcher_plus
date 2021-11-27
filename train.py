@@ -80,6 +80,12 @@ def train_loop(args):
 
 
 def predict_on_preprocessed(args):
+    """
+    uses a simple "foward" on the validation set to estimate performance (prints confusion matrix)
+    todo: move to test.py
+    :param args:
+    :return:
+    """
     args.phase = "val"
     val_dataset = data.MyDataLoader(args)
     model = models.MyModel(args)
