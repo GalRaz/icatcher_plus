@@ -330,14 +330,13 @@ def generate_second_gaze_labels(force_create=False, visualize_confusion=True):
     :return:
     """
     classes = {"away": 0, "left": 1, "right": 2}
-    video_list = list(args.video_folder.glob("*.mp4"))
-    parser = parsers.PrefLookTimestampParser(30, args.label2_folder, ".txt")
+    video_list = list(args.video_folder.glob("*"))
     for video_file in video_list:
         logging.info("[gen_2nd_labels] Video: %s" % video_file.name)
         if (args.label2_folder / (video_file.stem + '.txt')).exists():
-            cap = cv2.VideoCapture(str(video_file))
-            # make sure target fps is around 30
-            assert np.abs(cap.get(cv2.CAP_PROP_FPS) - 30) < 0.1
+            fps = video.get_fps(video_file)
+            video.verify_constant_framerate(video_file)
+            parser = parsers.PrefLookTimestampParser(fps, args.label2_folder, ".txt")
             responses, _, _ = parser.parse(video_file.stem)
             gaze_labels = np.load(str(Path.joinpath(args.faces_folder, video_file.stem, 'gaze_labels.npy')))
             gaze_labels_second = []
