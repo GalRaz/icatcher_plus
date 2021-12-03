@@ -14,5 +14,6 @@ dependencies:
   - tqdm
   - colour
   - pytest
+  - ffmpeg-python
   - pip:
     - opencv-python

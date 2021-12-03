@@ -13,6 +13,7 @@ import torch
 from tqdm import tqdm
 import options
 import parsers
+import video
 
 
 def preprocess_raw_lookit_dataset(args, force_create=False):
@@ -193,14 +194,6 @@ def process_dataset_lowest_face(args, gaze_labels_only=False, force_create=False
     video_list = sorted(list(args.video_folder.glob("*")))
     net = cv2.dnn.readNetFromCaffe(str(args.config_file), str(args.face_model_file))
     # todo: are there videos where target fps!=30 ?
-    if args.raw_dataset_type == "princeton":
-        parser = parsers.PrincetonParser(30,
-                                         ".vcx",
-                                         args.label_folder)
-    elif args.raw_dataset_type == "lookit" or args.raw_dataset_type == "generic":
-        parser = parsers.PrefLookTimestampParser(30, args.label_folder, ".txt")
-    else:
-        raise NotImplementedError
     for video_file in video_list:
         st_time = time.time()
         logging.info("[process_lkt_legacy] Proccessing %s" % video_file.name)
@@ -218,11 +211,26 @@ def process_dataset_lowest_face(args, gaze_labels_only=False, force_create=False
         gaze_labels = []
         face_labels = []
 
+
         cap = cv2.VideoCapture(str(video_file))
+        # make sure target fps is around 30
+        video.verify_constant_framerate(video_file)
+        fps = video.get_fps(video_file)
+        print("video fps: {}".format(fps))
+        # assert np.abs(cap.get(cv2.CAP_PROP_FPS) - fps) < 0.1
+        if args.raw_dataset_type == "princeton":
+            parser = parsers.PrincetonParser(fps,
+                                             ".vcx",
+                                             args.label_folder,
+                                             Path(
+                                                 "/disk3/yotam/icatcher+/datasets/marchman_raw/Visit_A/start_times_visitA.csv"))
+        elif args.raw_dataset_type == "lookit" or args.raw_dataset_type == "generic":
+            parser = parsers.PrefLookTimestampParser(fps, args.label_folder, ".txt")
+        else:
+            raise NotImplementedError
         responses, _, _ = parser.parse(video_file.stem)
         ret_val, frame = cap.read()
-        # make sure target fps is around 30
-        assert np.abs(cap.get(cv2.CAP_PROP_FPS) - 30) < 0.1
+
         while ret_val:
             if responses:
                 logging.info("[process_lkt_legacy] Processing frame: {}".format(frame_counter))
@@ -381,39 +389,44 @@ def gen_lookit_multi_face_subset(force_create=False):
     :param force_create: forces creation of files even if they exist
     :return:
     """
-    args.multi_face_folder.mkdir()
-    names = [f.stem for f in Path(args.video_folder).glob('*.mp4')]
+    args.multi_face_folder.mkdir(exist_ok=True, parents=True)
+    names = [f.stem for f in Path(args.video_folder).glob('*')]
     face_hist = np.zeros(10)
     total_datapoint = 0
     for name in names:
         logging.info(name)
         src_folder = args.faces_folder / name
         dst_folder = args.multi_face_folder / name
-        dst_folder.mkdir()
-        (dst_folder / 'img').mkdir()
-        (dst_folder / 'box').mkdir()
+        dst_folder.mkdir(exist_ok=True, parents=True)
+        (dst_folder / 'img').mkdir(exist_ok=True, parents=True)
+        (dst_folder / 'box').mkdir(exist_ok=True, parents=True)
         face_labels = np.load(src_folder / 'face_labels.npy')
         files = list((src_folder / 'img').glob(f'*.png'))
         filenames = [f.stem for f in files]
         filenames = sorted(filenames)
         num_datapoint = 0
-        for i in range(len(filenames)):
-            if filenames[i][-1] != '0':
-                face_label = face_labels[int(filenames[i][:5])]
-                num_datapoint += 1
-                total_datapoint += 1
-                faces = [filenames[i - 1]]
-                while i < len(filenames) and filenames[i][-1] != '0':
-                    faces.append(filenames[i])
-                    i += 1
-                face_hist[len(faces)] += 1
-                for face in faces:
-                    dst_face_file = (dst_folder / 'img' / f'{name}_{face}_{face_label}.png')
-                    if not dst_face_file.is_file() or force_create:
-                        shutil.copy((src_folder / 'img' / (face + '.png')), dst_face_file)
-                    dst_box_file = (dst_folder / 'box' / f'{name}_{face}_{face_label}.npy')
-                    if not dst_box_file.is_file() or force_create:
-                        shutil.copy((src_folder / 'box' / (face + '.npy')), dst_box_file)
+        for i in range(len(face_labels)):
+            frame_str = "{:05d}".format(i)
+            frame_face_str = frame_str + "_0"
+            if not frame_face_str in filenames:
+                face_hist[0] += 1
+            else:
+                faces = [frame_face_str]
+                j = 1
+                while (frame_str + "_{}".format(j)) in filenames:
+                    faces.append(frame_str + "_{}".format(j))
+                    j += 1
+                face_hist[j] += 1
+                if j > 1:
+                    num_datapoint += 1
+                    total_datapoint += 1
+                    for face in faces:
+                        dst_face_file = (dst_folder / 'img' / f'{name}_{face}_{frame_str}.png')
+                        if not dst_face_file.is_file() or force_create:
+                            shutil.copy((src_folder / 'img' / (face + '.png')), dst_face_file)
+                        dst_box_file = (dst_folder / 'box' / f'{name}_{face}_{frame_str}.npy')
+                        if not dst_box_file.is_file() or force_create:
+                            shutil.copy((src_folder / 'box' / (face + '.npy')), dst_box_file)
         logging.info('# multi-face datapoint:{}'.format(num_datapoint))
     logging.info('total # multi-face datapoint:{}'.format(total_datapoint))
     logging.info(face_hist)
