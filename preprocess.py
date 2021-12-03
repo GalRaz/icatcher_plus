@@ -421,12 +421,14 @@ def gen_lookit_multi_face_subset(force_create=False):
                     num_datapoint += 1
                     total_datapoint += 1
                     for face in faces:
-                        dst_face_file = (dst_folder / 'img' / f'{name}_{face}_{frame_str}.png')
+                        dst_face_file = (dst_folder / 'img' / f'{name}_{face}.png')
                         if not dst_face_file.is_file() or force_create:
                             shutil.copy((src_folder / 'img' / (face + '.png')), dst_face_file)
-                        dst_box_file = (dst_folder / 'box' / f'{name}_{face}_{frame_str}.npy')
+                        dst_box_file = (dst_folder / 'box' / f'{name}_{face}.npy')
                         if not dst_box_file.is_file() or force_create:
                             shutil.copy((src_folder / 'box' / (face + '.npy')), dst_box_file)
+                # if num_datapoint >= 1000:
+                #     break
         logging.info('# multi-face datapoint:{}'.format(num_datapoint))
     logging.info('total # multi-face datapoint:{}'.format(total_datapoint))
     logging.info(face_hist)
