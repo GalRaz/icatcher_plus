@@ -355,7 +355,7 @@ def generate_frame_by_frame_comparisons(sorted_IDs, all_metrics, args):
                               height=1, label=label,
                               color=LABEL_TO_COLOR[label])
             timeline.set_xlabel("Frame #")
-            if i == 0 and j == 0:
+            if j == 0:
                 timeline.legend(loc='upper right')
                 accuracy.set_title("Accuracy")
         accuracies = [all_metrics[target_ID][inference]['accuracy'] for inference in INFERENCE_METHODS]
@@ -412,11 +412,12 @@ def generate_plot_set(sorted_IDs, all_metrics, inference, save_path):
     mean = np.mean(accuracies)
     accuracy_bar.axhline(y=mean, color='black', linestyle='-', label="mean (" + str(mean)[:4] + ")")
 
-    accuracy_bar.set_title('iCatcher accuracy (over mutually valid frames)')
+    accuracy_bar.set_title('Accuracy (over mutually valid frames)')
     accuracy_bar.set_ylim([0, 100])
     accuracy_bar.set_xticks(ticks)
     accuracy_bar.set_xticklabels(labels, rotation='vertical', fontsize=8)
     accuracy_bar.set_xlabel('Video')
+    accuracy_bar.set_ylabel('Accuracy')
 
     accuracy_bar.legend()
 
