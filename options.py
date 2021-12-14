@@ -170,6 +170,7 @@ def parse_arguments_for_preprocess():
     parser.add_argument("output_folder", type=str, help="path to put preprocessed dataset")
     parser.add_argument("--raw_dataset_type", type=str, choices=["lookit", "princeton", "generic"], default="lookit",
                         help="the type of dataset to preprocess")
+    parser.add_argument("--fc_model", type=str, default="models/face_classifier_weights_best.pt", help="path to face classifier model if it was trained")
     parser.add_argument("--face_detector_confidence", type=float, default=0.7, help="confidence threshold for face detector")
     parser.add_argument("--gpu_id", type=int, default=-1, help="Which GPU to use (or -1 for cpu)")
     parser.add_argument("--log", help="If present, writes log to this path")
@@ -187,7 +188,7 @@ def parse_arguments_for_preprocess():
     args.label2_folder = args.output_folder / "coding_second"
     args.multi_face_folder = args.output_folder / "multi_face"
     args.face_data_folder = args.output_folder / "infant_vs_others"
-    args.face_classifier_model_file = Path("models", "face_classifier_weights_best.pt")
+    args.fc_model = Path(args.fc_model)
     args.face_model_file = Path("models", "face_model.caffemodel")
     args.config_file = Path("models", "config.prototxt")
     if args.gpu_id == -1:

@@ -216,10 +216,11 @@ def process_dataset_lowest_face(args, gaze_labels_only=False, force_create=False
         print("video fps: {}".format(fps))
         # assert np.abs(cap.get(cv2.CAP_PROP_FPS) - fps) < 0.1
         if args.raw_dataset_type == "princeton":
-            parser = parsers.PrincetonParser(fps,
+            assert abs(fps - 30) < 0.1
+            parser = parsers.PrincetonParser(30,
                                              ".vcx",
                                              args.label_folder,
-                                             Path("/disk3/yotam/icatcher+/datasets/marchman_raw/Visit_A/start_times_visitA.csv"))
+                                             Path(args.raw_dataset_path, "start_times_visitA.csv"))
         elif args.raw_dataset_type == "lookit" or args.raw_dataset_type == "generic":
             parser = parsers.PrefLookTimestampParser(fps, args.label_folder, ".txt")
         else:
@@ -318,7 +319,7 @@ def process_dataset_lowest_face(args, gaze_labels_only=False, force_create=False
         logging.info('[process_lkt_legacy] Time used: %.2f sec' % (ed_time - st_time))
 
 
-def generate_second_gaze_labels(force_create=False, visualize_confusion=True):
+def generate_second_gaze_labels(args, force_create=False, visualize_confusion=True):
     """
     Processes the second annotator labels
     :param force_create: forces creation of files even if they exist
@@ -327,12 +328,27 @@ def generate_second_gaze_labels(force_create=False, visualize_confusion=True):
     """
     classes = {"away": 0, "left": 1, "right": 2}
     video_list = list(args.video_folder.glob("*"))
+    if args.raw_dataset_type == "generic" or args.raw_dataset_type == "lookit":
+        suffix = ".txt"
+    elif args.raw_dataset_type == "princeton":
+        suffix = ".vcx"
+    else:
+        raise NotImplementedError
     for video_file in video_list:
         logging.info("[gen_2nd_labels] Video: %s" % video_file.name)
-        if (args.label2_folder / (video_file.stem + '.txt')).exists():
+        if (args.label2_folder / (video_file.stem + suffix)).exists():
             fps = video.get_fps(video_file)
             video.verify_constant_framerate(video_file)
-            parser = parsers.PrefLookTimestampParser(fps, args.label2_folder, ".txt")
+            if args.raw_dataset_type == "princeton":
+                assert abs(fps - 30) < 0.1
+                parser = parsers.PrincetonParser(30,
+                                                 suffix,
+                                                 args.label2_folder,
+                                                 Path(args.raw_dataset_path, "start_times_visitA.csv"))
+            elif args.raw_dataset_type == "lookit" or args.raw_dataset_type == "generic":
+                parser = parsers.PrefLookTimestampParser(fps, args.label2_folder, suffix)
+            else:
+                raise NotImplementedError
             responses, _, _ = parser.parse(video_file.stem)
             gaze_labels = np.load(str(Path.joinpath(args.faces_folder, video_file.stem, 'gaze_labels.npy')))
             gaze_labels_second = []
@@ -364,7 +380,7 @@ def visualize_human_confusion_matrix():
     """
     labels = []
     preds = []
-    video_list = list(args.video_folder.glob("*.mp4"))
+    video_list = list(args.video_folder.glob("*"))
     for video_file in video_list:
         gaze_labels_second_filename = Path.joinpath(args.faces_folder, video_file.stem, 'gaze_labels_second.npy')
         if gaze_labels_second_filename.is_file():
@@ -469,7 +485,7 @@ def process_dataset_face_classifier(args, force_create=False):
     model, input_size = face_classifier.fc_model.init_face_classifier(fc_args,
                                                                       model_name=fc_args.model,
                                                                       num_classes=2,
-                                                                      resume_from=args.face_classifier_model_file)
+                                                                      resume_from=args.fc_model)
     data_transforms = face_classifier.fc_eval.get_fc_data_transforms(fc_args, input_size)
     model.to(args.device)
     model.eval()

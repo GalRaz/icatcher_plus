@@ -115,8 +115,8 @@ class PrincetonParser(BaseParser):
             next(my_reader, None)  # skip the headers
             for row in my_reader:
                 numbers = [int(x) for x in row[1].split(":")]
-                time_Stamp = numbers[0]*60*60*self.fps + numbers[1]*60*self.fps + numbers[2]*self.fps + numbers[3]
-                start_times[Path(row[0]).stem] = time_Stamp
+                time_stamp = numbers[0]*60*60*self.fps + numbers[1]*60*self.fps + numbers[2]*self.fps + numbers[3]
+                start_times[Path(row[0]).stem] = time_stamp
         return start_times
 
     def parse(self, file, file_is_fullpath=False):
