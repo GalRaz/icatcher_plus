@@ -147,9 +147,6 @@ def preprocess_raw_princeton_dataset(args, force_create=False):
             shutil.copyfile(args.raw_dataset_path / 'VCX2' / (file + ".vcx"), args.label2_folder / (file + ".vcx"))
 
 
-
-
-
 def detect_face_opencv_dnn(net, frame, conf_threshold):
     """
     Uses a pretrained face detection model to generate facial bounding boxes,
@@ -222,8 +219,7 @@ def process_dataset_lowest_face(args, gaze_labels_only=False, force_create=False
             parser = parsers.PrincetonParser(fps,
                                              ".vcx",
                                              args.label_folder,
-                                             Path(
-                                                 "/disk3/yotam/icatcher+/datasets/marchman_raw/Visit_A/start_times_visitA.csv"))
+                                             Path("/disk3/yotam/icatcher+/datasets/marchman_raw/Visit_A/start_times_visitA.csv"))
         elif args.raw_dataset_type == "lookit" or args.raw_dataset_type == "generic":
             parser = parsers.PrefLookTimestampParser(fps, args.label_folder, ".txt")
         else:
@@ -475,23 +471,6 @@ def process_dataset_face_classifier(args, force_create=False):
                                                                       num_classes=2,
                                                                       resume_from=args.face_classifier_model_file)
     data_transforms = face_classifier.fc_eval.get_fc_data_transforms(fc_args, input_size)
-    ## todo: remove test code from here
-    # dataloaders = face_classifier.fc_data.get_dataset_dataloaders(args, input_size, 64, False)
-    # criterion = face_classifier.fc_model.get_loss()
-    # model.to(args.device)
-    #
-    # val_loss, val_top1, val_labels, val_probs, val_target_labels = face_classifier.fc_eval.evaluate(args,
-    #                                                                                                 model,
-    #                                                                                                 dataloaders['val'],
-    #                                                                                                 criterion,
-    #                                                                                                 return_prob=False,
-    #                                                                                                 is_labelled=True,
-    #                                                                                                 generate_labels=True)
-    #
-    # logging.info("\n[val] Failed images:\n")
-    # err_idxs = np.where(np.array(val_labels) != np.array(val_target_labels))[0]
-    # visualize.print_data_img_name(dataloaders, 'val', err_idxs)
-    # logging.info('val_loss: {:.4f}, val_top1: {:.4f}'.format(val_loss, val_top1))
     model.to(args.device)
     model.eval()
     video_files = sorted(list(args.video_folder.glob("*")))

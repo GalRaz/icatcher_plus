@@ -10,7 +10,7 @@ def get_fc_data_transforms(args, input_size, dt_key=None):
     if dt_key is not None and dt_key != 'train':
         return {dt_key: transforms.Compose([
             transforms.ToTensor(),
-            transforms.Resize(input_size, antialias=True),
+            transforms.Resize((input_size, input_size), antialias=True),
             transforms.CenterCrop(input_size),
             transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
         ])}
@@ -30,9 +30,9 @@ def get_fc_data_transforms(args, input_size, dt_key=None):
     aug_list = []
     aug_list.append(transforms.ToTensor())
     if args.cropping:
-        aug_list.append(transforms.RandomResizedCrop(input_size))
+        aug_list.append(transforms.RandomResizedCrop((input_size, input_size)))
     else:
-        aug_list.append(transforms.Resize(input_size, antialias=True))
+        aug_list.append(transforms.Resize((input_size, input_size), antialias=True))
     if args.rotation:
         aug_list.append(transforms.RandomRotation(20))
     if args.color:
@@ -54,7 +54,7 @@ def get_fc_data_transforms(args, input_size, dt_key=None):
         'train': aug_transform,
         'val': transforms.Compose([
             transforms.ToTensor(),
-            transforms.Resize(input_size, antialias=True),
+            transforms.Resize((input_size, input_size), antialias=True),
             transforms.CenterCrop(input_size),
             transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
         ]),

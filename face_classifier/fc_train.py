@@ -6,10 +6,10 @@ import os
 import numpy as np
 import visualize
 from pathlib import Path
+from face_classifier.fc_data import *
+from face_classifier.fc_eval import *
+from face_classifier.fc_model import *
 
-from .fc_model import *
-from .fc_eval import *
-from .fc_data import *
 
 
 def get_args():
@@ -32,7 +32,7 @@ def get_args():
     # batch size
     parser.add_argument('--bs', default=8, type=int)
     # number of epochs, epochs=0 for evalusation only
-    parser.add_argument('--epochs', default=20, type=int)
+    parser.add_argument('--epochs', default=40, type=int)
     # schedule
     parser.add_argument('--scheduler', default='none', type=str)  # exp, ms
     # dropout
@@ -173,7 +173,7 @@ if __name__ == "__main__":
     resume_from = None if args.resume == 'none' else args.resume
 
     # Directory to save weights to
-    save_dir = "./models/weights"
+    save_dir = "../models/fc_weights"
     save_dir += "-A"
     if args.rotation:
         save_dir += "r"
