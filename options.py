@@ -99,6 +99,7 @@ def parse_arguments_for_testing():
         assert args.video_filter.is_file() or args.video_filter.is_dir()
     if args.output_annotation:
         args.output_filepath = Path(args.output_annotation)
+        args.output_filepath.mkdir(exist_ok=False, parents=True)
         if not args.output_filepath.is_dir():
             print("--output_filepath argument must point to a folder.")
             raise AssertionError
@@ -129,6 +130,7 @@ def parse_arguments_for_testing():
 def parse_arguments_for_visualizations():
     parser = argparse.ArgumentParser()
     parser.add_argument("output_folder", type=str, default="output", help="path to output results.")
+    parser.add_argument("raw_dataset_folder", type=str, help="path to raw dataset folder")
     parser.add_argument("dataset_folder", type=str, help="path to preprocessed dataset folder")
     parser.add_argument("human_codings_folder", type=str, help="the codings from human1")
     parser.add_argument("human2_codings_folder", type=str, help="the codings from human12")

@@ -239,8 +239,7 @@ def compare_two_coding_files(coding1, coding2):
 def compare_coding_files(human_coding_file, human_coding_file2, machine_coding_file, args):
     logging.info("comparing target and inferred labels: {target_path} vs {inferred_path}")
     parser1 = parsers.PrefLookTimestampParser(30)
-    parser2 = parsers.PrincetonParser(30,
-                                      start_time_file="/disk3/yotam/icatcher+/datasets/marchman_raw/Visit_A/start_times_visitA.csv")
+    parser2 = parsers.PrincetonParser(30, start_time_file=Path(args.raw_dataset_folder, "start_times_visitA.csv"))
     if args.machine_coding_format == "PrefLookTimestamp":
         parser = parser1
     else:
