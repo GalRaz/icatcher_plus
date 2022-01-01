@@ -14,6 +14,7 @@ from tqdm import tqdm
 import options
 import parsers
 import video
+import csv
 
 
 def preprocess_raw_lookit_dataset(args, force_create=False):
@@ -24,49 +25,148 @@ def preprocess_raw_lookit_dataset(args, force_create=False):
     :param force_create: forces creation of files even if they exist
     :return:
     """
+    np.random.seed(seed=43)  # seed the random generator
     args.video_folder.mkdir(parents=True, exist_ok=True)
     args.label_folder.mkdir(parents=True, exist_ok=True)
     args.label2_folder.mkdir(parents=True, exist_ok=True)
     args.faces_folder.mkdir(parents=True, exist_ok=True)
-
-    # TODO: Bugs: 1 file does not have this prefix; 1 file ends with .mov
     prefix = 'cfddb63f-12e9-4e62-abd1-47534d6c4dd2_'
-    coding_first = [f.stem[:-5] for f in Path(args.raw_dataset_path / 'coding_first').glob('*.txt')]
-    coding_second = [f.stem[:-5] for f in Path(args.raw_dataset_path / 'coding_second').glob('*.txt')]
-    videos = [f.stem for f in Path(args.raw_dataset_path / 'videos').glob(prefix+'*.mp4')]
+    suffix = ".mp4"
+    video_dataset = {}
+    # search for videos
+    for file in Path(args.raw_dataset_path / "videos").glob("*"):
+        video_dataset[file] = {"video_id": file.stem.split("_")[1],
+                               "video_path": file,
+                               "video_suffix": file.suffix,
+                               "in_tlv": False,
+                               "has_1coding": False,
+                               "has_2coding": False,
+                               "first_coding_file": None,
+                               "second_coding_file": None,
+                               "child_id": None,
+                               "split": None}
+    # parse tlv file
+    tlv_file = Path(args.raw_dataset_path / "prefphys_split0_filelist_20211221.tsv")
+    rows = []
+    with open(tlv_file) as file:
+        tsv_file = csv.reader(file, delimiter="\t")
+        header = next(tsv_file)
+        for row in tsv_file:
+            rows.append(row)
+    # fill video dataset with information from tlv
+    video_id = header.index("videoID")
+    child_id = header.index("childID")
+    which_dataset = header.index("which.dataset")  # train or test video
+    tlv_videos = [row[video_id] for row in rows]
+    for entry in video_dataset.values():
+        if entry["video_id"] in tlv_videos:
+            entry["in_tlv"] = True
+            index = tlv_videos.index(entry["video_id"])
+            entry["child_id"] = rows[index][child_id]
+            entry["split"] = rows[index][which_dataset]
+    # fill video dataset with information from folders
+    first_coding_files = [f for f in Path(args.raw_dataset_path / 'coding_first').glob("*.txt")]
+    first_coding_files_video_ids = ["-".join(f.stem.split("_")[2].split("-")[1:]) for f in first_coding_files]
+    second_coding_files = [f for f in Path(args.raw_dataset_path / 'coding_second').glob("*.txt")]
+    second_coding_files_video_ids = ["-".join(f.stem.split("_")[2].split("-")[1:]) for f in second_coding_files]
+    for entry in video_dataset.values():
+        if entry["video_id"] in first_coding_files_video_ids:
+            index = first_coding_files_video_ids.index(entry["video_id"])
+            entry["has_1coding"] = True
+            entry["first_coding_file"] = first_coding_files[index]
+        if entry["video_id"] in second_coding_files_video_ids:
+            index = second_coding_files_video_ids.index(entry["video_id"])
+            entry["has_2coding"] = True
+            entry["second_coding_file"] = second_coding_files[index]
+        if entry["has_2coding"]:  # just a small sanity check
+            assert entry["has_1coding"]
 
-    logging.info('[preprocess_raw] coding_first: {}'.format(len(coding_first)))
-    logging.info('[preprocess_raw] coding_second: {}'.format(len(coding_second)))
-    logging.info('[preprocess_raw] videos: {}'.format(len(videos)))
+    # print some stats
+    valid_videos = len(video_dataset.keys())
+    valid_videos_in_tlv = len([x for x in video_dataset.values() if x["in_tlv"] and x["has_1coding"]])
+    doubly_coded = len([x for x in video_dataset.values() if x["in_tlv"] and x["has_2coding"]])
+    unique_children = len(np.unique([x["child_id"] for x in video_dataset.values() if x["in_tlv"] and x["has_1coding"]]))
+    logging.info("tlv videos: {},"
+                 " found videos: {},"
+                 " found videos in tlv: {},"
+                 " doubly coded: {},"
+                 " unique children: {}".format(len(rows), valid_videos, valid_videos_in_tlv, doubly_coded, unique_children))
 
-    training_set = []
-    test_set = []
+    # filter out videos according to split type
+    if args.split_type == "all":
+        videos = [x for x in video_dataset.values() if x["in_tlv"] and x["has_1coding"]]
+    elif args.split_type == "split0_train":
+        videos = [x for x in video_dataset.values() if x["in_tlv"] and x["has_1coding"] and x["split"] == "1_train"]
+    elif args.split_type == "split0_test":
+        videos = [x for x in video_dataset.values() if x["in_tlv"] and x["has_1coding"] and x["split"] == "2_test"]
+    else:
+        raise NotImplementedError
+    videos = np.array(videos)
 
-    for filename in videos:
-        if prefix not in filename:
-            continue
-        label_id = filename[len(prefix):]
-        if label_id in coding_first:
-            if label_id in coding_second:
-                test_set.append(filename)
-            else:
-                training_set.append(filename)
+    # filter out videos according to one_video_per_child_policy and train_val_disjoint
+    if args.one_video_per_child_policy == "include_all":
+        double_coded = [x for x in videos if x["has_2coding"]]
+        threshold = int(len(videos) * args.val_percent)
+        val_set = np.random.choice(double_coded, size=threshold, replace=False)
+        if args.train_val_disjoint:
+            val_children_id = [x["child_id"] for x in val_set]
+            train_set = [x for x in videos if x["child_id"] not in val_children_id and x not in val_set]
+            train_set = np.array(train_set)
+        else:
+            train_set = [x for x in videos if x not in val_set]
+    elif args.one_video_per_child_policy == "exclude_all":
+        video_children_id = [x["child_id"] for x in videos]
+        _, indices = np.unique(video_children_id, return_index=True)
+        videos = videos[indices]
+        double_coded = [x for x in videos if x["has_2coding"]]
+        threshold = min(int(len(videos) * args.val_percent), len(double_coded))
+        val_set = np.random.choice(double_coded, size=threshold, replace=False)
+        train_set = np.array([x for x in videos if x not in val_set])
+    elif args.one_video_per_child_policy == "exc_train_only":
+        video_children_id = [x["child_id"] for x in videos]
+        _, unique_indices = np.unique(video_children_id, return_index=True)
+        double_coded_and_unique_videos = [x for x in videos[unique_indices] if x["has_2coding"]]
+        threshold = min(int(len(videos) * args.val_percent), len(double_coded_and_unique_videos))
+        val_set = np.random.choice(double_coded_and_unique_videos, size=threshold, replace=False)
+        if args.train_val_disjoint:
+            val_children_id = [x["child_id"] for x in val_set]
+            train_set = [x for x in videos if x["child_id"] not in val_children_id and x not in val_set]
+            train_set = np.array(train_set)
+        else:
+            train_set = np.array([x for x in videos if x not in val_set])
+    elif args.one_video_per_child_policy == "exc_val_only":
+        val_set = [x for x in videos if x["has_2coding"]]
+        val_children_id = [x["child_id"] for x in val_set]
+        if args.train_val_disjoint:
+            temp_train_set = [x for x in videos if x["child_id"] not in val_children_id and x not in val_set]
+        else:
+            temp_train_set = [x for x in videos if x not in val_set]
+        temp_train_video_children_id = [x["child_id"] for x in temp_train_set]
+        _, unique_indices = np.unique(temp_train_video_children_id, return_index=True)
+        train_set = np.array(temp_train_video_children_id[unique_indices])
+    else:
+        raise NotImplementedError
 
-    logging.info('[preprocess_raw] training set: {} validation set: {}'.format(len(training_set), len(test_set)))
+    # create final structured dataset
+    logging.info('[preprocess_raw] training set: {} validation set: {}'.format(len(train_set), len(val_set)))
 
-    for filename in training_set:
-        if not Path(args.video_folder, (filename[len(prefix):]+'.mp4')).is_file() or force_create:
-            shutil.copyfile(args.raw_dataset_path / 'videos' / (filename+'.mp4'), args.video_folder / (filename[len(prefix):]+'.mp4'))
-        if not Path(args.label_folder, (filename[len(prefix):]+'.txt')).is_file() or force_create:
-            shutil.copyfile(args.raw_dataset_path / 'coding_first' / (filename[len(prefix):]+'-evts.txt'), args.label_folder / (filename[len(prefix):]+'.txt'))
+    for video_file in train_set:
+        video_file_path = video_file["video_path"]
+        coding_file_path = video_file["first_coding_file"]
+        assert video_file_path.is_file()
+        assert coding_file_path.is_file()
+        shutil.copyfile(video_file_path, Path(args.video_folder / (video_file["video_id"] + video_file_path.suffix)))
+        shutil.copyfile(coding_file_path, Path(args.label_folder / (video_file["video_id"] + coding_file_path.suffix)))
 
-    for filename in test_set:
-        if not Path(args.video_folder, (filename[len(prefix):] + '.mp4')).is_file() or force_create:
-            shutil.copyfile(args.raw_dataset_path / 'videos' / (filename + '.mp4'), args.video_folder /(filename[len(prefix):]+'.mp4'))
-        if not Path(args.label_folder, (filename[len(prefix):] + '.txt')).is_file() or force_create:
-            shutil.copyfile(args.raw_dataset_path / 'coding_first' / (filename[len(prefix):] + '-evts.txt'), args.label_folder / (filename[len(prefix):]+'.txt'))
-        if not Path(args.label2_folder, (filename[len(prefix):] + '.txt')).is_file() or force_create:
-            shutil.copyfile(args.raw_dataset_path / 'coding_second' / (filename[len(prefix):] + '-evts.txt'), args.label2_folder / (filename[len(prefix):]+'.txt'))
+    for video_file in val_set:
+        video_file_path = video_file["video_path"]
+        coding_file_path = video_file["first_coding_file"]
+        second_coding_file_path = video_file["second_coding_file"]
+        assert video_file_path.is_file()
+        assert coding_file_path.is_file()
+        shutil.copyfile(video_file_path, Path(args.video_folder / (video_file["video_id"] + video_file_path.suffix)))
+        shutil.copyfile(coding_file_path, Path(args.label_folder / (video_file["video_id"] + coding_file_path.suffix)))
+        shutil.copyfile(second_coding_file_path, Path(args.label2_folder / (video_file["video_id"] + second_coding_file_path.suffix)))
 
 
 def preprocess_raw_generic_dataset(args, force_create=False):
@@ -211,7 +311,10 @@ def process_dataset_lowest_face(args, gaze_labels_only=False, force_create=False
 
         cap = cv2.VideoCapture(str(video_file))
         # make sure target fps is around 30
-        video.verify_constant_framerate(video_file)
+        vfr, meta = video.is_video_vfr(video_file, get_meta_data=True)
+        if vfr:
+            logging.warning("video file: {} has variable frame rate".format(str(video_file)))
+            logging.info(str(meta))
         fps = video.get_fps(video_file)
         print("video fps: {}".format(fps))
         # assert np.abs(cap.get(cv2.CAP_PROP_FPS) - fps) < 0.1
@@ -338,7 +441,10 @@ def generate_second_gaze_labels(args, force_create=False, visualize_confusion=Tr
         logging.info("[gen_2nd_labels] Video: %s" % video_file.name)
         if (args.label2_folder / (video_file.stem + suffix)).exists():
             fps = video.get_fps(video_file)
-            video.verify_constant_framerate(video_file)
+            vfr, meta = video.is_video_vfr(video_file, get_meta_data=True)
+            if vfr:
+                logging.warning("video file: {} has variable frame rate".format(str(video_file)))
+                logging.info(str(meta))
             if args.raw_dataset_type == "princeton":
                 assert abs(fps - 30) < 0.1
                 parser = parsers.PrincetonParser(30,
@@ -534,17 +640,20 @@ def process_dataset_face_classifier(args, force_create=False):
             np.save(str(face_labels_fc_filename), face_labels_fc)
 
 
-def report_dataset_split():
+def report_dataset_stats():
     """
     prints out a list of training and test videos according to the heuristic that doubly coded videos are test set.
     :return:
     """
     all_videos = []
     test_videos = []
-    for path in sorted(args.label_folder.glob("*.txt")):
+    raw_videos = []
+    for path in sorted(args.label_folder.glob("*")):
         all_videos.append(path.name)
-    for path in sorted(args.label2_folder.glob("*.txt")):
+    for path in sorted(args.label2_folder.glob("*")):
         test_videos.append(path.name)
+    for path in sorted(args.video_folder.glob("*")):
+        raw_videos.append(path)
     train_videos = [x for x in all_videos if x not in test_videos]
     logging.info("train videos: [{0}]".format(', '.join(map(str, train_videos))))
     logging.info("test videos: [{0}]".format(', '.join(map(str, test_videos))))
@@ -569,8 +678,8 @@ if __name__ == "__main__":
         raise NotImplementedError
 
     process_dataset_lowest_face(args, gaze_labels_only=False, force_create=False)
-    generate_second_gaze_labels(force_create=False, visualize_confusion=False)
-    # report_dataset_split()
+    generate_second_gaze_labels(args, force_create=False, visualize_confusion=True)
+    # report_dataset_stats()
     # gen_lookit_multi_face_subset(force_create=False)
     # uncomment next line if face classifier was trained:
-    process_dataset_face_classifier(args, force_create=False)
+    process_dataset_face_classifier(args, force_create=True)
