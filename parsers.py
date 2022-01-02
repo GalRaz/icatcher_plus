@@ -11,9 +11,9 @@ class BaseParser:
 
     def parse(self, file):
         """
-        returns a list of lists. each list contains the frame number, valid_flag, class
+        returns a list of lists. each list contains the frame number (or timestamps), valid_flag, class
         where:
-        frame number is zero indexed
+        frame number is zero indexed (or if timestamp, starts from 0.0)
         valid_flag is 1 if this frame has valid annotation, and 0 otherwise
         class is either away, left, right or off.
 
@@ -45,11 +45,11 @@ class PrefLookTimestampParser(BaseParser):
     """
     a parser that can parse PrefLookTimestamp as described here:
     https://osf.io/3n97m/
-    todo: assert this returns same values as peter's version
     """
-    def __init__(self, fps, labels_folder=None, ext=None):
+    def __init__(self, fps, labels_folder=None, ext=None, return_time_stamps=False):
         super().__init__()
         self.fps = fps
+        self.return_time_stamps = return_time_stamps
         if ext:
             self.ext = ext
         if labels_folder:
@@ -73,8 +73,12 @@ class PrefLookTimestampParser(BaseParser):
         output = []
         start, end = 0, 0
         for entry in range(labels.shape[0]):
-            frame = int(int(labels[entry, 0]) * self.fps / 1000)
-            dur = int(int(labels[entry, 1]) * self.fps / 1000)
+            if self.return_time_stamps:
+                frame = int(labels[entry, 0])
+                dur = int(labels[entry, 1])
+            else:
+                frame = int(int(labels[entry, 0]) * self.fps / 1000)
+                dur = int(int(labels[entry, 1]) * self.fps / 1000)
             class_name = labels[entry, 2]
             valid_flag = 1 if class_name in classes else 0
             if class_name == "codingactive":  # indicates the period of video when coding was actually performed

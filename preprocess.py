@@ -311,12 +311,15 @@ def process_dataset_lowest_face(args, gaze_labels_only=False, force_create=False
 
         cap = cv2.VideoCapture(str(video_file))
         # make sure target fps is around 30
-        vfr, meta = video.is_video_vfr(video_file, get_meta_data=True)
+        vfr, meta_data = video.is_video_vfr(video_file, get_meta_data=True)
+        fps = video.get_fps(video_file)
         if vfr:
             logging.warning("video file: {} has variable frame rate".format(str(video_file)))
-            logging.info(str(meta))
-        fps = video.get_fps(video_file)
-        print("video fps: {}".format(fps))
+            logging.info(str(meta_data))
+            frame_info, vfr_frame_counter, _ = video.get_frame_information(video_file)
+        else:
+            print("video fps: {}".format(fps))
+
         # assert np.abs(cap.get(cv2.CAP_PROP_FPS) - fps) < 0.1
         if args.raw_dataset_type == "princeton":
             assert abs(fps - 30) < 0.1
@@ -325,7 +328,10 @@ def process_dataset_lowest_face(args, gaze_labels_only=False, force_create=False
                                              args.label_folder,
                                              Path(args.raw_dataset_path, "start_times_visitA.csv"))
         elif args.raw_dataset_type == "lookit" or args.raw_dataset_type == "generic":
-            parser = parsers.PrefLookTimestampParser(fps, args.label_folder, ".txt")
+            parser = parsers.PrefLookTimestampParser(fps=fps,
+                                                     labels_folder=args.label_folder,
+                                                     ext=".txt",
+                                                     return_time_stamps=vfr)
         else:
             raise NotImplementedError
         responses, _, _ = parser.parse(video_file.stem)
@@ -334,9 +340,13 @@ def process_dataset_lowest_face(args, gaze_labels_only=False, force_create=False
         while ret_val:
             if responses:
                 logging.info("[process_lkt_legacy] Processing frame: {}".format(frame_counter))
-                if frame_counter >= responses[0][0]:  # skip until reaching first annotated frame
+                if vfr:
+                    frame_stamp = frame_info[frame_counter]
+                else:
+                    frame_stamp = frame_counter
+                if frame_stamp >= responses[0][0]:  # skip until reaching first annotated frame
                     # find closest (previous) response this frame belongs to
-                    q = [index for index, val in enumerate(responses) if frame_counter >= val[0]]
+                    q = [index for index, val in enumerate(responses) if frame_stamp >= val[0]]
                     response_index = max(q)
                     if responses[response_index][1] != 0:  # make sure response is valid
                         gaze_class = responses[response_index][2]
@@ -404,6 +414,8 @@ def process_dataset_lowest_face(args, gaze_labels_only=False, force_create=False
                 logging.info("[process_lkt_legacy] Skipping frame since parser reported no annotation")
             ret_val, frame = cap.read()
             frame_counter += 1
+        if vfr:
+            assert frame_counter == vfr_frame_counter
         # save gaze labels
         gaze_labels = np.array(gaze_labels)
         gaze_labels_filename = Path.joinpath(args.faces_folder, video_file.stem, 'gaze_labels.npy')
@@ -441,10 +453,11 @@ def generate_second_gaze_labels(args, force_create=False, visualize_confusion=Tr
         logging.info("[gen_2nd_labels] Video: %s" % video_file.name)
         if (args.label2_folder / (video_file.stem + suffix)).exists():
             fps = video.get_fps(video_file)
-            vfr, meta = video.is_video_vfr(video_file, get_meta_data=True)
+            vfr, meta_data = video.is_video_vfr(video_file, get_meta_data=True)
             if vfr:
                 logging.warning("video file: {} has variable frame rate".format(str(video_file)))
-                logging.info(str(meta))
+                logging.info(str(meta_data))
+                frame_info, vfr_frame_counter, _ = video.get_frame_information(video_file)
             if args.raw_dataset_type == "princeton":
                 assert abs(fps - 30) < 0.1
                 parser = parsers.PrincetonParser(30,
@@ -452,15 +465,22 @@ def generate_second_gaze_labels(args, force_create=False, visualize_confusion=Tr
                                                  args.label2_folder,
                                                  Path(args.raw_dataset_path, "start_times_visitA.csv"))
             elif args.raw_dataset_type == "lookit" or args.raw_dataset_type == "generic":
-                parser = parsers.PrefLookTimestampParser(fps, args.label2_folder, suffix)
+                parser = parsers.PrefLookTimestampParser(fps=fps,
+                                                         labels_folder=args.label2_folder,
+                                                         ext=suffix,
+                                                         return_time_stamps=vfr)
             else:
                 raise NotImplementedError
             responses, _, _ = parser.parse(video_file.stem)
             gaze_labels = np.load(str(Path.joinpath(args.faces_folder, video_file.stem, 'gaze_labels.npy')))
             gaze_labels_second = []
             for frame in range(gaze_labels.shape[0]):
-                if frame >= responses[0][0]:
-                    q = [index for index, val in enumerate(responses) if frame >= val[0]]
+                if vfr:
+                    frame_stamp = frame_info[frame]
+                else:
+                    frame_stamp = frame
+                if frame_stamp >= responses[0][0]:
+                    q = [index for index, val in enumerate(responses) if frame_stamp >= val[0]]
                     response_index = max(q)
                     if responses[response_index][1] != 0:
                         gaze_class = responses[response_index][2]

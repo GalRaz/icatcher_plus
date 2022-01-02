@@ -44,5 +44,8 @@ def get_frame_information(video_file_path):
     video_frames = [frame for frame in output['frames'] if frame['media_type'] == 'video']
     frame_times = [frame["pkt_pts_time"] for frame in video_frames]
     video_stream_info = next(s for s in output['streams'] if s['codec_type'] == 'video')
-    assert len(frame_times) == video_stream_info["nb_frames"]
-    return frame_times, video_stream_info["nb_frames"], video_stream_info["time_base"]
+    assert len(frame_times) == int(video_stream_info["nb_frames"])
+    frame_times_ms = [1000*float(x) for x in frame_times]
+    assert frame_times_ms[0] == 0.0
+    # returns timestamps in milliseconds
+    return frame_times_ms, int(video_stream_info["nb_frames"]), video_stream_info["time_base"]
