@@ -67,7 +67,7 @@ class MyModel:
             lambda_rule = lambda epoch: self.opt.lr_decay_rate ** epoch
             scheduler = torch.optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda=lambda_rule)
         elif self.opt.lr_policy == 'plateau':
-            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, 'min', verbose=True, patience=5)
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, 'min', verbose=True, patience=3)
         elif self.opt.lr_policy == 'multi_step':
             scheduler = torch.optim.lr_scheduler.MultiStepLR(self.optimizer, milestones=[10, 15], gamma=0.1)
         elif self.opt.lr_policy == "cyclic":
