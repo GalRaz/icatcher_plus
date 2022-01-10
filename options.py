@@ -1,5 +1,6 @@
 import argparse
 from pathlib import Path
+import sys
 
 
 def parse_arguments():
@@ -34,9 +35,9 @@ def parse_arguments():
                         help="if present, uses this file to filter out certain data from validation set")
     parser.add_argument("--use_disjoint", action="store_true",
                         help="if true, uses only disjoint subjects videos, else uses only subjects who appeared in train set")
-    parser.add_argument("--rand_augment", type=bool, default=False,
+    parser.add_argument("--rand_augment", default=False, action="store_true",
                         help="if true, uses RandAugment for training augmentations")
-    parser.add_argument("--horiz_flip", type=bool, default=True,
+    parser.add_argument("--horiz_flip", default=False, action="store_true",
                         help="if true, horizontally flips images in training (and flips labels as well)")
     parser.add_argument("--number_of_epochs", type=int, default=100, help="Total number of epochs to train model")
     parser.add_argument("--seed", type=int, default=42, help="Random seed to train with")
@@ -57,6 +58,8 @@ def parse_arguments():
         import os
         os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
         args.device = "cuda:{}".format(0)
+    with open(Path(args.experiment_path, 'commandline_args.txt'), 'w') as f:
+        f.write('\n'.join(sys.argv[1:]))
     return args
 
 
