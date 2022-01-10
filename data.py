@@ -1,5 +1,6 @@
 import torch
 from torchvision import transforms
+from torchvision.transforms.functional import hflip
 import numpy as np
 from PIL import Image
 import copy
@@ -7,7 +8,7 @@ from pathlib import Path
 import logging
 import csv
 import visualize
-
+from augmentations import RandAugment
 
 class DataTransforms:
     def __init__(self, img_size):
@@ -16,8 +17,8 @@ class DataTransforms:
                 transforms.Resize((img_size, img_size)),
                 transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.05),
                 transforms.ToTensor(),
-                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-                transforms.RandomErasing()
+                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+                # transforms.RandomErasing()
             ]),
             'val': transforms.Compose([
                 transforms.Resize((img_size, img_size)),
@@ -33,11 +34,11 @@ class DataTransforms:
 
 
 class LookItDataset:
-    def __init__(self, args):
-        self.args = args
-        self.transforms = DataTransforms(args.image_size).transformations
-        self.img_processor = self.transforms[args.phase]
-        if self.args.filter_validation and self.args.phase == "val":
+    def __init__(self, opt):
+        self.opt = copy.deepcopy(opt)
+        self.img_processor = DataTransforms(self.opt.image_size).transformations[self.opt.phase]  # ew.
+        self.random_augmentor = RandAugment(2, 9)
+        if self.opt.filter_validation and self.opt.phase == "val":
             self.file_filter = self.parse_filter_file()
         else:
             self.file_filter = None
@@ -59,8 +60,8 @@ class LookItDataset:
 
     def parse_filter_file(self):
         validation_videos = []
-        disjoint = "FALSE" if self.args.use_disjoint else "TRUE"
-        with open(self.args.filter_validation, newline='') as csvfile:
+        disjoint = "FALSE" if self.opt.use_disjoint else "TRUE"
+        with open(self.opt.filter_validation, newline='') as csvfile:
             my_reader = csv.reader(csvfile, delimiter=',', quotechar='|')
             for row in my_reader:
                 if row[0] == "test" and row[-1] == disjoint:
@@ -73,22 +74,22 @@ class LookItDataset:
         :param face_label_name: file with face labels
         :return:
         """
-        all_names_path = Path(self.args.dataset_folder, "coding_first")
-        test_names_path = Path(self.args.dataset_folder, "coding_second")
-        dataset_folder_path = Path(self.args.dataset_folder, "faces")
+        all_names_path = Path(self.opt.dataset_folder, "coding_first")
+        test_names_path = Path(self.opt.dataset_folder, "coding_second")
+        dataset_folder_path = Path(self.opt.dataset_folder, "faces")
         all_names = [f.stem for f in all_names_path.glob('*')]
         test_names = [f.stem for f in test_names_path.glob('*')]
         my_list = []
-        logging.info("{}: Collecting paths for dataloader".format(self.args.phase))
+        logging.info("{}: Collecting paths for dataloader".format(self.opt.phase))
         video_counter = 0
         for name in all_names:
-            if self.args.phase == "val":
+            if self.opt.phase == "val":
                 if name not in test_names:
                     continue
                 if self.file_filter:
                     if name not in self.file_filter:
                         continue
-            elif self.args.phase == "train":
+            elif self.opt.phase == "train":
                 if name in test_names:
                     continue
             else:
@@ -96,38 +97,44 @@ class LookItDataset:
             gaze_labels = np.load(str(Path.joinpath(dataset_folder_path, name, f'gaze_labels.npy')))
             face_labels = np.load(str(Path.joinpath(dataset_folder_path, name, f'{face_label_name}.npy')))
             cur_video_counter = 0
-            cur_fail_counter = 0
+            sequence_fail_counter = 0
+            single_fail_counter = 0
             cur_video_total = len(gaze_labels)
             cur_video_fc_fail = np.count_nonzero(face_labels == -1)
             cur_video_fd_fail = np.count_nonzero(face_labels == -2)
             logging.info("Video: {}".format(name))
-            logging.info("fc didn't find a face {} frames,"
-                         " {} frames were not labeld for other reasons,"
-                         " {} total labeled frames".format(cur_video_fc_fail,
-                                                           cur_video_fd_fail,
-                                                           cur_video_total))
+            logging.info("face classifier failures: {},"
+                         " other failures: {},"  # (face detector failed, no annotation, start and end window, etc)
+                         " total labeled: {}.".format(cur_video_fc_fail,
+                                                     cur_video_fd_fail,
+                                                     cur_video_total))
             for frame_number in range(gaze_labels.shape[0]):
-                gaze_label_seg = gaze_labels[frame_number:frame_number + self.args.frames_per_datapoint]
-                face_label_seg = face_labels[frame_number:frame_number + self.args.frames_per_datapoint]
-                if len(gaze_label_seg) != self.args.frames_per_datapoint:
+                gaze_label_seg = gaze_labels[frame_number:frame_number + self.opt.frames_per_datapoint]
+                face_label_seg = face_labels[frame_number:frame_number + self.opt.frames_per_datapoint]
+                if len(gaze_label_seg) != self.opt.frames_per_datapoint:
+                    sequence_fail_counter += 1
                     break
                 if any(face_label_seg < 0):  # a tidy bit too strict?...we can basically afford 1 or two missing labels
-                    cur_fail_counter += 1
+                    if np.count_nonzero(face_label_seg < 0) == 1:
+                        single_fail_counter += 1
+                    else:
+                        sequence_fail_counter += 1
                     continue
-                if not self.args.eliminate_transitions or self.check_all_same(gaze_label_seg):
-                    class_seg = gaze_label_seg[self.args.frames_per_datapoint // 2]
+                if not self.opt.eliminate_transitions or self.check_all_same(gaze_label_seg):
+                    class_seg = gaze_label_seg[self.opt.frames_per_datapoint // 2]
                     img_files_seg = []
                     box_files_seg = []
-                    for i in range(self.args.frames_per_datapoint):
+                    for i in range(self.opt.frames_per_datapoint):
                         img_files_seg.append(f'{name}/img/{frame_number + i:05d}_{face_label_seg[i]:01d}.png')
                         box_files_seg.append(f'{name}/box/{frame_number + i:05d}_{face_label_seg[i]:01d}.npy')
-                    img_files_seg = img_files_seg[::self.args.frames_stride_size]
-                    box_files_seg = box_files_seg[::self.args.frames_stride_size]
+                    img_files_seg = img_files_seg[::self.opt.frames_stride_size]
+                    box_files_seg = box_files_seg[::self.opt.frames_stride_size]
                     my_list.append((img_files_seg, box_files_seg, class_seg))
                     cur_video_counter += 1
-            logging.info("{}/{} usable datapoints with {} failures".format(cur_video_counter,
-                                                                           cur_video_total,
-                                                                           cur_fail_counter))
+            logging.info("{}/{} ({:.2f}%) usable datapoints with {} sequence failures\n".format(cur_video_counter,
+                                                                                                cur_video_total,
+                                                                                                100 * (cur_video_counter / cur_video_total),
+                                                                                                sequence_fail_counter))
             if not my_list:
                 logging.info("The video {} has no annotations".format(name))
                 continue
@@ -137,24 +144,38 @@ class LookItDataset:
 
     def __getitem__(self, index):
         img_files_seg, box_files_seg, class_seg = self.paths[index]
-
+        if self.opt.phase == "train":  # also do horizontal flip (but also swap label if necessary for left & right)
+            flip = np.random.randint(2)
+        else:
+            flip = 0
         imgs = []
         for img_file in img_files_seg:
-            img = Image.open(self.args.dataset_folder / "faces" / img_file).convert('RGB')
+            img = Image.open(self.opt.dataset_folder / "faces" / img_file).convert('RGB')
+            if self.opt.phase == "train":  # compose random augmentations with post_processor
+                img = self.random_augmentor(img)
             img = self.img_processor(img)
+            if flip:
+                img = hflip(img)
             imgs.append(img)
         imgs = torch.stack(imgs)
 
         boxs = []
         for box_file in box_files_seg:
-            box = np.load(self.args.dataset_folder / "faces" / box_file, allow_pickle=True).item()
+            box = np.load(self.opt.dataset_folder / "faces" / box_file, allow_pickle=True).item()
             box = torch.tensor([box['face_size'], box['face_ver'], box['face_hor'], box['face_height'], box['face_width']])
+            if flip:
+                box[2] = 1 - box[2]  # flip horizontal box
             boxs.append(box)
         boxs = torch.stack(boxs)
         boxs = boxs.float()
-        imgs = imgs.to(self.args.device)
-        boxs = boxs.to(self.args.device)
-        class_seg = torch.as_tensor(class_seg).to(self.args.device)
+        imgs = imgs.to(self.opt.device)
+        boxs = boxs.to(self.opt.device)
+        class_seg = torch.as_tensor(class_seg).to(self.opt.device)
+        if flip:
+            if class_seg == 1:
+                class_seg += 1
+            elif class_seg == 2:
+                class_seg -= 1
         return {
             'imgs': imgs,  # n x 3 x 100 x 100
             'boxs': boxs,  # n x 5
@@ -261,7 +282,7 @@ class MyDataLoader:
     def __init__(self, opt):
         self.opt = copy.deepcopy(opt)
         shuffle = (self.opt.phase == "train")
-        self.dataset = LookItDataset(opt)
+        self.dataset = LookItDataset(self.opt)
         self.dataloader = torch.utils.data.DataLoader(
             self.dataset,
             batch_size=opt.batch_size,
@@ -278,19 +299,29 @@ class MyDataLoader:
         for i, data in enumerate(self.dataloader):
             yield data
 
-    def plot_sample_collage(self):
-        condition = True
+    def plot_sample_collage(self, collage_size=25):
+        """
+        plots a collage of images from dataset
+        :param collage_size the size of the collage, must have integer square root
+        :return:
+        """
+        classes = {0: "away", 1: "left", 2: "right"}
+        bins = [[], [], []]
+        assert np.sqrt(collage_size) == int(np.sqrt(collage_size))
         iterator = iter(self.dataloader)
+        condition = (len(bins[0]) < collage_size) or\
+                    (len(bins[1]) < collage_size) or\
+                    (len(bins[2]) < collage_size)
         while condition:
             batch_data = next(iterator)
-            if torch.count_nonzero(batch_data["label"] == 0) >= 9:
-                condition = False
-        batch_imgs = batch_data["imgs"][:, 2, ...]
-        batch_labels = batch_data["label"]
-        classes = {0: "away", 1: "left", 2: "right"}
+            for i in range(len(batch_data["label"])):
+                if len(bins[batch_data["label"][i]]) < collage_size:
+                    bins[batch_data["label"][i]].append(batch_data["imgs"][i, 2, ...].permute(1, 2, 0))
+            condition = (len(bins[0]) < collage_size) or \
+                        (len(bins[1]) < collage_size) or \
+                        (len(bins[2]) < collage_size)
         for class_id in classes.keys():
-            imgs = batch_imgs[torch.where(batch_labels == class_id)]
-            imgs = imgs[:9, ...].permute(0, 2, 3, 1).cpu().numpy()
+            imgs = torch.stack(bins[class_id]).cpu().numpy()
             imgs = (imgs - np.min(imgs, axis=(1, 2, 3), keepdims=True)) / (np.max(imgs, axis=(1, 2, 3), keepdims=True) - np.min(imgs, axis=(1, 2, 3), keepdims=True))
             save_path = Path(self.opt.experiment_path, "collage_{}.png".format(classes[class_id]))
-            visualize.make_gallery(imgs, save_path, ncols=3)
+            visualize.make_gallery(imgs, save_path, ncols=int(np.sqrt(collage_size)))

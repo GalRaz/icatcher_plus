@@ -46,7 +46,7 @@ def preprocess_raw_lookit_dataset(args, force_create=False):
                                "child_id": None,
                                "split": None}
     # parse tlv file
-    tlv_file = Path(args.raw_dataset_path / "prefphys_split0_filelist_20211221.tsv")
+    tlv_file = Path(args.raw_dataset_path / "prefphys_split0_filelist_20220104.tsv")
     rows = []
     with open(tlv_file) as file:
         tsv_file = csv.reader(file, delimiter="\t")
@@ -117,11 +117,11 @@ def preprocess_raw_lookit_dataset(args, force_create=False):
     elif args.one_video_per_child_policy == "exclude_all":
         video_children_id = [x["child_id"] for x in videos]
         _, indices = np.unique(video_children_id, return_index=True)
-        videos = videos[indices]
-        double_coded = [x for x in videos if x["has_2coding"]]
-        threshold = min(int(len(videos) * args.val_percent), len(double_coded))
+        unique_videos = videos[indices]
+        double_coded = [x for x in unique_videos if x["has_2coding"]]
+        threshold = min(int(len(unique_videos) * args.val_percent), len(double_coded))
         val_set = np.random.choice(double_coded, size=threshold, replace=False)
-        train_set = np.array([x for x in videos if x not in val_set])
+        train_set = np.array([x for x in unique_videos if x not in val_set])
     elif args.one_video_per_child_policy == "exc_train_only":
         video_children_id = [x["child_id"] for x in videos]
         _, unique_indices = np.unique(video_children_id, return_index=True)
