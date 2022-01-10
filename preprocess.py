@@ -88,7 +88,7 @@ def preprocess_raw_lookit_dataset(args, force_create=False):
     unique_children = len(np.unique([x["child_id"] for x in video_dataset.values() if x["in_tlv"] and x["has_1coding"]]))
     logging.info("tlv videos: {},"
                  " found videos: {},"
-                 " found videos in tlv: {},"
+                 " found videos in tsv: {},"
                  " doubly coded: {},"
                  " unique children: {}".format(len(rows), valid_videos, valid_videos_in_tlv, doubly_coded, unique_children))
 

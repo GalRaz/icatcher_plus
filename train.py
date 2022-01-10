@@ -57,13 +57,14 @@ def train_loop(args):
             running_loss = 0.0
             running_corrects = 0
             num_datapoints = 0
-            for batch in val_dataset:
+            for batch_index, batch in enumerate(val_dataset):
                 output = model.network(batch)
                 val_loss = model.loss_fn(output, batch["label"])
                 _, predictions = torch.max(output, 1)
                 num_datapoints += batch["label"].shape[0]
                 running_loss += val_loss.item() * batch["label"].shape[0]
                 running_corrects += torch.sum(torch.eq(predictions, batch["label"])).item()
+                logging.info("val: batch {} / {}".format(batch_index, len(val_dataset) // args.batch_size))
         model.network.train(mode=True)
         val_loss_total = running_loss / num_datapoints
         val_acc_total = (running_corrects / num_datapoints) * 100
