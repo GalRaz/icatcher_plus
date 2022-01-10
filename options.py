@@ -34,6 +34,10 @@ def parse_arguments():
                         help="if present, uses this file to filter out certain data from validation set")
     parser.add_argument("--use_disjoint", action="store_true",
                         help="if true, uses only disjoint subjects videos, else uses only subjects who appeared in train set")
+    parser.add_argument("--rand_augment", type=bool, default=False,
+                        help="if true, uses RandAugment for training augmentations")
+    parser.add_argument("--horiz_flip", type=bool, default=True,
+                        help="if true, horizontally flips images in training (and flips labels as well)")
     parser.add_argument("--number_of_epochs", type=int, default=100, help="Total number of epochs to train model")
     parser.add_argument("--seed", type=int, default=42, help="Random seed to train with")
     parser.add_argument("--gpu_id", type=int, default=-1, help="Which GPU to use (or -1 for cpu)")

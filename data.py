@@ -144,15 +144,16 @@ class LookItDataset:
 
     def __getitem__(self, index):
         img_files_seg, box_files_seg, class_seg = self.paths[index]
-        if self.opt.phase == "train":  # also do horizontal flip (but also swap label if necessary for left & right)
-            flip = np.random.randint(2)
-        else:
-            flip = 0
+        flip = 0
+        if self.opt.horiz_flip:
+            if self.opt.phase == "train":  # also do horizontal flip (but also swap label if necessary for left & right)
+                flip = np.random.randint(2)
         imgs = []
         for img_file in img_files_seg:
             img = Image.open(self.opt.dataset_folder / "faces" / img_file).convert('RGB')
-            if self.opt.phase == "train":  # compose random augmentations with post_processor
-                img = self.random_augmentor(img)
+            if self.opt.rand_augment:
+                if self.opt.phase == "train":  # compose random augmentations with post_processor
+                    img = self.random_augmentor(img)
             img = self.img_processor(img)
             if flip:
                 img = hflip(img)
