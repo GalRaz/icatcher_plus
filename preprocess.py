@@ -34,8 +34,8 @@ def preprocess_raw_lookit_dataset(args, force_create=False):
     suffix = ".mp4"
     video_dataset = {}
     # search for videos
-    for file in Path(args.raw_dataset_path / "videos").glob("*"):
-        video_dataset[file] = {"video_id": file.stem.split("_")[1],
+    for file in Path(args.raw_dataset_path / "videos" / "annotated").glob("*"):
+        video_dataset[file] = {"video_id": "-".join(file.stem.split("_")[2].split("-")[1:]),
                                "video_path": file,
                                "video_suffix": file.suffix,
                                "in_tlv": False,
@@ -46,7 +46,7 @@ def preprocess_raw_lookit_dataset(args, force_create=False):
                                "child_id": None,
                                "split": None}
     # parse tlv file
-    tlv_file = Path(args.raw_dataset_path / "prefphys_split0_filelist_20220104.tsv")
+    tlv_file = Path(args.raw_dataset_path / "prephys_split0_videos.tsv")
     rows = []
     with open(tlv_file) as file:
         tsv_file = csv.reader(file, delimiter="\t")
@@ -65,9 +65,9 @@ def preprocess_raw_lookit_dataset(args, force_create=False):
             entry["child_id"] = rows[index][child_id]
             entry["split"] = rows[index][which_dataset]
     # fill video dataset with information from folders
-    first_coding_files = [f for f in Path(args.raw_dataset_path / 'coding_first').glob("*.txt")]
+    first_coding_files = [f for f in Path(args.raw_dataset_path / "annotations" / 'coder1').glob("*.txt")]
     first_coding_files_video_ids = ["-".join(f.stem.split("_")[2].split("-")[1:]) for f in first_coding_files]
-    second_coding_files = [f for f in Path(args.raw_dataset_path / 'coding_second').glob("*.txt")]
+    second_coding_files = [f for f in Path(args.raw_dataset_path / "annotations" / 'coder2').glob("*.txt")]
     second_coding_files_video_ids = ["-".join(f.stem.split("_")[2].split("-")[1:]) for f in second_coding_files]
     for entry in video_dataset.values():
         if entry["video_id"] in first_coding_files_video_ids:
