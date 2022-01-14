@@ -180,8 +180,9 @@ def preprocess_raw_generic_dataset(args, force_create=False):
     raw_coding_second_path = Path(args.raw_dataset_path / 'coding_second')
 
     videos = [f.stem for f in raw_videos_path.glob("*.mp4")]
-    coding_first = [f.stem for f in raw_coding_first_path.glob("*.txt")]
-    coding_second = [f.stem for f in raw_coding_second_path.glob("*.txt")]
+    coding_first = ["_".join(f.stem.split("_")[:-1]) for f in raw_coding_first_path.glob("*")]
+    coding_second = ["_".join(f.stem.split("_")[:-1]) for f in raw_coding_second_path.glob("*")]
+    coding_ext = next(raw_coding_first_path.glob("*")).suffix
 
     logging.info('[preprocess_raw] coding_first: {}'.format(len(coding_first)))
     logging.info('[preprocess_raw] coding_second: {}'.format(len(coding_second)))
@@ -192,16 +193,19 @@ def preprocess_raw_generic_dataset(args, force_create=False):
     for i, file in enumerate(sorted(list(training_set))):
         if not Path(args.video_folder, (file + '.mp4')).is_file() or force_create:
             shutil.copyfile(raw_videos_path / (file + '.mp4'), args.video_folder / (file + '.mp4'))
-        if not Path(args.label_folder, (file + '.txt')).is_file() or force_create:
-            shutil.copyfile(raw_coding_first_path / (file + ".txt"), args.label_folder / (file + ".txt"))
+        if not Path(args.label_folder, (file + coding_ext)).is_file() or force_create:
+            real_file = next(raw_coding_first_path.glob(file+"*"))
+            shutil.copyfile(real_file, args.label_folder / (file + coding_ext))
 
     for i, file in enumerate(sorted(list(test_set))):
         if not Path(args.video_folder, (file + '.mp4')).is_file() or force_create:
             shutil.copyfile(raw_videos_path / (file + '.mp4'), args.video_folder / (file + '.mp4'))
-        if not Path(args.label_folder, (file + '.txt')).is_file() or force_create:
-            shutil.copyfile(raw_coding_first_path / (file + ".txt"), args.label_folder / (file + ".txt"))
-        if not Path(args.label2_folder, (file + '.txt')).is_file() or force_create:
-            shutil.copyfile(raw_coding_second_path / (file + ".txt"), args.label2_folder / (file + ".txt"))
+        if not Path(args.label_folder, (file + coding_ext)).is_file() or force_create:
+            real_file = next(raw_coding_first_path.glob(file + "*"))
+            shutil.copyfile(real_file, args.label_folder / (file + coding_ext))
+        if not Path(args.label2_folder, (file + coding_ext)).is_file() or force_create:
+            real_file = next(raw_coding_second_path.glob(file + "*"))
+            shutil.copyfile(real_file, args.label2_folder / (file + coding_ext))
 
 
 def preprocess_raw_princeton_dataset(args, force_create=False):
@@ -328,9 +332,10 @@ def process_dataset_lowest_face(args, gaze_labels_only=False, force_create=False
                                              args.label_folder,
                                              Path(args.raw_dataset_path, "start_times_visitA.csv"))
         elif args.raw_dataset_type == "lookit" or args.raw_dataset_type == "generic":
+            ext = next(Path(args.label_folder).glob("*")).suffix
             parser = parsers.PrefLookTimestampParser(fps=fps,
                                                      labels_folder=args.label_folder,
-                                                     ext=".txt",
+                                                     ext=ext,
                                                      return_time_stamps=vfr)
         else:
             raise NotImplementedError
@@ -443,12 +448,7 @@ def generate_second_gaze_labels(args, force_create=False, visualize_confusion=Tr
     """
     classes = {"away": 0, "left": 1, "right": 2}
     video_list = list(args.video_folder.glob("*"))
-    if args.raw_dataset_type == "generic" or args.raw_dataset_type == "lookit":
-        suffix = ".txt"
-    elif args.raw_dataset_type == "princeton":
-        suffix = ".vcx"
-    else:
-        raise NotImplementedError
+    suffix = next(Path(args.label_folder).glob("*")).suffix
     for video_file in video_list:
         logging.info("[gen_2nd_labels] Video: %s" % video_file.name)
         if (args.label2_folder / (video_file.stem + suffix)).exists():
@@ -496,10 +496,10 @@ def generate_second_gaze_labels(args, force_create=False, visualize_confusion=Tr
         else:
             logging.info('[gen_2nd_labels] No label!')
     if visualize_confusion:
-        visualize_human_confusion_matrix()
+        visualize_human_confusion_matrix(Path(args.output_folder, "confusion.pdf"))
 
 
-def visualize_human_confusion_matrix():
+def visualize_human_confusion_matrix(path):
     """
     wrapper for calculating and visualizing confusion matrix with human annotations
     :return:
@@ -515,9 +515,9 @@ def visualize_human_confusion_matrix():
             idxs = np.where((gaze_labels >= 0) & (gaze_labels_second >= 0))
             labels.extend(list(gaze_labels[idxs]))
             preds.extend(list(gaze_labels_second[idxs]))
-    human_dir = Path('plots', 'human')
-    human_dir.mkdir(exist_ok=True, parents=True)
-    _, _ = visualize.calculate_confusion_matrix(labels, preds, human_dir / 'conf.pdf')
+    # human_dir = Path('plots', 'human')
+    # human_dir.mkdir(exist_ok=True, parents=True)
+    _, _ = visualize.calculate_confusion_matrix(labels, preds, path)
 
 
 def gen_lookit_multi_face_subset(force_create=False):
@@ -660,7 +660,7 @@ def process_dataset_face_classifier(args, force_create=False):
             np.save(str(face_labels_fc_filename), face_labels_fc)
 
 
-def report_dataset_stats():
+def report_dataset_stats(args):
     """
     prints out a list of training and test videos according to the heuristic that doubly coded videos are test set.
     :return:
@@ -677,7 +677,7 @@ def report_dataset_stats():
     train_videos = [x for x in all_videos if x not in test_videos]
     logging.info("train videos: [{0}]".format(', '.join(map(str, train_videos))))
     logging.info("test videos: [{0}]".format(', '.join(map(str, test_videos))))
-    # visualize_human_confusion_matrix()
+    visualize_human_confusion_matrix(Path(args.output_folder, "confusion.pdf"))
 
 
 if __name__ == "__main__":
@@ -698,8 +698,8 @@ if __name__ == "__main__":
         raise NotImplementedError
 
     process_dataset_lowest_face(args, gaze_labels_only=False, force_create=False)
-    generate_second_gaze_labels(args, force_create=False, visualize_confusion=True)
-    # report_dataset_stats()
+    generate_second_gaze_labels(args, force_create=False, visualize_confusion=False)
+    report_dataset_stats(args)
     # gen_lookit_multi_face_subset(force_create=False)
     # uncomment next line if face classifier was trained:
-    process_dataset_face_classifier(args, force_create=True)
+    process_dataset_face_classifier(args, force_create=False)
