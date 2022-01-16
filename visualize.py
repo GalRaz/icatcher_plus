@@ -238,18 +238,16 @@ def compare_two_coding_files(coding1, coding2):
 
 def compare_coding_files(human_coding_file, human_coding_file2, machine_coding_file, args):
     logging.info("comparing target and inferred labels: {target_path} vs {inferred_path}")
-    parser1 = parsers.PrefLookTimestampParser(30)
-    parser2 = parsers.PrincetonParser(30, start_time_file=Path(args.raw_dataset_folder, "start_times_visitA.csv"))
     if args.machine_coding_format == "PrefLookTimestamp":
-        parser = parser1
+        parser = parsers.PrefLookTimestampParser(30)
     else:
-        parser = parser2
+        parser = parsers.PrincetonParser(30, start_time_file=Path(args.raw_dataset_folder, "start_times_visitA.csv"))
     machine, mstart, mend = parser.parse(machine_coding_file, file_is_fullpath=True)
 
     if args.human_coding_format == "PrefLookTimestamp":
-        parser = parser1
+        parser = parsers.PrefLookTimestampParser(30)
     else:
-        parser = parser2
+        parser = parsers.PrincetonParser(30, start_time_file=Path(args.raw_dataset_folder, "start_times_visitA.csv"))
     human, start1, end1 = parser.parse(human_coding_file, file_is_fullpath=True)
     human2, start2, end2 = parser.parse(human_coding_file2, file_is_fullpath=True)
     # machine = machine[:-1]
