@@ -237,7 +237,6 @@ def compare_two_coding_files(coding1, coding2):
 
 
 def compare_coding_files(human_coding_file, human_coding_file2, machine_coding_file, args):
-    logging.info("comparing target and inferred labels: {target_path} vs {inferred_path}")
     if args.machine_coding_format == "PrefLookTimestamp":
         parser = parsers.PrefLookTimestampParser(30)
     else:
@@ -381,7 +380,15 @@ def generate_frame_by_frame_comparisons(sorted_IDs, all_metrics, args):
         plt.clf()
 
 
-def generate_plot_set(sorted_IDs, all_metrics, inference, save_path):
+def generate_plot_collage(sorted_IDs, all_metrics, inference, save_path):
+    """
+    plots one image with various selected stats
+    :param sorted_IDs: ids of videos sorted by accuracy score
+    :param all_metrics: all metrics per video
+    :param inference: what to compare against eachother
+    :param save_path: where to save the image
+    :return:
+    """
     inf_target = inference.split("_")[-1]
     classes = {"away": 0, "left": 1, "right": 2}
     fig, axs = plt.subplots(3, 2, figsize=(10, 12))
@@ -513,7 +520,7 @@ def plot_luminance_vs_accuracy(sorted_IDs, all_metrics, args):
 
 def get_face_pixel_density(id, faces_folder):
     """
-    given a video id, calculates the average face area in pixels using pre-procesed crops
+    given a video id, calculates the average face area in pixels using pre-processed crops
     :param ids: video id
     :param faces_folder: the folder containing all crops and their meta data as created by "preprocess.py"
     :return:
@@ -530,16 +537,47 @@ def get_face_pixel_density(id, faces_folder):
     return np.mean(face_areas)
 
 
+def get_face_location_std(id, faces_folder):
+    """
+    given a video id, calculates the standard deviation of the face location in that video
+    :param ids: video id
+    :param faces_folder: the folder containing all crops and their meta data as created by "preprocess.py"
+    :return:
+    """
+    movements = []
+    face_labels = np.load(Path(faces_folder, id, 'face_labels_fc.npy'))
+    for i, face_id in enumerate(face_labels):
+        if face_id >= 0:
+            box_file = Path(faces_folder, id, "box", "{:05d}_{:01d}.npy".format(i, face_id))
+            '{name}/box/{frame_number + i:05d}_{face_label_seg[i]:01d}.npy.format()'
+            box = np.load(box_file, allow_pickle=True).item()
+            face_loc = np.array([box['face_box'][1] - box['face_box'][0], box['face_box'][3] - box['face_box'][2]])
+            movements.append(face_loc)
+    movements = np.array(movements)
+    stds = np.mean(np.std(movements, axis=0))
+    return stds
+
+
 def plot_face_pixel_density_vs_accuracy(sorted_IDs, all_metrics, args):
     plt.figure(figsize=(8.0, 6.0))
     densities = [all_metrics[x]["stats"]["avg_face_pixel_density"] for x in sorted_IDs]
     plt.scatter(densities, [all_metrics[id]["human1_vs_machine"]["accuracy"] for id in sorted_IDs])
-    # plt.xlim([0, 1])
-    # plt.ylim([0, 1])
     plt.xlabel("Face pixel denisty")
     plt.ylabel("iCatcher accuracy")
     plt.title("iCatcher accuracy versus average face pixel density per video")
     plt.savefig(Path(args.output_folder, 'iCatcher_face_density_acc.png'))
+    plt.cla()
+    plt.clf()
+
+
+def plot_face_location_vs_accuracy(sorted_IDs, all_metrics, args):
+    plt.figure(figsize=(8.0, 6.0))
+    stds = [all_metrics[x]["stats"]["avg_face_loc_std"] for x in sorted_IDs]
+    plt.scatter(stds, [all_metrics[id]["human1_vs_machine"]["accuracy"] for id in sorted_IDs])
+    plt.xlabel("Face location std in pixels")
+    plt.ylabel("iCatcher accuracy")
+    plt.title("iCatcher accuracy versus face location pixel std")
+    plt.savefig(Path(args.output_folder, 'iCatcher_face_location_std_acc.png'))
     plt.cla()
     plt.clf()
 
@@ -574,16 +612,17 @@ def create_cache_metrics(args, force_create=False):
         coding_intersect = sorted(list(coding_intersect))
         assert len(coding_intersect) > 0
         all_metrics = {}
-        for code_file in coding_intersect:
+        for i, code_file in enumerate(coding_intersect):
+            logging.info("computing stats: {} / {}".format(i, len(coding_intersect) - 1))
             human_coding_file = Path(args.human_codings_folder, code_file + human_ext)
             human_coding_file2 = Path(args.human2_codings_folder, code_file + human2_ext)
             machine_coding_file = Path(args.machine_codings_folder, code_file + machine_ext)
-            all_metrics[human_coding_file.stem] = compare_coding_files(human_coding_file, human_coding_file2, machine_coding_file, args)
-
-        # calc face densities
-        for key in all_metrics.keys():
+            key = human_coding_file.stem
+            all_metrics[key] = compare_coding_files(human_coding_file, human_coding_file2, machine_coding_file, args)
+            # other stats
             all_metrics[key]["stats"] = {}
             all_metrics[key]["stats"]["avg_face_pixel_density"] = get_face_pixel_density(key, args.faces_folder)
+            all_metrics[key]["stats"]["avg_face_loc_std"] = get_face_location_std(key, args.faces_folder)
         # Store in disk for faster access next time:
         pickle.dump(all_metrics, open(metric_save_path, "wb"))
     return all_metrics
@@ -678,11 +717,12 @@ if __name__ == "__main__":
     INFERENCE_METHODS = ["human1_vs_human2", "human1_vs_machine"]
     # sandbox(all_metrics)
     for inference in INFERENCE_METHODS:
-        generate_plot_set(sorted_ids, all_metrics, inference, args.output_folder)
+        generate_plot_collage(sorted_ids, all_metrics, inference, args.output_folder)
     # generate_frame_comparison(random.sample(sorted_ids, min(len(sorted_ids), 8)), all_metrics, args)
     generate_frame_by_frame_comparisons(sorted_ids, all_metrics, args)
-    plot_inference_accuracy_vs_human_agreement(sorted_ids, all_metrics, args)
     plot_face_pixel_density_vs_accuracy(sorted_ids, all_metrics, args)
+    plot_face_location_vs_accuracy(sorted_ids, all_metrics, args)
+    plot_inference_accuracy_vs_human_agreement(sorted_ids, all_metrics, args)
     plot_luminance_vs_accuracy(sorted_ids, all_metrics, args)
 
 
