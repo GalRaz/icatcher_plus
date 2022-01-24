@@ -6,6 +6,5 @@ def test_imports():
     import torch
     import tensorboard
     import tqdm
-    import colour
     import cv2
     import seaborn

@@ -12,7 +12,6 @@ from matplotlib.ticker import (MultipleLocator, FormatStrFormatter, AutoMinorLoc
 import csv
 import logging
 import cv2
-from colour import Color
 from pathlib import Path
 from options import parse_arguments_for_visualizations
 import textwrap
