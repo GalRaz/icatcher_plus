@@ -180,7 +180,8 @@ class LookItDataset:
         return {
             'imgs': imgs,  # n x 3 x 100 x 100
             'boxs': boxs,  # n x 5
-            'label': class_seg
+            'label': class_seg,  # n x 1
+            'path': img_files_seg[2]  # n x 1
         }
 
 
@@ -284,14 +285,13 @@ class MyDataLoader:
         self.opt = copy.deepcopy(opt)
         shuffle = (self.opt.phase == "train")
         self.dataset = LookItDataset(self.opt)
+        self.plot_sample_collage()
         self.dataloader = torch.utils.data.DataLoader(
             self.dataset,
-            batch_size=opt.batch_size,
+            batch_size=self.opt.batch_size,
             shuffle=shuffle,
-            num_workers=int(opt.num_threads)
+            num_workers=int(self.opt.num_threads)
         )
-        if self.opt.phase == "train":
-            self.plot_sample_collage()
 
     def __len__(self):
         return len(self.dataset)
@@ -307,9 +307,16 @@ class MyDataLoader:
         :return:
         """
         classes = {0: "away", 1: "left", 2: "right"}
-        bins = [[], [], []]
-        assert np.sqrt(collage_size) == int(np.sqrt(collage_size))
-        iterator = iter(self.dataloader)
+        bins = [[], [], []]  # bin of images per class
+        selected_paths = [[], [], []]  # bin of selected image path per class
+        assert np.sqrt(collage_size) == int(np.sqrt(collage_size))  # collage size must have an integer square root
+        random_dataloader = torch.utils.data.DataLoader(
+            self.dataset,
+            batch_size=self.opt.batch_size,
+            shuffle=True,
+            num_workers=int(self.opt.num_threads)
+        )  # use a random dataloader, with shuffling on so collage is of different children
+        iterator = iter(random_dataloader)
         condition = (len(bins[0]) < collage_size) or\
                     (len(bins[1]) < collage_size) or\
                     (len(bins[2]) < collage_size)
@@ -318,11 +325,14 @@ class MyDataLoader:
             for i in range(len(batch_data["label"])):
                 if len(bins[batch_data["label"][i]]) < collage_size:
                     bins[batch_data["label"][i]].append(batch_data["imgs"][i, 2, ...].permute(1, 2, 0))
+                    selected_paths[batch_data["label"][i]].append(batch_data["path"][i])
             condition = (len(bins[0]) < collage_size) or \
                         (len(bins[1]) < collage_size) or \
                         (len(bins[2]) < collage_size)
         for class_id in classes.keys():
             imgs = torch.stack(bins[class_id]).cpu().numpy()
             imgs = (imgs - np.min(imgs, axis=(1, 2, 3), keepdims=True)) / (np.max(imgs, axis=(1, 2, 3), keepdims=True) - np.min(imgs, axis=(1, 2, 3), keepdims=True))
-            save_path = Path(self.opt.experiment_path, "collage_{}.png".format(classes[class_id]))
+            save_path = Path(self.opt.experiment_path, "{}_collage_{}.png".format(self.opt.phase, classes[class_id]))
             visualize.make_gallery(imgs, save_path, ncols=int(np.sqrt(collage_size)))
+        # for entry in selected_paths:
+        #     logging.info(entry)

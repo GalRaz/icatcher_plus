@@ -41,18 +41,19 @@ def calculate_confusion_matrix(label, pred, save_path, mat=None, class_num=3):
         for i in range(class_num):
             for j in range(class_num):
                 mat[i][j] = sum((label == i) & (pred == j))
-    logging.info("confusion matrix:{}".format(mat))
     total_acc = (mat.diagonal().sum() / mat.sum()) * 100
-    mat = mat / np.sum(mat, -1, keepdims=True)
+    norm_mat = mat / np.sum(mat, -1, keepdims=True)
     fig, ax = plt.subplots(figsize=(3, 3))
-    ax = sns.heatmap(mat, ax=ax, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues')
+    ax = sns.heatmap(norm_mat, ax=ax, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues')
     ax.set_xticklabels(['away', 'left', 'right'])
     ax.set_yticklabels(['away', 'left', 'right'])
     plt.axis('equal')
     plt.tight_layout(pad=0.1)
     plt.savefig(save_path)
     logging.info('acc:{:.4f}%'.format(total_acc))
-    return mat, total_acc
+    logging.info('confusion matrix: {}'.format(mat))
+    logging.info('normalized confusion matrix: {}'.format(norm_mat))
+    return norm_mat, total_acc
 
 
 def confusion_mat(targets, preds, classes, normalize=False, plot=False, title="Confusion Matrix", cmap=plt.cm.Blues):

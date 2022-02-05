@@ -1,6 +1,5 @@
 from torchvision import transforms, datasets
 import torch.utils.data.dataloader as dataloader
-from config import *
 from pathlib import Path
 from .fc_eval import get_fc_data_transforms
 from collections import defaultdict

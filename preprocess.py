@@ -439,7 +439,7 @@ def process_dataset_lowest_face(args, gaze_labels_only=False, force_create=False
         logging.info('[process_lkt_legacy] Time used: %.2f sec' % (ed_time - st_time))
 
 
-def generate_second_gaze_labels(args, force_create=False, visualize_confusion=True):
+def generate_second_gaze_labels(args, force_create=False, visualize_confusion=False):
     """
     Processes the second annotator labels
     :param force_create: forces creation of files even if they exist
