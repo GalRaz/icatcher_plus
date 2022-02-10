@@ -96,7 +96,7 @@ def preprocess_raw_lookit_dataset(args, force_create=False):
     if args.split_type == "all":
         videos = [x for x in video_dataset.values() if x["in_tlv"] and x["has_1coding"]]
     elif args.split_type == "split0_train":
-        videos = [x for x in video_dataset.values() if x["in_tlv"] and x["has_1coding"] and x["split"] == "1_train"]
+        videos = [x for x in video_dataset.values() if x["in_tlv"] and x["has_1coding"] and (x["split"] == "1_train" or x["split"] == "1_validate")]
     elif args.split_type == "split0_test":
         videos = [x for x in video_dataset.values() if x["in_tlv"] and x["has_1coding"] and x["split"] == "2_test"]
     else:
