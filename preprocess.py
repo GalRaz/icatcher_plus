@@ -34,7 +34,7 @@ def preprocess_raw_lookit_dataset(args, force_create=False):
     suffix = ".mp4"
     video_dataset = {}
     # search for videos
-    for file in Path(args.raw_dataset_path / "videos" / "annotated").glob("*"):
+    for file in Path(args.raw_dataset_path / "videos").glob("*"):
         video_dataset[file] = {"video_id": "-".join(file.stem.split("_")[2].split("-")[1:]),
                                "video_path": file,
                                "video_suffix": file.suffix,
