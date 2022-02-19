@@ -21,7 +21,10 @@ def label_to_color(label):
     mapping = {"left": (0.5, 0.6, 0.9),
                "right": (0.9, 0.6, 0.5),
                "away": "lightgrey",
-               "invalid": "white"}
+               "invalid": "white",
+               "lblue": (0.5, 0.6, 0.9),
+               "lred": (0.9, 0.6, 0.5),
+               "lgreen": (0.6, 0.8, 0.0)}
     return mapping[label]
 
 
@@ -167,6 +170,8 @@ def compare_two_coding_files(coding1, coding2):
     end = max(end1, end2)
     total_frames_coding1 = end1 - start1
     total_frames_coding2 = end2 - start2
+    total_transitions_coding1 = len(coding1[0]) - len([x for x in coding1[0] if x[2] not in classes.keys()])
+    total_transitions_coding2 = len(coding2[0]) - len([x for x in coding2[0] if x[2] not in classes.keys()])
     for frame_index in range(start, end):
         if frame_index < coding1[0][0][0]:
             coding1_label = [None, None, "invalid"]
@@ -215,8 +220,12 @@ def compare_two_coding_files(coding1, coding2):
             c2_left_right_total += 1
 
     accuracy = 100 * same_count / (same_count + diff_count)
-    num_coding1_valid = valid_labels_coding1 / total_frames_coding1
-    num_coding2_valid = valid_labels_coding2 / total_frames_coding2
+
+    frac_coding1_valid = valid_labels_coding1 / total_frames_coding1
+    frac_coding2_valid = valid_labels_coding2 / total_frames_coding2
+
+    num_coding1_valid = valid_labels_coding1
+    num_coding2_valid = valid_labels_coding2
 
     coding1_on_vs_away = (coding1_by_label[0] + coding1_by_label[1]) / sum(coding1_by_label)
     coding2_on_vs_away = (coding2_by_label[0] + coding2_by_label[1]) / sum(coding2_by_label)
@@ -224,6 +233,8 @@ def compare_two_coding_files(coding1, coding2):
     c2_left_right_accuracy = left_right_agree / c2_left_right_total
 
     metrics = {"accuracy": accuracy,
+               "frac_coding1_valid": frac_coding1_valid,
+               "frac_coding2_valid": frac_coding2_valid,
                "num_coding1_valid": num_coding1_valid,
                "num_coding2_valid": num_coding2_valid,
                "coding1_on_vs_away": coding1_on_vs_away,
@@ -235,7 +246,9 @@ def compare_two_coding_files(coding1, coding2):
                "times_coding1": times_coding1,
                "times_coding2": times_coding2,
                "valid_range_coding1": [start1, end1],
-               "valid_range_coding2": [start2, end2]}
+               "valid_range_coding2": [start2, end2],
+               "total_transitions_coding1": total_transitions_coding1,
+               "total_transitions_coding2": total_transitions_coding2}
     return metrics
 
 
@@ -402,114 +415,185 @@ def generate_frame_by_frame_comparisons(sorted_IDs, all_metrics, args):
         plt.clf()
 
 
-def generate_plot_collage(sorted_IDs, all_metrics, inference, save_path):
+def generate_collage_plot(sorted_IDs, all_metrics, save_path):
     """
     plots one image with various selected stats
     :param sorted_IDs: ids of videos sorted by accuracy score
     :param all_metrics: all metrics per video
-    :param inference: what to compare against eachother
     :param save_path: where to save the image
     :return:
     """
-    inf_target = inference.split("_")[-1]
     classes = {"away": 0, "left": 1, "right": 2}
-    fig, axs = plt.subplots(3, 2, figsize=(10, 12))
-    accuracy_bar = axs[0, 0]
-    axs[0, 1].axis('off')
-    target_valid_scatter = axs[1, 0]
-    on_away_scatter = axs[1, 1]
-    label_scatter = axs[2, 0]
-    label_bar = axs[2, 1]
-    scatter_plots = [target_valid_scatter, on_away_scatter, label_scatter]
-    for ax in scatter_plots:
-        if ax == target_valid_scatter:
-            #             pass
-            ax.set_xlim([0, 100])
-            ax.set_ylim([0, 100])
-        else:
-            ax.set_xlim([0, 1])
-            ax.set_ylim([0, 1])
-        ax.plot([0, 1], [0, 1], transform=ax.transAxes, color="black", label="Ideal trend")
-    x = np.arange(len(sorted_IDs))
-    labels = range(len(sorted_IDs))
-    ticks = range(len(sorted_IDs))
-    accuracies = [all_metrics[ID][inference]['accuracy'] for ID in sorted_IDs]
-    accuracy_bar.bar(x, accuracies, color='purple')
-    mean = np.mean(accuracies)
-    accuracy_bar.axhline(y=mean, color='black', linestyle='-', label="mean (" + str(mean)[:4] + ")")
+    # fig, axs = plt.subplots(3, 2, figsize=(10, 12))
+    fig = plt.figure(figsize=(10, 12))
 
-    accuracy_bar.set_title('Accuracy (over mutually valid frames)')
-    accuracy_bar.set_ylim([0, 100])
-    accuracy_bar.set_xticks(ticks)
-    accuracy_bar.set_xticklabels(labels, rotation='vertical', fontsize=8)
-    accuracy_bar.set_xlabel('Video')
+    # accuracies plot
+    accuracy_bar = fig.add_subplot(3, 2, (1, 2))  # three rows, two columns
+    # accuracy_bar = axs[0, :]
+    accuracies_hvh = [all_metrics[ID]["human1_vs_human2"]['accuracy'] for ID in sorted_IDs]
+    mean_hvh = np.mean(accuracies_hvh)
+    accuracies_hvm = [all_metrics[ID]["human1_vs_machine"]['accuracy'] for ID in sorted_IDs]
+    mean_hvm = np.mean(accuracies_hvm)
+    labels = sorted_IDs
+    width = 0.35  # the width of the bars
+    x = np.arange(len(labels))
+    accuracy_bar.bar(x - width / 2, accuracies_hvh, width, color=label_to_color("lblue"), label='Human vs Human')
+    accuracy_bar.bar(x + width / 2, accuracies_hvm, width, color=label_to_color("lred"), label='Human vs Machine')
     accuracy_bar.set_ylabel('Accuracy')
-
+    accuracy_bar.set_xlabel('Video')
+    accuracy_bar.set_title('Accuracy over valid frames')
+    accuracy_bar.set_xticks(x)
+    # accuracy_bar.bar_label(rects1, padding=3)
+    # accuracy_bar.bar_label(rects2, padding=3)
+    accuracy_bar.axhline(y=mean_hvh, color=label_to_color("lblue"), linestyle='-', label="mean (" + str(mean_hvh)[:4] + ")")
+    accuracy_bar.axhline(y=mean_hvm, color=label_to_color("lred"), linestyle='-', label="mean (" + str(mean_hvm)[:4] + ")")
+    accuracy_bar.set_ylim([0, 100])
     accuracy_bar.legend()
+
+    # target valid plot
+    transitions_bar = fig.add_subplot(3, 2, 3)  # three rows, two columns
+    width = 0.66  # the width of the bars
+    x = np.arange(len(sorted_IDs))
+    # target_valid_scatter = axs[1, 0]
+    # target_valid_scatter.plot([0, 1], [0, 1], transform=target_valid_scatter.transAxes, color="black", label="Ideal trend")
+    # transitions_bar.set_xlim([0, 3])
+    # transitions_bar.set_ylim([0, 3])
+    #
+    transitions_h1 = [100*all_metrics[ID]["human1_vs_human2"]['total_transitions_coding1'] /
+                          all_metrics[ID]["human1_vs_human2"]['num_coding1_valid'] for ID in sorted_IDs]
+    transitions_h2 = [100*all_metrics[ID]["human1_vs_human2"]['total_transitions_coding2'] /
+                          all_metrics[ID]["human1_vs_human2"]['num_coding2_valid'] for ID in sorted_IDs]
+    transitions_m = [100*all_metrics[ID]["human1_vs_machine"]['total_transitions_coding2'] /
+                          all_metrics[ID]["human1_vs_machine"]['num_coding2_valid'] for ID in sorted_IDs]
+
+    transitions_bar.bar(x - width / 3, transitions_h1, width=(width / 3) - 0.1, label="Human 1", color=label_to_color("lblue"))
+    transitions_bar.bar(x, transitions_h2, width=(width / 3) - 0.1, label="Human 2", color=label_to_color("lgreen"))
+    transitions_bar.bar(x + width / 3, transitions_m, width=(width / 3) - 0.1, label="Machine", color=label_to_color("lred"))
+    transitions_bar.set_xticks(x)
+    transitions_bar.set_title('# transitions per 100 frames')
+    transitions_bar.legend()
+
+    # on away plot
+    on_away_scatter = fig.add_subplot(3, 2, 4)  # three rows, two columns
+    # on_away_scatter = axs[1, 1]
+    on_away_scatter.plot([0, 1], [0, 1], transform=on_away_scatter.transAxes, color="black", label="Ideal trend")
+    on_away_scatter.set_xlim([0, 1])
+    on_away_scatter.set_ylim([0, 1])
+    x_target_away_hvh = [all_metrics[ID]["human1_vs_human2"]['coding1_on_vs_away'] for ID in sorted_IDs]
+    y_target_away_hvh = [all_metrics[ID]["human1_vs_human2"]['coding2_on_vs_away'] for ID in sorted_IDs]
+    x_target_away_hvm = [all_metrics[ID]["human1_vs_machine"]['coding1_on_vs_away'] for ID in sorted_IDs]
+    y_target_away_hvm = [all_metrics[ID]["human1_vs_machine"]['coding2_on_vs_away'] for ID in sorted_IDs]
+    on_away_scatter.scatter(x_target_away_hvh, y_target_away_hvh, color=label_to_color("lblue"), label='Human vs Human')
+    for i in range(len(sorted_IDs)):
+        on_away_scatter.annotate(i, (x_target_away_hvh[i], y_target_away_hvh[i]))
+    on_away_scatter.scatter(x_target_away_hvm, y_target_away_hvm, color=label_to_color("lred"), label='Human vs Machine')
+    for i in range(len(sorted_IDs)):
+        on_away_scatter.annotate(i, (x_target_away_hvm[i], y_target_away_hvm[i]))
+    on_away_scatter.set_xlabel("Human 1 valid frames percent")
+    on_away_scatter.set_ylabel("Human 2 / Machine valid frames percent")
+    on_away_scatter.set_title("On-target / On-off-target")
+    on_away_scatter.legend()
+
+    # label distribution plot
+    # label_scatter = fig.add_subplot(3, 2, 5)  # three rows, two columns
+    # # label_scatter = axs[2, 0]
+    # label_scatter.plot([0, 1], [0, 1], transform=label_scatter.transAxes, color="black", label="Ideal trend")
+    # label_scatter.set_xlim([0, 1])
+    # label_scatter.set_ylim([0, 1])
+    # for i, label in enumerate(sorted(classes.keys())):
+    #     y_labels = [y[i] / sum(y) for y in [all_metrics[ID]["human1_vs_human2"]['coding1_by_label'] for ID in sorted_IDs]]
+    #     x_labels = [y[i] / sum(y) for y in [all_metrics[ID]["human1_vs_human2"]['coding2_by_label'] for ID in sorted_IDs]]
+    #     label_scatter.scatter(x_labels, y_labels, color=label_to_color(label), label="hvh: " + label, marker='^')
+    #     for n in range(len(sorted_IDs)):
+    #         label_scatter.annotate(n, (x_labels[n], y_labels[n]))
+    # for i, label in enumerate(sorted(classes.keys())):
+    #     y_labels = [y[i] / sum(y) for y in [all_metrics[ID]["human1_vs_machine"]['coding1_by_label'] for ID in sorted_IDs]]
+    #     x_labels = [y[i] / sum(y) for y in [all_metrics[ID]["human1_vs_machine"]['coding2_by_label'] for ID in sorted_IDs]]
+    #     label_scatter.scatter(x_labels, y_labels, color=label_to_color(label), label="hvh: " + label, marker='o')
+    #     for n in range(len(sorted_IDs)):
+    #         label_scatter.annotate(n, (x_labels[n], y_labels[n]))
+    #
+    # label_scatter.set_xlabel('Human 1 label proportion')
+    # label_scatter.set_ylabel('Human 2 / Machine labels proportion')
+    # label_scatter.set_title('labels distribution')
+    # label_scatter.legend()  # loc='upper center'
+
+    # label distribution bar plot
+    label_bar = fig.add_subplot(3, 2, (5, 6))  # three rows, two columns
+    # label_bar = axs[2, 1]
+    ticks = range(len(sorted_IDs))
+    bottoms_h1 = np.zeros(shape=(len(sorted_IDs)))
+    bottoms_h2 = np.zeros(shape=(len(sorted_IDs)))
+    bottoms_m = np.zeros(shape=(len(sorted_IDs)))
+    width = 0.66
+    patterns = [".", "O", "*"]
+    for i, label in enumerate(sorted(classes.keys())):
+        label_counts_h1 = [y[i] / sum(y) for y in [all_metrics[ID]["human1_vs_human2"]['coding1_by_label'] for ID in sorted_IDs]]
+        label_counts_h2 = [y[i] / sum(y) for y in [all_metrics[ID]["human1_vs_human2"]['coding2_by_label'] for ID in sorted_IDs]]
+        label_counts_m = [y[i] / sum(y) for y in [all_metrics[ID]["human1_vs_machine"]['coding2_by_label'] for ID in sorted_IDs]]
+
+        label_bar.bar(x - width/3, label_counts_h1, bottom=bottoms_h1, width=(width / 3)-0.1, label=label,
+                      color=label_to_color(label), edgecolor='black', hatch=patterns[0])
+        label_bar.bar(x, label_counts_h2, bottom=bottoms_h2, width=(width / 3)-0.1, label=label,
+                      color=label_to_color(label), edgecolor='black', hatch=patterns[1])
+        label_bar.bar(x + width/3, label_counts_m, bottom=bottoms_m, width=(width / 3)-0.1, label=label,
+                      color=label_to_color(label), edgecolor='black', hatch=patterns[2])
+        if i == 0:
+            from matplotlib.patches import Patch
+            artists = [Patch(facecolor=label_to_color("away"), label="Away"),
+                       Patch(facecolor=label_to_color("left"), label="Left"),
+                       Patch(facecolor=label_to_color("right"), label="Right"),
+                       Patch(facecolor="white", edgecolor='black', hatch=patterns[0], label="Human 1"),
+                       Patch(facecolor="white", edgecolor='black', hatch=patterns[1], label="Human 2"),
+                       Patch(facecolor="white", edgecolor='black', hatch=patterns[2], label="Machine")]
+            label_bar.legend(handles=artists)
+        bottoms_h1 += label_counts_h1
+        bottoms_h2 += label_counts_h2
+        bottoms_m += label_counts_m
+    label_bar.xaxis.set_major_locator(MultipleLocator(1))
+    label_bar.set_xticks(ticks)
+    label_bar.set_title('Label percent per video')
+    label_bar.set_ylabel('Percent')
+    label_bar.set_xlabel('Video')
+
+    plt.subplots_adjust(left=0.1, bottom=0.075, right=0.9, top=0.925, wspace=0.2, hspace=0.5)
+    # plt.suptitle(f'{inference} evaluation', fontsize=24)
+    plt.savefig(Path(save_path, "collage.png"))
+    plt.cla()
+    plt.clf()
+
+
+
+    # scatter_plots = [target_valid_scatter, on_away_scatter, label_scatter]
+    # for ax in scatter_plots:
+    #     if ax == target_valid_scatter:
+    #         #             pass
+    #         ax.set_xlim([0, 100])
+    #         ax.set_ylim([0, 100])
+    #     else:
+    #         ax.set_xlim([0, 1])
+    #         ax.set_ylim([0, 1])
+    #     ax.plot([0, 1], [0, 1], transform=ax.transAxes, color="black", label="Ideal trend")
+    # x = np.arange(len(sorted_IDs))
+    # labels = range(len(sorted_IDs))
+
+    # accuracies = [all_metrics[ID][inference]['accuracy'] for ID in sorted_IDs]
+    # mean = np.mean(accuracies)
+    # accuracy_bar.bar(x, accuracies, color='purple')
+    # accuracy_bar.axhline(y=mean, color='black', linestyle='-', label="mean (" + str(mean)[:4] + ")")
+    # accuracy_bar.set_title('Accuracy (over mutually valid frames)')
+    # accuracy_bar.set_ylim([0, 100])
+    # accuracy_bar.set_xticks(ticks)
+    # accuracy_bar.set_xticklabels(labels, rotation='vertical', fontsize=8)
+    # accuracy_bar.set_xlabel('Video')
+    # accuracy_bar.set_ylabel('Accuracy')
+    #
+    # accuracy_bar.legend()
 
     # ID_index = axs[0, 1]
     # cell_text = [[i, sorted_IDs[i]] for i in range(len(sorted_IDs))]
     # ID_index.table(cell_text, loc='center', fontsize=18)
     # ID_index.set_title("Video index to ID")
-
-    x_target_valid = [all_metrics[ID][inference]['num_coding1_valid']*100 for ID in sorted_IDs]
-    y_target_valid = [all_metrics[ID][inference]['num_coding2_valid']*100 for ID in sorted_IDs]
-    target_valid_scatter.scatter(x_target_valid, y_target_valid)
-    for i in range(len(sorted_IDs)):
-        target_valid_scatter.annotate(i, (x_target_valid[i], y_target_valid[i]))
-    target_valid_scatter.set_xlabel("Human annotated labels")
-    target_valid_scatter.set_ylabel(f'{inf_target} labels')
-
-    target_valid_scatter.set_title(
-        f'Percent of valid frames\nfor human1 vs {inf_target}')
-
-    x_target_away = [all_metrics[ID][inference]['coding1_on_vs_away'] for ID in sorted_IDs]
-    y_target_away = [all_metrics[ID][inference]['coding2_on_vs_away'] for ID in sorted_IDs]
-    on_away_scatter.scatter(x_target_away, y_target_away)
-    for i in range(len(sorted_IDs)):
-        on_away_scatter.annotate(i, (x_target_away[i], y_target_away[i]))
-
-    on_away_scatter.set_xlabel("Human1 valid frames percent")
-    on_away_scatter.set_ylabel(f'{inf_target} valid frames percent')
-    on_away_scatter.set_title(
-        f'ratio between left-right and left-right-away\n for {inf_target} vs human data')
-
-    for i, label in enumerate(sorted(classes.keys())):
-        x_labels = [y[i] / sum(y) for y in [all_metrics[ID][inference]['coding2_by_label'] for ID in sorted_IDs]]
-        y_labels = [y[i] / sum(y) for y in [all_metrics[ID][inference]['coding1_by_label'] for ID in sorted_IDs]]
-        label_scatter.scatter(x_labels, y_labels, color=label_to_color(label), label=label)
-        for n in range(len(sorted_IDs)):
-            label_scatter.annotate(n, (x_labels[n], y_labels[n]))
-    label_scatter.set_xlabel(f'{inf_target} label proportion')
-    label_scatter.set_ylabel('human1 label proportion')
-    label_scatter.set_title(
-        f'label distribution for human data vs {inf_target}')
-    label_scatter.legend(loc='upper center')
-
-    bottoms_inf = np.zeros(shape=(len(sorted_IDs)))
-    bottoms_tar = np.zeros(shape=(len(sorted_IDs)))
-    for i, label in enumerate(sorted(classes.keys())):
-        label_counts_inf = [y[i] / sum(y) for y in
-                            [all_metrics[ID][inference]['coding2_by_label'] for ID in sorted_IDs]]
-        label_counts_tar = [y[i] / sum(y) for y in [all_metrics[ID][inference]['coding1_by_label'] for ID in sorted_IDs]]
-
-        label_bar.bar(x - 0.22, label_counts_inf, bottom=bottoms_inf, width=0.4, label=label,
-                      color=label_to_color(label))
-        label_bar.bar(x + 0.22, label_counts_tar, bottom=bottoms_tar, width=0.4, label=label,
-                      color=label_to_color(label))
-
-        bottoms_inf += label_counts_inf
-        bottoms_tar += label_counts_tar
-    label_bar.xaxis.set_major_locator(MultipleLocator(1))
-    label_bar.set_xticks(ticks)
-    label_bar.set_title('Percent of each label\ntype for each video\n(left side is predictions)')
-    label_bar.set_ylabel('Percent')
-    label_bar.set_xlabel('Video')
-    plt.subplots_adjust(left=0.1, bottom=0.075, right=0.9, top=0.925, wspace=0.2, hspace=0.5)
-    plt.suptitle(f'{inference} evaluation', fontsize=24)
-    plt.savefig(Path(save_path, "{}.png".format(inference)))
-    plt.cla()
-    plt.clf()
 
 
 def plot_inference_accuracy_vs_human_agreement(sorted_IDs, all_metrics, args):
@@ -736,10 +820,9 @@ if __name__ == "__main__":
     # sort by accuracy
     sorted_ids = sorted(list(all_metrics.keys()),
                         key=lambda x: all_metrics[x]["human1_vs_machine"]["accuracy"])
-    INFERENCE_METHODS = ["human1_vs_human2", "human1_vs_machine"]
+
     # sandbox(all_metrics)
-    for inference in INFERENCE_METHODS:
-        generate_plot_collage(sorted_ids, all_metrics, inference, args.output_folder)
+    generate_collage_plot(sorted_ids, all_metrics, args.output_folder)
     # generate_frame_comparison(random.sample(sorted_ids, min(len(sorted_ids), 8)), all_metrics, args)
     generate_frame_by_frame_comparisons(sorted_ids, all_metrics, args)
     plot_face_pixel_density_vs_accuracy(sorted_ids, all_metrics, args)
