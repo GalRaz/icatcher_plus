@@ -36,7 +36,7 @@ def prep_frame(popped_frame, bbox, class_text, face):
     :return:
     """
     popped_frame = visualize.put_text(popped_frame, class_text)
-    if bbox:
+    if bbox is not None:
         popped_frame = visualize.put_rectangle(popped_frame, face)
         if not class_text == "away" and not class_text == "off" and not class_text == "on":
             popped_frame = visualize.put_arrow(popped_frame, class_text, face)
