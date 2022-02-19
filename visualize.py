@@ -470,8 +470,10 @@ def generate_collage_plot(sorted_IDs, all_metrics, save_path):
     transitions_bar.bar(x, transitions_h2, width=(width / 3) - 0.1, label="Human 2", color=label_to_color("lgreen"))
     transitions_bar.bar(x + width / 3, transitions_m, width=(width / 3) - 0.1, label="Machine", color=label_to_color("lred"))
     transitions_bar.set_xticks(x)
-    transitions_bar.set_title('# transitions per 100 frames')
+    transitions_bar.set_title('# Transitions per 100 frames')
     transitions_bar.legend()
+    transitions_bar.set_ylabel('# Transitions per 100 frames')
+    transitions_bar.set_xlabel('Video')
 
     # on away plot
     on_away_scatter = fig.add_subplot(3, 2, 4)  # three rows, two columns
@@ -489,9 +491,9 @@ def generate_collage_plot(sorted_IDs, all_metrics, save_path):
     on_away_scatter.scatter(x_target_away_hvm, y_target_away_hvm, color=label_to_color("lred"), label='Human vs Machine')
     for i in range(len(sorted_IDs)):
         on_away_scatter.annotate(i, (x_target_away_hvm[i], y_target_away_hvm[i]))
-    on_away_scatter.set_xlabel("Human 1 valid frames percent")
-    on_away_scatter.set_ylabel("Human 2 / Machine valid frames percent")
-    on_away_scatter.set_title("On-target / On-off-target")
+    on_away_scatter.set_xlabel("Human 1")
+    on_away_scatter.set_ylabel("Human 2 or Machine")
+    on_away_scatter.set_title("On-target percent")
     on_away_scatter.legend()
 
     # label distribution plot
