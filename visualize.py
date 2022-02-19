@@ -16,10 +16,13 @@ from pathlib import Path
 from options import parse_arguments_for_visualizations
 import textwrap
 
-### todo: retrieve globals from command line arguments ###
-LABEL_TO_COLOR = {"left": (0.5, 0.6, 0.9), "right": (0.6, 0.8, 0), "away": (0.95, 0.5, 0.4), "none": "lightgrey"}
-# logging.basicConfig(level=logging.CRITICAL)
-###########################################################
+
+def label_to_color(label):
+    mapping = {"left": (0.5, 0.6, 0.9),
+               "right": (0.9, 0.6, 0.5),
+               "away": "lightgrey",
+               "invalid": "white"}
+    return mapping[label]
 
 
 def calculate_confusion_matrix(label, pred, save_path, mat=None, class_num=3):
@@ -142,14 +145,14 @@ def compare_two_coding_files(coding1, coding2):
     same_count = 0
     diff_count = 0
     times_coding1 = {"left": [],
-                    "right": [],
-                    "away": [],
-                    "none": []}
+                     "right": [],
+                     "away": [],
+                     "invalid": []}
 
     times_coding2 = {"left": [],
-                      "right": [],
-                      "away": [],
-                      "none": []}
+                     "right": [],
+                     "away": [],
+                     "invalid": []}
 
     coding1_by_label = [0, 0, 0]
     coding2_by_label = [0, 0, 0]
@@ -166,8 +169,8 @@ def compare_two_coding_files(coding1, coding2):
     total_frames_coding2 = end2 - start2
     for frame_index in range(start, end):
         if frame_index < coding1[0][0][0]:
-            coding1_label = [None, None, "none"]
-            times_coding1["none"].append(frame_index)
+            coding1_label = [None, None, "invalid"]
+            times_coding1["invalid"].append(frame_index)
         else:
             target_q_np = np.nonzero(frame_index >= coding1_np)[0][-1]
             coding1_label = coding1[0][target_q_np]
@@ -176,11 +179,11 @@ def compare_two_coding_files(coding1, coding2):
                 times_coding1[coding1_label[2]].append(frame_index)
                 valid_labels_coding1 += 1
             else:
-                coding1_label = [None, None, "none"]
-                times_coding1["none"].append(frame_index)
+                coding1_label = [None, None, "invalid"]
+                times_coding1["invalid"].append(frame_index)
         if frame_index < coding2[0][0][0]:
-            coding2_label = [None, None, "none"]
-            times_coding2["none"].append(frame_index)
+            coding2_label = [None, None, "invalid"]
+            times_coding2["invalid"].append(frame_index)
         else:
             inferred_q_np = np.nonzero(frame_index >= coding2_np)[0][-1]
             coding2_label = coding2[0][inferred_q_np]
@@ -189,16 +192,16 @@ def compare_two_coding_files(coding1, coding2):
                 times_coding2[coding2_label[2]].append(frame_index)
                 valid_labels_coding2 += 1
             else:
-                coding2_label = [None, None, "none"]
-                times_coding2["none"].append(frame_index)
+                coding2_label = [None, None, "invalid"]
+                times_coding2["invalid"].append(frame_index)
 
-        if coding1_label[2] != "none":
+        if coding1_label[2] != "invalid":
             assert coding1_label[2] in classes.keys()
             coding1_by_label[classes[coding1_label[2]]] += 1
-        if coding2_label[2] != "none":
+        if coding2_label[2] != "invalid":
             assert coding2_label[2] in classes.keys()
             coding2_by_label[classes[coding2_label[2]]] += 1
-        if coding1_label[2] != "none" and coding2_label[2] != "none":
+        if coding1_label[2] != "invalid" and coding2_label[2] != "invalid":
             assert coding1_label[2] in classes.keys()
             if coding1_label[2] == coding2_label[2]:
                 same_count += 1
@@ -321,10 +324,10 @@ def sample_luminance(ID, args, start, end, num_samples=10):
 
 
 def generate_frame_by_frame_comparisons(sorted_IDs, all_metrics, args):
-    GRAPH_CLASSES = ["left", "right", "away", "none"]
-    INFERENCE_METHODS = ["human1_vs_human2", "human1_vs_machine"]
+    GRAPH_CLASSES = ["left", "right", "away", "invalid"]
     widths = [20, 1, 5]
     heights = [1]
+    skip = 10
     gs_kw = dict(width_ratios=widths, height_ratios=heights)
     # fig, axs = plt.subplots(len(sorted_IDs), 3, figsize=(30, 45), gridspec_kw=gs_kw)
     # if len(axs.shape) == 1:
@@ -337,29 +340,48 @@ def generate_frame_by_frame_comparisons(sorted_IDs, all_metrics, args):
         fig, axs = plt.subplots(1, 3, figsize=(24.0, 8.0), gridspec_kw=gs_kw)
         timeline, accuracy, sample_frame = axs  # won't work with single video...
         plt.suptitle('Frame by frame comparisons: {}'.format(target_ID + ".mp4"))
-        start1, end1 = all_metrics[target_ID]["human1_vs_machine"]["valid_range_coding1"]
-        start2, end2 = all_metrics[target_ID]["human1_vs_machine"]["valid_range_coding2"]
-        start = min(start1, start2)
-        end = max(end1, end2)
+        start1, end1 = all_metrics[target_ID]["human1_vs_human2"]["valid_range_coding2"]
+        start2, end2 = all_metrics[target_ID]["human1_vs_human2"]["valid_range_coding1"]
+        start3, end3 = all_metrics[target_ID]["human1_vs_machine"]["valid_range_coding2"]
+        start = min(start1, start2, start3)
+        end = max(end1, end2, end3)
         timeline.set_title("Frames: {} - {}".format(str(start), str(end)))
-        for j, name in enumerate(["times_coding1", "times_coding2"]):
-            times = all_metrics[target_ID]["human1_vs_machine"][name]
-            video_label = "human" if j==0 else "machine"
-            skip = 10  # frame comparison resolution. Increase to speed up plotting
+
+        times1 = all_metrics[target_ID]["human1_vs_human2"]["times_coding2"]
+        times2 = all_metrics[target_ID]["human1_vs_human2"]["times_coding1"]
+        times3 = all_metrics[target_ID]["human1_vs_machine"]["times_coding2"]
+        times = [times1, times2, times3]
+        video_label = ["human 2", "human 1", "machine"]
+
+        for j, vid_label in enumerate(video_label):
             for label in GRAPH_CLASSES:
-                timeline.barh(video_label, skip, left=times[label][::skip],
+                timeline.barh(vid_label, skip, left=times[j][label][::skip],
                               height=1, label=label,
-                              color=LABEL_TO_COLOR[label])
+                              color=label_to_color(label))
             timeline.set_xlabel("Frame #")
             if j == 0:
                 timeline.legend(loc='upper right')
                 accuracy.set_title("Accuracy")
-        accuracies = [all_metrics[target_ID][inference]['accuracy'] for inference in INFERENCE_METHODS]
+
+        # for j, name in enumerate(["times_coding1", "times_coding2"]):
+        #     times = all_metrics[target_ID]["human1_vs_machine"][name]
+        #     video_label = "human" if j==0 else "machine"
+        #     skip = 10  # frame comparison resolution. Increase to speed up plotting
+        #     for label in GRAPH_CLASSES:
+        #         timeline.barh(video_label, skip, left=times[label][::skip],
+        #                       height=1, label=label,
+        #                       color=label_to_color(label))
+        #     timeline.set_xlabel("Frame #")
+        #     if j == 0:
+        #         timeline.legend(loc='upper right')
+        #         accuracy.set_title("Accuracy")
+        inference = ["human1_vs_human2", "human1_vs_machine"]
+        accuracies = [all_metrics[target_ID][entry]['accuracy'] for entry in inference]
         # colors = [color_gradient[int(acc * 100)].rgb for acc in accuracies]
 
-        accuracy.bar(range(len(INFERENCE_METHODS)), accuracies, color="black")
-        accuracy.set_xticks(range(len(INFERENCE_METHODS)))
-        accuracy.set_xticklabels(INFERENCE_METHODS, rotation=45, ha="right")
+        accuracy.bar(range(len(inference)), accuracies, color="black")
+        accuracy.set_xticks(range(len(inference)))
+        accuracy.set_xticklabels(inference, rotation=45, ha="right")
         accuracy.set_ylim([0, 100])
         accuracy.set_ylabel("Accuracy")
         # sample_frame_index = min(
@@ -455,7 +477,7 @@ def generate_plot_collage(sorted_IDs, all_metrics, inference, save_path):
     for i, label in enumerate(sorted(classes.keys())):
         x_labels = [y[i] / sum(y) for y in [all_metrics[ID][inference]['coding2_by_label'] for ID in sorted_IDs]]
         y_labels = [y[i] / sum(y) for y in [all_metrics[ID][inference]['coding1_by_label'] for ID in sorted_IDs]]
-        label_scatter.scatter(x_labels, y_labels, color=LABEL_TO_COLOR[label], label=label)
+        label_scatter.scatter(x_labels, y_labels, color=label_to_color(label), label=label)
         for n in range(len(sorted_IDs)):
             label_scatter.annotate(n, (x_labels[n], y_labels[n]))
     label_scatter.set_xlabel(f'{inf_target} label proportion')
@@ -472,9 +494,9 @@ def generate_plot_collage(sorted_IDs, all_metrics, inference, save_path):
         label_counts_tar = [y[i] / sum(y) for y in [all_metrics[ID][inference]['coding1_by_label'] for ID in sorted_IDs]]
 
         label_bar.bar(x - 0.22, label_counts_inf, bottom=bottoms_inf, width=0.4, label=label,
-                      color=LABEL_TO_COLOR[label])
+                      color=label_to_color(label))
         label_bar.bar(x + 0.22, label_counts_tar, bottom=bottoms_tar, width=0.4, label=label,
-                      color=LABEL_TO_COLOR[label])
+                      color=label_to_color(label))
 
         bottoms_inf += label_counts_inf
         bottoms_tar += label_counts_tar
