@@ -1,7 +1,7 @@
 ### Latest Results (validation set, split0)
 <table>
         <tr>
-        All statistics are over valid frames only.  
+        All statistics are over all valid frames only.  
         </tr>
         <tr>
                 <td colspan="2" align="center"> <img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/collage.png"  alt="collage" width = 300px height = 400px ></td>
