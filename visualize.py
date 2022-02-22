@@ -24,7 +24,10 @@ def label_to_color(label):
                "invalid": "white",
                "lblue": (0.5, 0.6, 0.9),
                "lred": (0.9, 0.6, 0.5),
-               "lgreen": (0.6, 0.8, 0.0)}
+               "lgreen": (0.6, 0.8, 0.0),
+               "lorange": (0.94, 0.78, 0.0),
+               "lyellow": (0.9, 0.9, 0.0),
+               "mblue": (0.12, 0.41, 0.87)}
     return mapping[label]
 
 
@@ -437,16 +440,16 @@ def generate_collage_plot(sorted_IDs, all_metrics, save_path):
     labels = sorted_IDs
     width = 0.35  # the width of the bars
     x = np.arange(len(labels))
-    accuracy_bar.bar(x - width / 2, accuracies_hvh, width, color=label_to_color("lblue"), label='Human vs Human')
-    accuracy_bar.bar(x + width / 2, accuracies_hvm, width, color=label_to_color("lred"), label='Human vs Machine')
+    accuracy_bar.bar(x - width / 2, accuracies_hvh, width, color=label_to_color("lorange"), label='Human vs Human')
+    accuracy_bar.bar(x + width / 2, accuracies_hvm, width, color=label_to_color("mblue"), label='Human vs Machine')
     accuracy_bar.set_ylabel('Accuracy')
     accuracy_bar.set_xlabel('Video')
-    accuracy_bar.set_title('Accuracy over valid frames')
+    accuracy_bar.set_title('Accuracy per video')
     accuracy_bar.set_xticks(x)
     # accuracy_bar.bar_label(rects1, padding=3)
     # accuracy_bar.bar_label(rects2, padding=3)
-    accuracy_bar.axhline(y=mean_hvh, color=label_to_color("lblue"), linestyle='-', label="mean (" + str(mean_hvh)[:4] + ")")
-    accuracy_bar.axhline(y=mean_hvm, color=label_to_color("lred"), linestyle='-', label="mean (" + str(mean_hvm)[:4] + ")")
+    accuracy_bar.axhline(y=mean_hvh, color=label_to_color("lorange"), linestyle='-', label="mean (" + str(mean_hvh)[:4] + ")")
+    accuracy_bar.axhline(y=mean_hvm, color=label_to_color("mblue"), linestyle='-', label="mean (" + str(mean_hvm)[:4] + ")")
     accuracy_bar.set_ylim([0, 100])
     accuracy_bar.legend()
 
@@ -466,9 +469,9 @@ def generate_collage_plot(sorted_IDs, all_metrics, save_path):
     transitions_m = [100*all_metrics[ID]["human1_vs_machine"]['total_transitions_coding2'] /
                           all_metrics[ID]["human1_vs_machine"]['num_coding2_valid'] for ID in sorted_IDs]
 
-    transitions_bar.bar(x - width / 3, transitions_h1, width=(width / 3) - 0.1, label="Human 1", color=label_to_color("lblue"))
+    transitions_bar.bar(x - width / 3, transitions_h1, width=(width / 3) - 0.1, label="Human 1", color=label_to_color("lorange"))
     transitions_bar.bar(x, transitions_h2, width=(width / 3) - 0.1, label="Human 2", color=label_to_color("lgreen"))
-    transitions_bar.bar(x + width / 3, transitions_m, width=(width / 3) - 0.1, label="Machine", color=label_to_color("lred"))
+    transitions_bar.bar(x + width / 3, transitions_m, width=(width / 3) - 0.1, label="Machine", color=label_to_color("mblue"))
     transitions_bar.set_xticks(x)
     transitions_bar.set_title('# Transitions per 100 frames')
     transitions_bar.legend()
@@ -485,15 +488,15 @@ def generate_collage_plot(sorted_IDs, all_metrics, save_path):
     y_target_away_hvh = [all_metrics[ID]["human1_vs_human2"]['coding2_on_vs_away'] for ID in sorted_IDs]
     x_target_away_hvm = [all_metrics[ID]["human1_vs_machine"]['coding1_on_vs_away'] for ID in sorted_IDs]
     y_target_away_hvm = [all_metrics[ID]["human1_vs_machine"]['coding2_on_vs_away'] for ID in sorted_IDs]
-    on_away_scatter.scatter(x_target_away_hvh, y_target_away_hvh, color=label_to_color("lblue"), label='Human vs Human')
+    on_away_scatter.scatter(x_target_away_hvh, y_target_away_hvh, color=label_to_color("lorange"), label='Human vs Human')
     for i in range(len(sorted_IDs)):
         on_away_scatter.annotate(i, (x_target_away_hvh[i], y_target_away_hvh[i]))
-    on_away_scatter.scatter(x_target_away_hvm, y_target_away_hvm, color=label_to_color("lred"), label='Human vs Machine')
+    on_away_scatter.scatter(x_target_away_hvm, y_target_away_hvm, color=label_to_color("mblue"), label='Human vs Machine')
     for i in range(len(sorted_IDs)):
         on_away_scatter.annotate(i, (x_target_away_hvm[i], y_target_away_hvm[i]))
     on_away_scatter.set_xlabel("Human 1")
     on_away_scatter.set_ylabel("Human 2 or Machine")
-    on_away_scatter.set_title("On-target percent")
+    on_away_scatter.set_title("Percent looking on the screen")
     on_away_scatter.legend()
 
     # label distribution plot
@@ -528,7 +531,7 @@ def generate_collage_plot(sorted_IDs, all_metrics, save_path):
     bottoms_h2 = np.zeros(shape=(len(sorted_IDs)))
     bottoms_m = np.zeros(shape=(len(sorted_IDs)))
     width = 0.66
-    patterns = [".", "O", "*"]
+    patterns = [None, "O", "*"]
     for i, label in enumerate(sorted(classes.keys())):
         label_counts_h1 = [y[i] / sum(y) for y in [all_metrics[ID]["human1_vs_human2"]['coding1_by_label'] for ID in sorted_IDs]]
         label_counts_h2 = [y[i] / sum(y) for y in [all_metrics[ID]["human1_vs_human2"]['coding2_by_label'] for ID in sorted_IDs]]
@@ -548,14 +551,14 @@ def generate_collage_plot(sorted_IDs, all_metrics, save_path):
                        Patch(facecolor="white", edgecolor='black', hatch=patterns[0], label="Human 1"),
                        Patch(facecolor="white", edgecolor='black', hatch=patterns[1], label="Human 2"),
                        Patch(facecolor="white", edgecolor='black', hatch=patterns[2], label="Machine")]
-            label_bar.legend(handles=artists)
+            label_bar.legend(handles=artists, bbox_to_anchor=(0.95, 1.0), loc='upper left')
         bottoms_h1 += label_counts_h1
         bottoms_h2 += label_counts_h2
         bottoms_m += label_counts_m
     label_bar.xaxis.set_major_locator(MultipleLocator(1))
     label_bar.set_xticks(ticks)
-    label_bar.set_title('Label percent per video')
-    label_bar.set_ylabel('Percent')
+    label_bar.set_title('Proportion of looking left, right, and away per video')
+    label_bar.set_ylabel('Proportion')
     label_bar.set_xlabel('Video')
 
     plt.subplots_adjust(left=0.1, bottom=0.075, right=0.9, top=0.925, wspace=0.2, hspace=0.5)
