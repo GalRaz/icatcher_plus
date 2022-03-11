@@ -41,6 +41,91 @@ class TrivialParser(BaseParser):
             return None
 
 
+class LookitParser(BaseParser):
+    """
+    a parser that parses Lookit format, a slightly different version of PrefLookTimestampParser.
+    """
+    def __init__(self, fps, labels_folder=None, ext=None, return_time_stamps=False):
+        super().__init__()
+        self.fps = fps
+        self.return_time_stamps = return_time_stamps
+        if ext:
+            self.ext = ext
+        if labels_folder:
+            self.labels_folder = Path(labels_folder)
+
+    def parse(self, file, file_is_fullpath=False):
+        classes = ["away", "left", "right"]
+        exclude = ["outofframe", "preview", "instructions"]
+        special = ["codingactive"]
+        if file_is_fullpath:
+            label_path = Path(file)
+        else:
+            label_path = Path(self.labels_folder, file + self.ext)
+        labels = np.genfromtxt(open(label_path, "rb"), dtype='str', delimiter=",", skip_header=3)
+        times = labels[:, 0].astype(np.int)
+        sorting_indices = np.argsort(times)
+        labels = labels[sorting_indices]
+        output = []
+        prev_frame = 0
+        prev_class = None
+        exclude_state = []
+        assert labels[0, 2] in classes  # sanity check, lookit should be coded properly from index 0.
+        for i in range(len(labels)):
+            frame = int(labels[i, 0])
+            dur = int(labels[i, 1])
+            if labels[i, 2] in exclude:
+                assert frame >= prev_frame  # new exclude label can't overlap previous label time (except for equal framae onset)
+                if exclude_state:
+                    exclude_state = max(exclude_state, frame + dur)
+                else:
+                    exclude_state = frame + dur
+                    if frame == prev_frame:
+                        output[-1][1] = False
+                    else:
+                        output.append([frame, False, prev_class])
+            elif labels[i, 2] in classes:
+                if output:
+                    if output[-1][1] and output[-1][2] != labels[i, 2]:
+                        assert frame > output[-1][0]  # sanity: assures we didn't skip some different events when excluding
+                cur_class = labels[i, 2]
+                if not exclude_state:
+                    output.append([frame, True, cur_class])
+                else:
+                    if frame > exclude_state:
+                        output.append([exclude_state, True, prev_class])
+                        output.append([frame, True, cur_class])
+                    else:
+                        output.append([frame, False, cur_class])
+                        output.append([exclude_state, True, cur_class])
+                prev_class = cur_class
+                prev_frame = frame
+                exclude_state = []
+            elif labels[i, 2] in special:
+                assert False  # we don't support coding active label for now.
+            else:  # ignore labels that aren't in classes, exclude or special
+                pass
+        if not self.return_time_stamps:  # convert to frame numbers
+            for entry in output:
+                entry[0] = int(int(entry[0]) * self.fps / 1000)
+        start = int(output[0][0])
+        annotations_end = int(output[-1][0])  # for now throw frames beyond last label. since we don't have codingactive
+        trial_times = self.get_trial_end_times(labels)
+        trial_end = trial_times[-1]
+        return output, start, trial_end
+
+    def get_trial_end_times(self, sorted_labels):
+        trials = []
+        for i in range(len(sorted_labels)):
+            if sorted_labels[i, 2] == "end":
+                if not self.return_time_stamps:  # convert to frame numbers
+                    frame = int(int(sorted_labels[i, 0]) * self.fps / 1000)
+                else:
+                    frame = int(sorted_labels[i, 0])
+                trials.append(frame)
+        return trials
+
+
 class PrefLookTimestampParser(BaseParser):
     """
     a parser that can parse PrefLookTimestamp as described here:

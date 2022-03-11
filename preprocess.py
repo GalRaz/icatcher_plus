@@ -35,16 +35,17 @@ def preprocess_raw_lookit_dataset(args, force_create=False):
     video_dataset = {}
     # search for videos
     for file in Path(args.raw_dataset_path / "videos").glob("*"):
-        video_dataset[file] = {"video_id": "-".join(file.stem.split("_")[2].split("-")[1:]),
-                               "video_path": file,
-                               "video_suffix": file.suffix,
-                               "in_tlv": False,
-                               "has_1coding": False,
-                               "has_2coding": False,
-                               "first_coding_file": None,
-                               "second_coding_file": None,
-                               "child_id": None,
-                               "split": None}
+        if file.is_file():
+            video_dataset[file] = {"video_id": "-".join(file.stem.split("_")[2].split("-")[1:]),
+                                   "video_path": file,
+                                   "video_suffix": file.suffix,
+                                   "in_tlv": False,
+                                   "has_1coding": False,
+                                   "has_2coding": False,
+                                   "first_coding_file": None,
+                                   "second_coding_file": None,
+                                   "child_id": None,
+                                   "split": None}
     # parse tlv file
     tlv_file = Path(args.raw_dataset_path / "prephys_split0_videos.tsv")
     rows = []
@@ -114,7 +115,7 @@ def preprocess_raw_lookit_dataset(args, force_create=False):
             train_set = np.array(train_set)
         else:
             train_set = [x for x in videos if x not in val_set]
-    elif args.one_video_per_child_policy == "exclude_all":
+    elif args.one_video_per_child_policy == "unique_only":
         video_children_id = [x["child_id"] for x in videos]
         _, indices = np.unique(video_children_id, return_index=True)
         unique_videos = videos[indices]
@@ -122,7 +123,7 @@ def preprocess_raw_lookit_dataset(args, force_create=False):
         threshold = min(int(len(unique_videos) * args.val_percent), len(double_coded))
         val_set = np.random.choice(double_coded, size=threshold, replace=False)
         train_set = np.array([x for x in unique_videos if x not in val_set])
-    elif args.one_video_per_child_policy == "exc_train_only":
+    elif args.one_video_per_child_policy == "unique_only_in_val":
         video_children_id = [x["child_id"] for x in videos]
         _, unique_indices = np.unique(video_children_id, return_index=True)
         double_coded_and_unique_videos = [x for x in videos[unique_indices] if x["has_2coding"]]
@@ -134,7 +135,7 @@ def preprocess_raw_lookit_dataset(args, force_create=False):
             train_set = np.array(train_set)
         else:
             train_set = np.array([x for x in videos if x not in val_set])
-    elif args.one_video_per_child_policy == "exc_val_only":
+    elif args.one_video_per_child_policy == "unique_only_in_train":
         val_set = [x for x in videos if x["has_2coding"]]
         val_children_id = [x["child_id"] for x in val_set]
         if args.train_val_disjoint:
@@ -294,7 +295,6 @@ def process_dataset_lowest_face(args, gaze_labels_only=False, force_create=False
     classes = {"away": 0, "left": 1, "right": 2}
     video_list = sorted(list(args.video_folder.glob("*")))
     net = cv2.dnn.readNetFromCaffe(str(args.config_file), str(args.face_model_file))
-    # todo: are there videos where target fps!=30 ?
     for video_file in video_list:
         st_time = time.time()
         logging.info("[process_lkt_legacy] Proccessing %s" % video_file.name)
@@ -324,24 +324,28 @@ def process_dataset_lowest_face(args, gaze_labels_only=False, force_create=False
         else:
             print("video fps: {}".format(fps))
 
-        # assert np.abs(cap.get(cv2.CAP_PROP_FPS) - fps) < 0.1
         if args.raw_dataset_type == "princeton":
             assert abs(fps - 30) < 0.1
             parser = parsers.PrincetonParser(30,
                                              ".vcx",
                                              args.label_folder,
                                              Path(args.raw_dataset_path, "start_times_visitA.csv"))
-        elif args.raw_dataset_type == "lookit" or args.raw_dataset_type == "generic":
+        elif args.raw_dataset_type == "generic":
             ext = next(Path(args.label_folder).glob("*")).suffix
             parser = parsers.PrefLookTimestampParser(fps=fps,
                                                      labels_folder=args.label_folder,
                                                      ext=ext,
                                                      return_time_stamps=vfr)
+        elif args.raw_dataset_type == "lookit":
+            ext = next(Path(args.label_folder).glob("*")).suffix
+            parser = parsers.LookitParser(fps=fps,
+                                          labels_folder=args.label_folder,
+                                          ext=ext,
+                                          return_time_stamps=vfr)
         else:
             raise NotImplementedError
-        responses, _, _ = parser.parse(video_file.stem)
+        responses, _, end = parser.parse(video_file.stem)
         ret_val, frame = cap.read()
-
         while ret_val:
             if responses:
                 logging.info("[process_lkt_legacy] Processing frame: {}".format(frame_counter))
@@ -349,12 +353,13 @@ def process_dataset_lowest_face(args, gaze_labels_only=False, force_create=False
                     frame_stamp = frame_info[frame_counter]
                 else:
                     frame_stamp = frame_counter
-                if frame_stamp >= responses[0][0]:  # skip until reaching first annotated frame
+                if responses[0][0] <= frame_stamp <= end:  # only iterate on annotated frames
                     # find closest (previous) response this frame belongs to
                     q = [index for index, val in enumerate(responses) if frame_stamp >= val[0]]
                     response_index = max(q)
-                    if responses[response_index][1] != 0:  # make sure response is valid
+                    if responses[response_index][1]:  # make sure response is valid
                         gaze_class = responses[response_index][2]
+                        assert gaze_class in classes
                         gaze_labels.append(classes[gaze_class])
                         if not gaze_labels_only:
                             bbox = detect_face_opencv_dnn(net, frame, args.face_detector_confidence)
@@ -411,11 +416,11 @@ def process_dataset_lowest_face(args, gaze_labels_only=False, force_create=False
                     no_annotation_counter += 1
                     gaze_labels.append(-2)
                     face_labels.append(-2)
-                    logging.info("[process_lkt_legacy] Skipping since no annotation (yet)")
+                    logging.info("[process_lkt_legacy] Skipping since frame not in range of annotation")
             else:
+                no_annotation_counter += 1
                 gaze_labels.append(-2)
                 face_labels.append(-2)
-                no_annotation_counter += 1
                 logging.info("[process_lkt_legacy] Skipping frame since parser reported no annotation")
             ret_val, frame = cap.read()
             frame_counter += 1
@@ -464,14 +469,19 @@ def generate_second_gaze_labels(args, force_create=False, visualize_confusion=Fa
                                                  suffix,
                                                  args.label2_folder,
                                                  Path(args.raw_dataset_path, "start_times_visitA.csv"))
-            elif args.raw_dataset_type == "lookit" or args.raw_dataset_type == "generic":
+            elif args.raw_dataset_type == "generic":
                 parser = parsers.PrefLookTimestampParser(fps=fps,
                                                          labels_folder=args.label2_folder,
                                                          ext=suffix,
                                                          return_time_stamps=vfr)
+            elif args.raw_dataset_type == "lookit":
+                parser = parsers.LookitParser(fps=fps,
+                                              labels_folder=args.label2_folder,
+                                              ext=suffix,
+                                              return_time_stamps=vfr)
             else:
                 raise NotImplementedError
-            responses, _, _ = parser.parse(video_file.stem)
+            responses, _, end = parser.parse(video_file.stem)
             gaze_labels = np.load(str(Path.joinpath(args.faces_folder, video_file.stem, 'gaze_labels.npy')))
             gaze_labels_second = []
             for frame in range(gaze_labels.shape[0]):
@@ -479,11 +489,12 @@ def generate_second_gaze_labels(args, force_create=False, visualize_confusion=Fa
                     frame_stamp = frame_info[frame]
                 else:
                     frame_stamp = frame
-                if frame_stamp >= responses[0][0]:
+                if responses[0][0] <= frame_stamp <= end:  # only iterate on annotated frames
                     q = [index for index, val in enumerate(responses) if frame_stamp >= val[0]]
                     response_index = max(q)
-                    if responses[response_index][1] != 0:
+                    if responses[response_index][1]:
                         gaze_class = responses[response_index][2]
+                        assert gaze_class in classes
                         gaze_labels_second.append(classes[gaze_class])
                     else:
                         gaze_labels_second.append(-2)

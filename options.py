@@ -181,8 +181,8 @@ def parse_arguments_for_preprocess():
                         help="the type of dataset to preprocess")
     parser.add_argument("--fc_model", type=str, default="models/face_classifier_weights_best.pt", help="path to face classifier model if it was trained")
     parser.add_argument("--split_type", type=str, choices=["split0_train", "split0_test", "all"], default="split0_train")
-    parser.add_argument("--one_video_per_child_policy", choices=["include_all", "exclude_all", "exc_train_only", "exc_val_only"], type=str,
-                        default="exc_train_only", help="some videos are of the same child, this policy dictates what to do with those.")
+    parser.add_argument("--one_video_per_child_policy", choices=["include_all", "unique_only", "unique_only_in_val", "unique_only_in_train"], type=str,
+                        default="unique_only_in_val", help="some videos are of the same child, this policy dictates what to do with those.")
     parser.add_argument("--train_val_disjoint", action="store_true", help="if true, train and validation sets will never contain same child")
     parser.add_argument("--val_percent", type=float, default=0.2, help="desired percent of validation set")
     parser.add_argument("--face_detector_confidence", type=float, default=0.7, help="confidence threshold for face detector")
