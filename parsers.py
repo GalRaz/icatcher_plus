@@ -53,11 +53,11 @@ class LookitParser(BaseParser):
             self.ext = ext
         if labels_folder:
             self.labels_folder = Path(labels_folder)
+        self.classes = ["away", "left", "right"]
+        self.exclude = ["outofframe", "preview", "instructions"]
+        self.special = ["codingactive"]
 
     def parse(self, file, file_is_fullpath=False):
-        classes = ["away", "left", "right"]
-        exclude = ["outofframe", "preview", "instructions"]
-        special = ["codingactive"]
         if file_is_fullpath:
             label_path = Path(file)
         else:
@@ -68,23 +68,25 @@ class LookitParser(BaseParser):
         labels = labels[sorting_indices]
         output = []
         prev_frame = 0
-        prev_class = None
+        prev_class = self.find_first_class_instance(labels)
         exclude_state = []
-        assert labels[0, 2] in classes  # sanity check, lookit should be coded properly from index 0.
         for i in range(len(labels)):
             frame = int(labels[i, 0])
             dur = int(labels[i, 1])
-            if labels[i, 2] in exclude:
-                assert frame >= prev_frame  # new exclude label can't overlap previous label time (except for equal framae onset)
+            if labels[i, 2] in self.exclude:
+                assert frame >= prev_frame  # new exclude label can't overlap previous label time (except for equal frame onset)
                 if exclude_state:
                     exclude_state = max(exclude_state, frame + dur)
                 else:
                     exclude_state = frame + dur
                     if frame == prev_frame:
-                        output[-1][1] = False
+                        if output:
+                            output[-1][1] = False
+                        else:
+                            output.append([frame, False, prev_class])
                     else:
                         output.append([frame, False, prev_class])
-            elif labels[i, 2] in classes:
+            elif labels[i, 2] in self.classes:
                 if output:
                     if output[-1][1] and output[-1][2] != labels[i, 2]:
                         assert frame > output[-1][0]  # sanity: assures we didn't skip some different events when excluding
@@ -101,7 +103,7 @@ class LookitParser(BaseParser):
                 prev_class = cur_class
                 prev_frame = frame
                 exclude_state = []
-            elif labels[i, 2] in special:
+            elif labels[i, 2] in self.special:
                 assert False  # we don't support coding active label for now.
             else:  # ignore labels that aren't in classes, exclude or special
                 pass
@@ -113,6 +115,12 @@ class LookitParser(BaseParser):
         trial_times = self.get_trial_end_times(labels)
         trial_end = trial_times[-1]
         return output, start, trial_end
+
+    def find_first_class_instance(self, sorted_labels):
+        for entry in sorted_labels:
+            if entry[2] in self.classes:
+                return entry[2]
+
 
     def get_trial_end_times(self, sorted_labels):
         trials = []
