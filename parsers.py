@@ -62,65 +62,68 @@ class LookitParser(BaseParser):
             label_path = Path(file)
         else:
             label_path = Path(self.labels_folder, file + self.ext)
+        # load label file
         labels = np.genfromtxt(open(label_path, "rb"), dtype='str', delimiter=",", skip_header=3)
+        # sort by time
         times = labels[:, 0].astype(np.int)
         sorting_indices = np.argsort(times)
         labels = labels[sorting_indices]
+        # initialize
         output = []
-        prev_frame = 0
-        prev_class = self.find_first_class_instance(labels)
-        exclude_state = []
+        prev_class = "none"
+        prev_frame = -1
+        # loop over legitimate class labels
         for i in range(len(labels)):
             frame = int(labels[i, 0])
-            dur = int(labels[i, 1])
-            if labels[i, 2] in self.exclude:
-                assert frame >= prev_frame  # new exclude label can't overlap previous label time (except for equal frame onset)
-                if exclude_state:
-                    exclude_state = max(exclude_state, frame + dur)
-                else:
-                    exclude_state = frame + dur
-                    if frame == prev_frame:
-                        if output:
-                            output[-1][1] = False
-                        else:
-                            output.append([frame, False, prev_class])
-                    else:
-                        output.append([frame, False, prev_class])
-            elif labels[i, 2] in self.classes:
-                if output:
-                    if output[-1][1] and output[-1][2] != labels[i, 2]:
-                        assert frame > output[-1][0]  # sanity: assures we didn't skip some different events when excluding
+            if labels[i, 2] in self.classes:
                 cur_class = labels[i, 2]
-                if not exclude_state:
-                    output.append([frame, True, cur_class])
-                else:
-                    if frame > exclude_state:
-                        output.append([exclude_state, True, prev_class])
-                        output.append([frame, True, cur_class])
-                    else:
-                        output.append([frame, False, cur_class])
-                        output.append([exclude_state, True, cur_class])
+                if prev_class != cur_class:
+                    assert frame > prev_frame  # how can two labels be different but point to same time?
+                output.append([frame, True, cur_class])
                 prev_class = cur_class
                 prev_frame = frame
-                exclude_state = []
             elif labels[i, 2] in self.special:
-                assert False  # we don't support coding active label for now.
-            else:  # ignore labels that aren't in classes, exclude or special
-                pass
+                assert False  # we do not permit codingactive label. though this can be easily supported.
+        # extract "exclude" regions
+        exclude_regions = self.find_exclude_regions(labels)
+        merged_exclude_regions = self.merge_overlapping_intervals(exclude_regions)
+        # loop over exclude regions and fix output
+        for region in merged_exclude_regions:
+            region_start = region[0]
+            region_end = region[1]
+            # deal with labels before region
+            q = [index for index, value in enumerate(output) if value[0] < region_start]
+            if q:
+                last_overlap = max(q)
+                prev_class = output[last_overlap][2]
+                output.insert(last_overlap + 1, [region_start, False, prev_class])
+            # deal with labels inside region
+            q = [index for index, value in enumerate(output) if region_start <= value[0] < region_end]
+            if q:
+                for index in q:
+                    output[index][1] = False
+            # deal with last label inside region
+            q = [index for index, value in enumerate(output) if value[0] <= region_end]
+            if q:
+                last_overlap = max(q)
+                prev_class = output[last_overlap][2]
+                output.insert(last_overlap + 1, [region_end, True, prev_class])
+        # finish work
         if not self.return_time_stamps:  # convert to frame numbers
             for entry in output:
                 entry[0] = int(int(entry[0]) * self.fps / 1000)
         start = int(output[0][0])
-        annotations_end = int(output[-1][0])  # for now throw frames beyond last label. since we don't have codingactive
+        annotations_end = int(output[-1][0])
         trial_times = self.get_trial_end_times(labels)
         trial_end = trial_times[-1]
         return output, start, trial_end
 
-    def find_first_class_instance(self, sorted_labels):
+    def find_exclude_regions(self, sorted_labels):
+        regions = []
         for entry in sorted_labels:
-            if entry[2] in self.classes:
-                return entry[2]
-
+            if entry[2] in self.exclude:
+                regions.append([int(entry[0]), int(entry[0]) + int(entry[1])])
+        return regions
 
     def get_trial_end_times(self, sorted_labels):
         trials = []
@@ -132,6 +135,19 @@ class LookitParser(BaseParser):
                     frame = int(sorted_labels[i, 0])
                 trials.append(frame)
         return trials
+
+    def merge_overlapping_intervals(self, arr):
+        merged = []
+        if arr:
+            arr.sort(key=lambda interval: interval[0])
+            merged.append(arr[0])
+            for current in arr:
+                previous = merged[-1]
+                if current[0] <= previous[1]:
+                    previous[1] = max(previous[1], current[1])
+                else:
+                    merged.append(current)
+        return merged
 
 
 class PrefLookTimestampParser(BaseParser):

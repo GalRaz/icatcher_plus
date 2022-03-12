@@ -312,7 +312,6 @@ def process_dataset_lowest_face(args, gaze_labels_only=False, force_create=False
         gaze_labels = []
         face_labels = []
 
-
         cap = cv2.VideoCapture(str(video_file))
         # make sure target fps is around 30
         vfr, meta_data = video.is_video_vfr(video_file, get_meta_data=True)
