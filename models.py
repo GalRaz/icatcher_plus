@@ -4,6 +4,8 @@ from pathlib import Path
 import torch.nn.functional as F
 from torchvision.models.resnet import resnet18
 from collections import OrderedDict
+from torch.nn.parallel import DistributedDataParallel as DDP
+import logging
 
 
 class MyModel:
@@ -18,7 +20,6 @@ class MyModel:
             self.load_network("latest")
         self.optimizer = self.get_optimizer()
         self.scheduler = self.get_scheduler()
-        self.network.to(self.opt.device)
 
     def get_loss_fn(self):
         if self.opt.loss == "cat_cross_entropy":
@@ -41,7 +42,11 @@ class MyModel:
         else:
             raise NotImplementedError
         network.to(self.opt.device)
-        return network
+        if self.opt.distributed:
+            model = DDP(network, device_ids=[self.opt.rank])
+        else:
+            model = network
+        return model
 
     def get_optimizer(self):
         if self.opt.optimizer == "adam":
@@ -92,7 +97,7 @@ class MyModel:
         net = self.network
         if isinstance(net, torch.nn.DataParallel):
             net = net.module
-        print('loading the model from {}'.format(str(load_path)))
+        logging.info('loading the model from {}'.format(str(load_path)))
         # PyTorch newer than 0.4 (e.g., built from
         # GitHub source), you can remove str() on self.device
         state_dict = torch.load(load_path, map_location=str(self.opt.device))
@@ -107,7 +112,6 @@ class MyModel:
                 new_k = '.'.join(k.split(".")[1:])
                 new_dict[new_k] = v
             net.load_state_dict(new_dict)
-
 
     def save_network(self, which_epoch):
         """

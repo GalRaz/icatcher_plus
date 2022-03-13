@@ -25,7 +25,7 @@ def preprocess_raw_lookit_dataset(args, force_create=False):
     :param force_create: forces creation of files even if they exist
     :return:
     """
-    np.random.seed(seed=43)  # seed the random generator
+    np.random.seed(seed=args.seed)  # seed the random generator
     args.video_folder.mkdir(parents=True, exist_ok=True)
     args.label_folder.mkdir(parents=True, exist_ok=True)
     args.label2_folder.mkdir(parents=True, exist_ok=True)

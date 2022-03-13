@@ -1,11 +1,12 @@
 import argparse
 from pathlib import Path
 import sys
+import os
 
 
-def parse_arguments():
+def parse_arguments_for_training():
     """
-    parse command line arguments
+    parse command line arguments for training
     TODO: add option to parse from configuration file
     :return:
     """
@@ -41,8 +42,8 @@ def parse_arguments():
                         help="if true, horizontally flips images in training (and flips labels as well)")
     parser.add_argument("--number_of_epochs", type=int, default=100, help="Total number of epochs to train model")
     parser.add_argument("--seed", type=int, default=42, help="Random seed to train with")
-    parser.add_argument("--gpu_id", type=int, default=-1, help="Which GPU to use (or -1 for cpu)")
-    parser.add_argument("--num_threads", type=int, default=0, help="How many threads for dataloader")
+    parser.add_argument("--gpu_id", type=str, default=-1, help="GPU ids to use, comma delimited (or -1 for cpu)")
+    parser.add_argument("--port", type=str, default="12355", help="port to use for ddp")
     parser.add_argument("--tensorboard", action="store_true", help="Activates tensorboard logging")
     parser.add_argument("--log", action="store_true", help="Logs into a file instead of stdout")
     parser.add_argument("-v", "--verbosity", type=str, choices=["debug", "info", "warning"], default="info",
@@ -50,14 +51,12 @@ def parse_arguments():
     args = parser.parse_args()
     args.dataset_folder = Path(args.dataset_folder)
     # add some useful arguments for the rest of the code
+    args.distributed = len(args.gpu_id.split(",")) > 1
+    args.world_size = len(args.gpu_id.split(","))
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
     args.experiment_path = Path("runs", args.experiment_name)
     args.experiment_path.mkdir(exist_ok=True, parents=True)
-    if args.gpu_id == -1:
-        args.device = "cpu"
-    else:
-        import os
-        os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
-        args.device = "cuda:{}".format(0)
     with open(Path(args.experiment_path, 'commandline_args.txt'), 'w') as f:
         f.write('\n'.join(sys.argv[1:]))
     return args
@@ -187,7 +186,8 @@ def parse_arguments_for_preprocess():
     parser.add_argument("--val_percent", type=float, default=0.2, help="desired percent of validation set")
     parser.add_argument("--face_detector_confidence", type=float, default=0.7, help="confidence threshold for face detector")
     parser.add_argument("--gpu_id", type=int, default=-1, help="Which GPU to use (or -1 for cpu)")
-    parser.add_argument("--log", help="If present, writes log to this path")
+    parser.add_argument("--log", help="if present, writes log to this path")
+    parser.add_argument("--seed", type=int, default=43, help="random seed (controls split selection)")
     parser.add_argument("-v", "--verbosity", type=str, choices=["debug", "info", "warning"], default="info",
                         help="Selects verbosity level")
     args = parser.parse_args()
