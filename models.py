@@ -16,8 +16,10 @@ class MyModel:
         self.opt = copy.deepcopy(opt)
         self.loss_fn = self.get_loss_fn()
         self.network = self.get_network()
-        if opt.continue_train:
+        if self.opt.continue_train:
             self.load_network("latest")
+        if self.opt.distributed:
+            self.network = DDP(self.network, device_ids=[self.opt.rank])
         self.optimizer = self.get_optimizer()
         self.scheduler = self.get_scheduler()
 
@@ -42,11 +44,7 @@ class MyModel:
         else:
             raise NotImplementedError
         network.to(self.opt.device)
-        if self.opt.distributed:
-            model = DDP(network, device_ids=[self.opt.rank])
-        else:
-            model = network
-        return model
+        return network
 
     def get_optimizer(self):
         if self.opt.optimizer == "adam":
@@ -121,8 +119,7 @@ class MyModel:
         """
         save_filename = '{}_net.pth'.format(str(which_epoch))
         save_path = Path.joinpath(self.opt.experiment_path, save_filename)
-        torch.save(self.network.cpu().state_dict(), str(save_path))
-        self.network.to(self.opt.device)
+        torch.save(self.network.state_dict(), str(save_path))
 
     def count_parameters(self):
         """

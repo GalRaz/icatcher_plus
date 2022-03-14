@@ -25,8 +25,6 @@ def train_loop(rank, args):
         args.device = "cpu"
     else:
         args.device = "cuda:{}".format(args.rank)
-    if args.distributed:
-        store = dist.FileStore(str(Path(args.experiment_path, "tmp_filestore")), args.world_size)
     setup(args)
     my_logger = logger.Logger(args)
     args.phase = "train"
@@ -68,6 +66,7 @@ def train_loop(rank, args):
                                                                   epoch_loss))
         logging.info("train: epoch: {}, training acc: {}".format(epoch,
                                                                  epoch_acc))
+        val_loss_total = 0.
         if args.rank == 0:
             model.save_network(which_epoch=str(epoch))
             model.save_network(which_epoch="latest")
@@ -77,7 +76,10 @@ def train_loop(rank, args):
                 running_corrects = 0
                 num_datapoints = 0
                 for batch_index, batch in enumerate(val_dataloader.dataloader):
-                    output = model.network(batch)
+                    if args.distributed:  # might be unnecessary
+                        output = model.network.module(batch)
+                    else:
+                        output = model.network(batch)
                     val_loss = model.loss_fn(output, batch["label"])
                     _, predictions = torch.max(output, 1)
                     num_datapoints += batch["label"].shape[0]
@@ -93,13 +95,13 @@ def train_loop(rank, args):
             logging.info("validation: epoch: {}, acc: {}".format(epoch, val_acc_total))
             my_logger.write_scaler("epoch", "learning rate", model.optimizer.param_groups[0]['lr'], epoch)
             logging.info("lr: {}".format(model.optimizer.param_groups[0]['lr']))
-            if args.distributed:
-                store.set("val_loss_total", str(val_loss_total))
         if args.lr_policy == "plateau":
             if args.distributed:
-                dist.barrier()
-                val_loss_total = float(store.get("val_loss_total"))
-            model.scheduler.step(val_loss_total)
+                val_loss_total = torch.Tensor([val_loss_total]).to(args.rank)
+                dist.broadcast(tensor=val_loss_total, src=0)
+                model.scheduler.step(val_loss_total.item())
+            else:
+                model.scheduler.step(val_loss_total)
         else:
             model.scheduler.step()
 
