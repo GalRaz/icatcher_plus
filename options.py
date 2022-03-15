@@ -64,7 +64,7 @@ def parse_arguments_for_training():
 
 def parse_arguments_for_testing():
     parser = argparse.ArgumentParser()
-    parser.add_argument("source", type=str, help="the source to use (path to video file or webcam id)")
+    parser.add_argument("source", type=str, help="the source to use (path to video file, folder or webcam id)")
     parser.add_argument("model", type=str, help="path to model that will be used for predictions")
     parser.add_argument("--fc_model", type=str, help="path to face classifier model that will be used for deciding "
                                                      "which crop should we select from every frame")
@@ -72,13 +72,16 @@ def parse_arguments_for_testing():
                         help="selects source of stream to use.")
     parser.add_argument("--video_filter", type=str,
                         help="either a file consisting of a list of files used to filter videos in a folder,"
-                             " or a folder of files to filter the videos with")
+                             " or a folder of files to filter the videos with. if file and suffix is .tsv,"
+                             " will assume certain structure using the lookit dataset")
+    parser.add_argument("--raw_dataset_path", type=str, help="path to raw dataset (required if video_filter is a .tsv file")
     parser.add_argument("--output_annotation", type=str, help="folder to output annotations to")
     parser.add_argument("--on_off", action="store_true",
                         help="left/right/away annotations will be swapped with on/off (only works with icatcher+)")
     # Set up text output file, using https://osf.io/3n97m/ - PrefLookTimestamp coding standard
     parser.add_argument("--output_format", type=str, default="PrefLookTimestamp", choices=["PrefLookTimestamp",
-                                                                                           "raw_output"])
+                                                                                           "raw_output",
+                                                                                           "compressed"])
     parser.add_argument("--output_file_suffix", type=str, default=".txt", help="the output file suffix")
     parser.add_argument("--architecture", type=str, choices=["fc", "icatcher_vanilla", "icatcher+", "rnn"],
                         default="icatcher+",
@@ -103,6 +106,8 @@ def parse_arguments_for_testing():
     if args.video_filter:
         args.video_filter = Path(args.video_filter)
         assert args.video_filter.is_file() or args.video_filter.is_dir()
+    if args.raw_dataset_path:
+        args.raw_dataset_path = Path(args.raw_dataset_path)
     if args.output_annotation:
         args.output_filepath = Path(args.output_annotation)
         args.output_filepath.mkdir(exist_ok=False, parents=True)
