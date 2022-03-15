@@ -187,6 +187,7 @@ def predict_from_video(opt):
                         video_dataset = build_video_dataset(opt.raw_dataset_path, opt.video_filter)
                         filter_files = [x for x in video_dataset.values() if
                                         x["in_tsv"] and x["has_1coding"] and x["split"] == "2_test"]
+                        video_ids = [x["video_id"] for x in filter_files]
                         filter_files = [x["video_path"].stem for x in filter_files]
                     else:
                         with open(opt.video_filter_file, "r") as f:
@@ -226,8 +227,11 @@ def predict_from_video(opt):
             my_video_path = Path(opt.output_video_path, video_path.stem + "_output{}".format(my_suffix))
             video_output = cv2.VideoWriter(str(my_video_path), fourcc, framerate, resolution, True)
         if opt.output_annotation:
-            my_output_file_path = Path(opt.output_annotation, video_path.stem + opt.output_file_suffix)
-            if not opt.output_format == "compressed":
+            if opt.output_format == "compressed":
+                if video_ids:
+                    my_output_file_path = Path(opt.output_annotation, video_ids[i])
+            else:
+                my_output_file_path = Path(opt.output_annotation, video_path.stem + opt.output_file_suffix)
                 output_file = open(my_output_file_path, "w", newline="")
             if opt.output_format == "PrefLookTimestamp":
                 # Write header

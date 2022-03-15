@@ -57,17 +57,21 @@ class LookitParser(BaseParser):
         self.exclude = ["outofframe", "preview", "instructions"]
         self.special = ["codingactive"]
 
-    def parse(self, file, file_is_fullpath=False):
-        if file_is_fullpath:
-            label_path = Path(file)
-        else:
-            label_path = Path(self.labels_folder, file + self.ext)
+    def load_and_sort(self, label_path):
         # load label file
         labels = np.genfromtxt(open(label_path, "rb"), dtype='str', delimiter=",", skip_header=3)
         # sort by time
         times = labels[:, 0].astype(np.int)
         sorting_indices = np.argsort(times)
-        labels = labels[sorting_indices]
+        sorted_labels = labels[sorting_indices]
+        return sorted_labels
+
+    def parse(self, file, file_is_fullpath=False):
+        if file_is_fullpath:
+            label_path = Path(file)
+        else:
+            label_path = Path(self.labels_folder, file + self.ext)
+        labels = self.load_and_sort(label_path)
         # initialize
         output = []
         prev_class = "none"

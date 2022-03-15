@@ -150,11 +150,15 @@ def parse_arguments_for_visualizations():
                         type=str,
                         default="PrefLookTimestamp",
                         choices=["PrefLookTimestamp",
+                                 "lookit",
+                                 "compressed",
                                  "princeton"])
     parser.add_argument("--machine_coding_format",
                         type=str,
                         default="PrefLookTimestamp",
                         choices=["PrefLookTimestamp",
+                                 "lookit",
+                                 "compressed",
                                  "princeton"])
     parser.add_argument("--log", help="If present, writes log to this path")
     parser.add_argument("-v", "--verbosity", type=str, choices=["debug", "info", "warning"], default="info",
