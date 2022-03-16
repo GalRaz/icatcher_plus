@@ -131,6 +131,7 @@ def predict_from_video(opt):
     :param opt:
     :return:
     """
+    # todo: refactor, this function is too big
     # initialize
     opt.frames_per_datapoint = 10
     opt.frames_stride_size = 2
@@ -186,7 +187,7 @@ def predict_from_video(opt):
                     if opt.video_filter.suffix == ".tsv":
                         video_dataset = build_video_dataset(opt.raw_dataset_path, opt.video_filter)
                         filter_files = [x for x in video_dataset.values() if
-                                        x["in_tsv"] and x["has_1coding"] and x["split"] == "2_test"]
+                                        x["in_tsv"] and x["has_1coding"] and x["has_2coding"] and x["split"] == "2_test"]
                         video_ids = [x["video_id"] for x in filter_files]
                         filter_files = [x["video_path"].stem for x in filter_files]
                     else:
@@ -230,6 +231,8 @@ def predict_from_video(opt):
             if opt.output_format == "compressed":
                 if video_ids:
                     my_output_file_path = Path(opt.output_annotation, video_ids[i])
+                    if Path(str(my_output_file_path) + ".npz").is_file():
+                        continue
             else:
                 my_output_file_path = Path(opt.output_annotation, video_path.stem + opt.output_file_suffix)
                 output_file = open(my_output_file_path, "w", newline="")

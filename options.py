@@ -174,7 +174,7 @@ def parse_arguments_for_visualizations():
     assert args.human2_codings_folder.is_dir()
     args.machine_codings_folder = Path(args.machine_codings_folder)
     assert args.machine_codings_folder.is_dir()
-    args.raw_video_folder = Path(args.dataset_folder, "raw_videos")
+    args.raw_video_folder = Path(args.raw_dataset_folder, "videos")
     assert args.raw_video_folder.is_dir()
     args.faces_folder = Path(args.dataset_folder, "faces")
     assert args.faces_folder.is_dir()

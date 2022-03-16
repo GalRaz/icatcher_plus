@@ -17,7 +17,36 @@ import video
 import csv
 
 
+def create_annotation_split(output_location, raw_dataset_path):
+    """
+    creates a folder with 2 subfolders (coding1, coding2)
+    each having an annotation by different coders for videos in the test set
+    note: works only for lookit dataset
+    :param output_location: location to create folder
+    :param raw_dataset_path: path to raw dataset
+    :return:
+    """
+    coding1_location = Path(output_location, "coding1")
+    coding2_location = Path(output_location, "coding2")
+    coding1_location.mkdir(parents=True, exist_ok=True)
+    coding2_location.mkdir(parents=True, exist_ok=True)
+    tsv_location = Path(raw_dataset_path, "prephys_split0_videos.tsv")
+    db = build_video_dataset(raw_dataset_path, tsv_location)
+    test_subset = [x for x in db.values() if x["in_tsv"] and x["has_1coding"] and x["has_2coding"] and x["split"] == "2_test"]
+    coding1_files = [(x["video_id"], x["first_coding_file"]) for x in test_subset]
+    coding2_files = [(x["video_id"], x["second_coding_file"]) for x in test_subset]
+    for i in range(len(coding1_files)):
+        shutil.copy(Path(coding1_files[i][1]), Path(coding1_location, coding1_files[i][0] + ".txt"))
+        shutil.copy(Path(coding2_files[i][1]), Path(coding2_location, coding2_files[i][0] + ".txt"))
+
+
 def build_video_dataset(raw_dataset_path, tsv_location):
+    """
+    given the raw dataset path and the tsv file location, creates a dictionary describing the dataset
+    :param raw_dataset_path:
+    :param tsv_location:
+    :return:
+    """
     video_dataset = {}
     # search for videos
     for file in Path(raw_dataset_path / "videos").glob("*"):
@@ -531,7 +560,7 @@ def visualize_human_confusion_matrix(path):
             preds.extend(list(gaze_labels_second[idxs]))
     # human_dir = Path('plots', 'human')
     # human_dir.mkdir(exist_ok=True, parents=True)
-    _, _ = visualize.calculate_confusion_matrix(labels, preds, path)
+    _, _, _ = visualize.calculate_confusion_matrix(labels, preds, path)
 
 
 def gen_lookit_multi_face_subset(force_create=False):

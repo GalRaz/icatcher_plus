@@ -152,15 +152,15 @@ def predict_on_preprocessed(args):
             num_datapoints += batch["label"].shape[0]
             # running_loss += val_loss.item() * batch["label"].shape[0]
             running_corrects += torch.sum(torch.eq(predictions, batch["label"])).item()
-    mat, total_acc = calculate_confusion_matrix(None, None,
-                                                Path(args.experiment_path, "confusion_matrix_{}.png".format(args.use_disjoint)),
-                                                confusion_matrix.numpy())
+    norm_mat, mat, total_acc = calculate_confusion_matrix(None, None,
+                                                          Path(args.experiment_path, "confusion_matrix_{}.png".format(args.use_disjoint)),
+                                                          confusion_matrix.numpy())
     # val_loss_total = running_loss / num_datapoints
     val_acc_total = (running_corrects / num_datapoints) * 100
     # logging.info("validation loss: {}".format(val_loss_total))
     logging.info("validation acc: {}%".format(val_acc_total))
-    logging.info("per class acc: {}".format(mat.diagonal()))
-    logging.info("confusion matrix (normalized): {}".format(mat))
+    logging.info("per class acc: {}".format(norm_mat.diagonal()))
+    logging.info("confusion matrix (normalized): {}".format(norm_mat))
 
 
 if __name__ == "__main__":

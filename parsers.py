@@ -18,13 +18,42 @@ class BaseParser:
         class is either away, left, right or off.
 
         list should only contain frames that have changes in class (compared to previous frame)
-        i.e. if the video is labled ["away","away","away","right","right"]
+        i.e. if the video is labeled ["away","away","away","right","right"]
         then only frame 0 and frame 3 will appear on the output list.
 
         :param file: the label file to parse.
         :return: None if failed, else: list of lists as described above, the frame which codings starts, and frame at which it ends
         """
         raise NotImplementedError
+
+    def uncollapse_labels(self, labels, start, end):
+        """
+        given an output from parse as described above, uncollapses it into one big numpy array of labels (-3 for invalid).
+        :param labels:
+        :return:
+        """
+        class_map = {"away": 0, "left": 1, "right": 2}
+        if type(labels) == np.ndarray:
+            return labels
+        output = []
+        prev_entry = labels[0]
+        for entry in labels[1:]:
+            if prev_entry[1]:  # valid
+                response = class_map[prev_entry[2]]
+            else:
+                response = -3
+            for i in range(prev_entry[0], entry[0]):
+                output.append(response)
+            prev_entry = entry
+        for i in range(end - len(output)):
+            if labels[-1][1]:
+                output.append(class_map[labels[-1][2]])
+            else:
+                output.append(-3)
+        output = np.array(output)
+        output[:start] = -3
+        output[end:] = -3
+        return output
 
 
 class TrivialParser(BaseParser):
@@ -36,9 +65,24 @@ class TrivialParser(BaseParser):
 
     def parse(self, file):
         if file:
-            return [[0, 1, "left"]]
+            return [[0, 1, "left"]], 0, 10
         else:
             return None
+
+
+class CompressedParser(BaseParser):
+    """
+    parses a npz file saved for visualizations
+    """
+    def __init__(self):
+        super().__init__()
+
+    def parse(self, file):
+        data = np.load(file)
+        data = data["arr_0"]
+        data[:4] = -3  # mark first frames as invalid
+        data[-4:] = -3  # mark last frames as invalid
+        return data, 4, len(data)-4
 
 
 class LookitParser(BaseParser):
