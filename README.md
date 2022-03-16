@@ -1,4 +1,4 @@
-### Latest Results (validation set, split0)
+### Latest Results (test set, split0)
 <table>
         <tr>
         All statistics are over all valid frames only.  
