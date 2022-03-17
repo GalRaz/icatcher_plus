@@ -513,15 +513,15 @@ def generate_collage_plot2(sorted_IDs, all_metrics, save_path):
     # LT plot
     lt_scatter = fig.add_subplot(3, 2, 4)
     lt_scatter.plot([0, 1], [0, 1], transform=lt_scatter.transAxes, color="black", label="Ideal trend")
-    lt_scatter.set_xlim([0, 100])
-    lt_scatter.set_ylim([0, 100])
+    lt_scatter.set_xlim([0, 80])
+    lt_scatter.set_ylim([0, 80])
     x_target = []
     y_target = []
     for ID in sorted_IDs:
         x_target += [x["looking_time_1"]/30 for x in all_metrics[ID]["human1_vs_machine_trials"]]
         y_target += [x["looking_time_2"]/30 for x in all_metrics[ID]["human1_vs_machine_trials"]]
     lt_scatter.scatter(x_target, y_target, color=label_to_color("lorange"),
-                       label='Trial', alpha=0.9)
+                       label='Trial', alpha=0.3)
     lt_scatter.set_xlabel("Coder 1")
     lt_scatter.set_ylabel("Machine")
     lt_scatter.set_title("Looking time [s]")
@@ -538,7 +538,7 @@ def generate_collage_plot2(sorted_IDs, all_metrics, save_path):
         x_target += [x["percent_r_1"] * 100 for x in all_metrics[ID]["human1_vs_machine_trials"]]
         y_target += [x["percent_r_2"] * 100 for x in all_metrics[ID]["human1_vs_machine_trials"]]
     pr_scatter.scatter(x_target, y_target, color=label_to_color("lorange"),
-                       label='Trial', alpha=0.5)
+                       label='Trial', alpha=0.3)
     pr_scatter.set_xlabel("Coder 1")
     pr_scatter.set_ylabel("Machine")
     pr_scatter.set_title("Percent Right")
