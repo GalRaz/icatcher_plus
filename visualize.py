@@ -273,6 +273,8 @@ def compare_coding_files(human_coding_file, human_coding_file2, machine_coding_f
         return None
     metrics = {}
     machine_uncol = parser.uncollapse_labels(machine, mstart, mend)
+    special_machine = machine_uncol.copy()
+    special_machine[special_machine < 0] = 0
     human1_uncol = parser.uncollapse_labels(human, start1, end1)
     human2_uncol = parser.uncollapse_labels(human2, start2, end2)
     # bins = [[x, x+30] for x in range(0, end1, 30)]
@@ -281,7 +283,9 @@ def compare_coding_files(human_coding_file, human_coding_file2, machine_coding_f
     metrics["human1_vs_machine_session"] = compare_uncollapsed_coding_files(human1_uncol,
                                                                             machine_uncol,
                                                                             [[0, max(end1, mend)]])
-
+    metrics["human1_vs_smachine_session"] = compare_uncollapsed_coding_files(human1_uncol,
+                                                                             special_machine,
+                                                                             [[0, max(end1, mend)]])
     metrics["human1_vs_human2_trials"] = compare_uncollapsed_coding_files(human1_uncol, human2_uncol, trial_times)
     # metrics["human1_vs_human2_100msbins"] = compare_uncollapsed_coding_files(human1_uncol, human2_uncol, bins)
     metrics["human1_vs_human2_session"] = compare_uncollapsed_coding_files(human1_uncol,
@@ -458,6 +462,111 @@ def generate_frame_by_frame_comparisons(sorted_IDs, all_metrics, args):
         plt.clf()
 
 
+def generate_collage_plot2(sorted_IDs, all_metrics, save_path):
+    """
+    plots one image with various selected stats
+    :param sorted_IDs: ids of videos sorted by accuracy score
+    :param all_metrics: all metrics per video
+    :param save_path: where to save the image
+    :return:
+    """
+    classes = {"away": 0, "left": 1, "right": 2}
+    # fig, axs = plt.subplots(3, 2, figsize=(10, 12))
+    fig = plt.figure(figsize=(10, 12))
+
+    # confusion matrix
+    conf_mat_h2h = fig.add_subplot(3, 2, 1)  # three rows, two columns
+    total_confusion_h2h = np.sum([all_metrics[ID]["human1_vs_human2_session"]["confusion_matrix"] for ID in sorted_IDs],
+                                 axis=0)
+    total_confusion_h2h /= np.sum(total_confusion_h2h, -1, keepdims=True)
+    sns.heatmap(total_confusion_h2h, ax=conf_mat_h2h, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues')
+    conf_mat_h2h.set_xticklabels(['away', 'left', 'right'])
+    conf_mat_h2h.set_yticklabels(['away', 'left', 'right'])
+    conf_mat_h2h.set_xlabel('Coder 1')
+    conf_mat_h2h.set_ylabel('Coder 2')
+    conf_mat_h2h.set_title('Confusion Matrix (Coder 1 vs Coder 2)')
+
+    # confusion matrix 2
+    conf_mat_h2h = fig.add_subplot(3, 2, 2)
+    total_confusion_h2h = np.sum([all_metrics[ID]["human1_vs_machine_session"]["confusion_matrix"] for ID in sorted_IDs],
+                                 axis=0)
+    total_confusion_h2h /= np.sum(total_confusion_h2h, -1, keepdims=True)
+    sns.heatmap(total_confusion_h2h, ax=conf_mat_h2h, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues')
+    conf_mat_h2h.set_xticklabels(['away', 'left', 'right'])
+    conf_mat_h2h.set_yticklabels(['away', 'left', 'right'])
+    conf_mat_h2h.set_xlabel('Coder 1')
+    conf_mat_h2h.set_ylabel('Machine')
+    conf_mat_h2h.set_title('Confusion Matrix (Coder 1 vs Machine)')
+
+    # confusion matrix 3
+    conf_mat_h2h = fig.add_subplot(3, 2, 3)
+    total_confusion_h2h = np.sum([all_metrics[ID]["human1_vs_smachine_session"]["confusion_matrix"] for ID in sorted_IDs],
+                                 axis=0)
+    total_confusion_h2h /= np.sum(total_confusion_h2h, -1, keepdims=True)
+    sns.heatmap(total_confusion_h2h, ax=conf_mat_h2h, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues')
+    conf_mat_h2h.set_xticklabels(['away', 'left', 'right'])
+    conf_mat_h2h.set_yticklabels(['away', 'left', 'right'])
+    conf_mat_h2h.set_xlabel('Coder 1')
+    conf_mat_h2h.set_ylabel('Machine')
+    conf_mat_h2h.set_title(r'Confusion Matrix (Coder 1 vs Machine w "invlid$\leftarrow$away")')
+
+    # LT plot
+    lt_scatter = fig.add_subplot(3, 2, 4)
+    lt_scatter.plot([0, 1], [0, 1], transform=lt_scatter.transAxes, color="black", label="Ideal trend")
+    lt_scatter.set_xlim([0, 100])
+    lt_scatter.set_ylim([0, 100])
+    x_target = []
+    y_target = []
+    for ID in sorted_IDs:
+        x_target += [x["looking_time_1"]/30 for x in all_metrics[ID]["human1_vs_machine_trials"]]
+        y_target += [x["looking_time_2"]/30 for x in all_metrics[ID]["human1_vs_machine_trials"]]
+    lt_scatter.scatter(x_target, y_target, color=label_to_color("lorange"),
+                       label='Trial', alpha=0.9)
+    lt_scatter.set_xlabel("Coder 1")
+    lt_scatter.set_ylabel("Machine")
+    lt_scatter.set_title("Looking time [s]")
+    lt_scatter.legend(loc='upper left')
+
+    # %R plot
+    pr_scatter = fig.add_subplot(3, 2, 5)
+    pr_scatter.plot([0, 1], [0, 1], transform=pr_scatter.transAxes, color="black", label="Ideal trend")
+    pr_scatter.set_xlim([0, 100])
+    pr_scatter.set_ylim([0, 100])
+    x_target = []
+    y_target = []
+    for ID in sorted_IDs:
+        x_target += [x["percent_r_1"] * 100 for x in all_metrics[ID]["human1_vs_machine_trials"]]
+        y_target += [x["percent_r_2"] * 100 for x in all_metrics[ID]["human1_vs_machine_trials"]]
+    pr_scatter.scatter(x_target, y_target, color=label_to_color("lorange"),
+                       label='Trial', alpha=0.5)
+    pr_scatter.set_xlabel("Coder 1")
+    pr_scatter.set_ylabel("Machine")
+    pr_scatter.set_title("Percent Right")
+    pr_scatter.legend(loc='lower center')
+
+    # percent agreement plot
+    pa_scatter = fig.add_subplot(3, 2, 6)
+    pa_scatter.plot([0, 1], [0, 1], transform=pa_scatter.transAxes, color="black", label="Ideal trend")
+    pa_scatter.set_xlim([0, 100])
+    pa_scatter.set_ylim([0, 100])
+    x_target = []
+    y_target = []
+    for ID in sorted_IDs:
+        x_target += [x["agreement"] * 100 for x in all_metrics[ID]["human1_vs_human2_trials"]]
+        y_target += [x["agreement"] * 100 for x in all_metrics[ID]["human1_vs_machine_trials"]]
+    pa_scatter.scatter(x_target, y_target, color=label_to_color("lorange"),
+                       label='Trial', alpha=0.3)
+    pa_scatter.set_xlabel("Coder 1 vs Coder 2")
+    pa_scatter.set_ylabel("Coder 1 vs Machine")
+    pa_scatter.set_title("Percent Agreement")
+    pa_scatter.legend(loc='upper left')
+
+    plt.subplots_adjust(left=0.1, bottom=0.075, right=0.9, top=0.925, wspace=0.2, hspace=0.5)
+    plt.savefig(Path(save_path, "collage2.png"))
+    plt.cla()
+    plt.clf()
+
+
 def generate_collage_plot(sorted_IDs, all_metrics, save_path):
     """
     plots one image with various selected stats
@@ -511,7 +620,7 @@ def generate_collage_plot(sorted_IDs, all_metrics, save_path):
     transitions_bar.set_ylabel('# Transitions per 100 frames')
     transitions_bar.set_xlabel('Video')
 
-    # on away plot
+    # Looking time plot
     on_away_scatter = fig.add_subplot(3, 2, 4)  # three rows, two columns
     # on_away_scatter = axs[1, 1]
     on_away_scatter.plot([0, 1], [0, 1], transform=on_away_scatter.transAxes, color="black", label="Ideal trend")
@@ -530,7 +639,7 @@ def generate_collage_plot(sorted_IDs, all_metrics, save_path):
     on_away_scatter.set_xlabel("Human 1")
     on_away_scatter.set_ylabel("Human 2 or Machine")
     on_away_scatter.set_title("Looking time [s]")
-    on_away_scatter.legend()
+    on_away_scatter.legend(loc='upper right')
 
     # label distribution plot
     # label_scatter = fig.add_subplot(3, 2, 5)  # three rows, two columns
@@ -566,16 +675,16 @@ def generate_collage_plot(sorted_IDs, all_metrics, save_path):
     width = 0.66
     patterns = [None, "O", "*"]
     for i, label in enumerate(sorted(classes.keys())):
-        label_counts_h1 = [y[i] / sum(y) for y in [all_metrics[ID]["human1_vs_human2_session"]['label_count_1'] for ID in sorted_IDs]]
-        label_counts_h2 = [y[i] / sum(y) for y in [all_metrics[ID]["human1_vs_human2_session"]['label_count_2'] for ID in sorted_IDs]]
-        label_counts_m = [y[i] / sum(y) for y in [all_metrics[ID]["human1_vs_machine_session"]['label_count_2'] for ID in sorted_IDs]]
+        label_counts_h1 = [y[i] / sum(y[:3]) for y in [all_metrics[ID]["human1_vs_human2_session"]['label_count_1'] for ID in sorted_IDs]]
+        label_counts_h2 = [y[i] / sum(y[:3]) for y in [all_metrics[ID]["human1_vs_human2_session"]['label_count_2'] for ID in sorted_IDs]]
+        label_counts_m = [y[i] / sum(y[:3]) for y in [all_metrics[ID]["human1_vs_machine_session"]['label_count_2'] for ID in sorted_IDs]]
 
         label_bar.bar(x - width/3, label_counts_h1, bottom=bottoms_h1, width=(width / 3)-0.1, label=label,
-                      color=label_to_color(label), edgecolor='black', hatch=patterns[0])
+                      color=label_to_color(label), edgecolor='black', hatch=patterns[0], linewidth=0)
         label_bar.bar(x, label_counts_h2, bottom=bottoms_h2, width=(width / 3)-0.1, label=label,
-                      color=label_to_color(label), edgecolor='black', hatch=patterns[1])
+                      color=label_to_color(label), edgecolor='black', hatch=patterns[1], linewidth=0)
         label_bar.bar(x + width/3, label_counts_m, bottom=bottoms_m, width=(width / 3)-0.1, label=label,
-                      color=label_to_color(label), edgecolor='black', hatch=patterns[2])
+                      color=label_to_color(label), edgecolor='black', hatch=patterns[2], linewidth=0)
         if i == 0:
             artists = [Patch(facecolor=label_to_color("away"), label="Away"),
                        Patch(facecolor=label_to_color("left"), label="Left"),
@@ -835,6 +944,7 @@ if __name__ == "__main__":
     sorted_ids = sorted(list(all_metrics.keys()),
                         key=lambda x: all_metrics[x]["human1_vs_machine_session"]["agreement"])
     generate_collage_plot(sorted_ids, all_metrics, args.output_folder)
+    generate_collage_plot2(sorted_ids, all_metrics, args.output_folder)
     generate_frame_by_frame_comparisons(sorted_ids, all_metrics, args)
     plot_face_pixel_density_vs_accuracy(sorted_ids, all_metrics, args)
     plot_face_location_vs_accuracy(sorted_ids, all_metrics, args)
