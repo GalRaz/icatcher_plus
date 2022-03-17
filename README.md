@@ -1,10 +1,8 @@
 ### Latest Results (test set, split0)
 <table>
         <tr>
-        All statistics are only over mutually valid frames.  
-        </tr>
-        <tr>
-                <td colspan="2" align="center"> <img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/collage.png"  alt="collage" width = 300px height = 400px ></td>
+                <td align="center"> <img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/collage.png"  alt="collage" width = 300px height = 400px ></td>
+                <td align="center"> <img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/collage2.png"  alt="collage2" width = 300px height = 400px ></td>
         </tr>
         <tr>
                 <td><img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/frame_by_frame_00.png" alt="0" width = 1000px height = 100px></td>
