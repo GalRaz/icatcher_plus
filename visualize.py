@@ -482,8 +482,8 @@ def generate_collage_plot2(sorted_IDs, all_metrics, save_path):
     sns.heatmap(total_confusion_h2h, ax=conf_mat_h2h, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues')
     conf_mat_h2h.set_xticklabels(['away', 'left', 'right'])
     conf_mat_h2h.set_yticklabels(['away', 'left', 'right'])
-    conf_mat_h2h.set_xlabel('Coder 1')
-    conf_mat_h2h.set_ylabel('Coder 2')
+    conf_mat_h2h.set_ylabel('Coder 1')
+    conf_mat_h2h.set_xlabel('Coder 2')
     conf_mat_h2h.set_title('Confusion Matrix (Coder 1 vs Coder 2)')
 
     # confusion matrix 2
@@ -494,8 +494,8 @@ def generate_collage_plot2(sorted_IDs, all_metrics, save_path):
     sns.heatmap(total_confusion_h2h, ax=conf_mat_h2h, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues')
     conf_mat_h2h.set_xticklabels(['away', 'left', 'right'])
     conf_mat_h2h.set_yticklabels(['away', 'left', 'right'])
-    conf_mat_h2h.set_xlabel('Coder 1')
-    conf_mat_h2h.set_ylabel('Machine')
+    conf_mat_h2h.set_ylabel('Coder 1')
+    conf_mat_h2h.set_xlabel('Machine')
     conf_mat_h2h.set_title('Confusion Matrix (Coder 1 vs Machine)')
 
     # confusion matrix 3
@@ -506,8 +506,8 @@ def generate_collage_plot2(sorted_IDs, all_metrics, save_path):
     sns.heatmap(total_confusion_h2h, ax=conf_mat_h2h, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues')
     conf_mat_h2h.set_xticklabels(['away', 'left', 'right'])
     conf_mat_h2h.set_yticklabels(['away', 'left', 'right'])
-    conf_mat_h2h.set_xlabel('Coder 1')
-    conf_mat_h2h.set_ylabel('Machine')
+    conf_mat_h2h.set_ylabel('Coder 1')
+    conf_mat_h2h.set_xlabel('Machine')
     conf_mat_h2h.set_title(r'Confusion Matrix (Coder 1 vs Machine w "invlid$\leftarrow$away")')
 
     # LT plot
