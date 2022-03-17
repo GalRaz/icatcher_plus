@@ -475,7 +475,7 @@ def generate_collage_plot2(sorted_IDs, all_metrics, save_path):
     fig = plt.figure(figsize=(10, 12))
 
     # confusion matrix
-    conf_mat_h2h = fig.add_subplot(3, 2, 1)  # three rows, two columns
+    conf_mat_h2h = fig.add_subplot(3, 3, 1)  # three rows, three columns
     total_confusion_h2h = np.sum([all_metrics[ID]["human1_vs_human2_session"]["confusion_matrix"] for ID in sorted_IDs],
                                  axis=0)
     total_confusion_h2h /= np.sum(total_confusion_h2h, -1, keepdims=True)
@@ -484,10 +484,10 @@ def generate_collage_plot2(sorted_IDs, all_metrics, save_path):
     conf_mat_h2h.set_yticklabels(['away', 'left', 'right'])
     conf_mat_h2h.set_ylabel('Coder 1')
     conf_mat_h2h.set_xlabel('Coder 2')
-    conf_mat_h2h.set_title('Confusion Matrix (Coder 1 vs Coder 2)')
+    conf_mat_h2h.set_title('Coder 1 vs Coder 2')
 
     # confusion matrix 2
-    conf_mat_h2h = fig.add_subplot(3, 2, 2)
+    conf_mat_h2h = fig.add_subplot(3, 3, 2)
     total_confusion_h2h = np.sum([all_metrics[ID]["human1_vs_machine_session"]["confusion_matrix"] for ID in sorted_IDs],
                                  axis=0)
     total_confusion_h2h /= np.sum(total_confusion_h2h, -1, keepdims=True)
@@ -496,10 +496,10 @@ def generate_collage_plot2(sorted_IDs, all_metrics, save_path):
     conf_mat_h2h.set_yticklabels(['away', 'left', 'right'])
     conf_mat_h2h.set_ylabel('Coder 1')
     conf_mat_h2h.set_xlabel('Machine')
-    conf_mat_h2h.set_title('Confusion Matrix (Coder 1 vs Machine)')
+    conf_mat_h2h.set_title('Coder 1 vs Machine')
 
     # confusion matrix 3
-    conf_mat_h2h = fig.add_subplot(3, 2, 3)
+    conf_mat_h2h = fig.add_subplot(3, 3, 3)
     total_confusion_h2h = np.sum([all_metrics[ID]["human1_vs_smachine_session"]["confusion_matrix"] for ID in sorted_IDs],
                                  axis=0)
     total_confusion_h2h /= np.sum(total_confusion_h2h, -1, keepdims=True)
@@ -508,10 +508,38 @@ def generate_collage_plot2(sorted_IDs, all_metrics, save_path):
     conf_mat_h2h.set_yticklabels(['away', 'left', 'right'])
     conf_mat_h2h.set_ylabel('Coder 1')
     conf_mat_h2h.set_xlabel('Machine')
-    conf_mat_h2h.set_title(r'Confusion Matrix (Coder 1 vs Machine w "invlid$\leftarrow$away")')
+    conf_mat_h2h.set_title(r'Coder 1 vs Machine w "invlid$\leftarrow$away"')
+
+    # LR ICC plot
+    lr_icc_scatter = fig.add_subplot(3, 3, 4)
+    lr_icc_scatter.plot([0, 1], [0, 1], transform=lr_icc_scatter.transAxes, color="black", label="Ideal trend")
+    lr_icc_scatter.set_xlim([0, 1])
+    lr_icc_scatter.set_ylim([0, 1])
+    x_target = [all_metrics[ID]["stats"]["ICC_LT_hvh"] for ID in sorted_IDs]
+    y_target = [all_metrics[ID]["stats"]["ICC_LT_hvm"] for ID in sorted_IDs]
+    lr_icc_scatter.scatter(x_target, y_target, color=label_to_color("lorange"),
+                       label='Session')
+    lr_icc_scatter.set_xlabel("Coder 1 vs Coder 2")
+    lr_icc_scatter.set_ylabel("Coder 1 vs Machine")
+    lr_icc_scatter.set_title("Looking Time ICC")
+    lr_icc_scatter.legend(loc='upper left')
+
+    # PR ICC plot
+    pr_icc_scatter = fig.add_subplot(3, 3, 5)
+    pr_icc_scatter.plot([0, 1], [0, 1], transform=pr_icc_scatter.transAxes, color="black", label="Ideal trend")
+    pr_icc_scatter.set_xlim([0, 1])
+    pr_icc_scatter.set_ylim([0, 1])
+    x_target = [all_metrics[ID]["stats"]["ICC_PR_hvh"] for ID in sorted_IDs]
+    y_target = [all_metrics[ID]["stats"]["ICC_PR_hvm"] for ID in sorted_IDs]
+    pr_icc_scatter.scatter(x_target, y_target, color=label_to_color("lorange"),
+                        label='Session')
+    pr_icc_scatter.set_xlabel("Coder 1 vs Coder 2")
+    pr_icc_scatter.set_ylabel("Coder 1 vs Machine")
+    pr_icc_scatter.set_title("Percent Right ICC")
+    pr_icc_scatter.legend(loc='upper left')
 
     # LT plot
-    lt_scatter = fig.add_subplot(3, 2, 4)
+    lt_scatter = fig.add_subplot(3, 3, 6)
     lt_scatter.plot([0, 1], [0, 1], transform=lt_scatter.transAxes, color="black", label="Ideal trend")
     lt_scatter.set_xlim([0, 80])
     lt_scatter.set_ylim([0, 80])
@@ -528,7 +556,7 @@ def generate_collage_plot2(sorted_IDs, all_metrics, save_path):
     lt_scatter.legend(loc='upper left')
 
     # %R plot
-    pr_scatter = fig.add_subplot(3, 2, 5)
+    pr_scatter = fig.add_subplot(3, 3, 7)
     pr_scatter.plot([0, 1], [0, 1], transform=pr_scatter.transAxes, color="black", label="Ideal trend")
     pr_scatter.set_xlim([0, 100])
     pr_scatter.set_ylim([0, 100])
@@ -545,7 +573,7 @@ def generate_collage_plot2(sorted_IDs, all_metrics, save_path):
     pr_scatter.legend(loc='lower center')
 
     # percent agreement plot
-    pa_scatter = fig.add_subplot(3, 2, 6)
+    pa_scatter = fig.add_subplot(3, 3, 8)
     pa_scatter.plot([0, 1], [0, 1], transform=pa_scatter.transAxes, color="black", label="Ideal trend")
     pa_scatter.set_xlim([0, 100])
     pa_scatter.set_ylim([0, 100])
@@ -561,7 +589,7 @@ def generate_collage_plot2(sorted_IDs, all_metrics, save_path):
     pa_scatter.set_title("Percent Agreement")
     pa_scatter.legend(loc='upper left')
 
-    plt.subplots_adjust(left=0.1, bottom=0.075, right=0.9, top=0.925, wspace=0.2, hspace=0.5)
+    plt.subplots_adjust(left=0.1, bottom=0.075, right=0.9, top=0.925, wspace=0.5, hspace=0.5)
     plt.savefig(Path(save_path, "collage2.png"))
     plt.cla()
     plt.clf()
