@@ -31,7 +31,7 @@ def create_annotation_split(output_location, raw_dataset_path):
     coding1_location.mkdir(parents=True, exist_ok=True)
     coding2_location.mkdir(parents=True, exist_ok=True)
     tsv_location = Path(raw_dataset_path, "prephys_split0_videos.tsv")
-    db = build_video_dataset(raw_dataset_path, tsv_location)
+    db = build_lookit_video_dataset(raw_dataset_path, tsv_location)
     test_subset = [x for x in db.values() if x["in_tsv"] and x["has_1coding"] and x["has_2coding"] and x["split"] == "2_test"]
     coding1_files = [(x["video_id"], x["first_coding_file"]) for x in test_subset]
     coding2_files = [(x["video_id"], x["second_coding_file"]) for x in test_subset]
@@ -40,7 +40,61 @@ def create_annotation_split(output_location, raw_dataset_path):
         shutil.copy(Path(coding2_files[i][1]), Path(coding2_location, coding2_files[i][0] + ".txt"))
 
 
-def build_video_dataset(raw_dataset_path, tsv_location):
+def build_marchman_video_dataset(raw_dataset_path, csv_location):
+    video_dataset = {}
+    # search for videos
+    for file in Path(raw_dataset_path / "Cal_BW MOV").glob("*"):
+        if file.is_file():
+            video_dataset[file.stem] = {"video_id": file.stem,
+                                        "video_path": file,
+                                        "video_suffix": file.suffix,
+                                        "in_csv": False,
+                                        "has_1coding": False,
+                                        "has_2coding": False,
+                                        "first_coding_file": None,
+                                        "second_coding_file": None,
+                                        "child_id": None,
+                                        "split": None,
+                                        "start_timestamp": None}
+    # parse tsv file
+    rows = []
+    with open(csv_location) as file:
+        csv_file = csv.reader(file, delimiter="\t")
+        header = next(csv_file)
+        header = header[0].split(",")
+        for row in csv_file:
+            rows.append(row[0].split(","))
+    # fill video dataset with information from tsv
+    video_id = header.index("videoFileName")
+    child_id = header.index("childID")
+    which_dataset = header.index("which.dataset")  # train, val or test video
+    start_timestamp = header.index("timestamp.vidstart")  # timestamp of video start
+    codingfile1 = header.index("codingFile1")
+    codingfile2 = header.index("codingFile2")
+    csv_videos = [row[video_id] for row in rows]
+    for entry in video_dataset.values():
+        if entry["video_path"].name in csv_videos:
+            entry["in_csv"] = True
+            index = csv_videos.index(entry["video_path"].name)
+            entry["child_id"] = rows[index][child_id]
+            entry["split"] = rows[index][which_dataset]
+            entry["start_timestamp"] = rows[index][start_timestamp]
+            entry["first_coding_file"] = Path(raw_dataset_path / "Cal_BW Reliability" / rows[index][codingfile1])
+            entry["second_coding_file"] = Path(raw_dataset_path / "Cal_BW Original" / rows[index][codingfile2])
+    # fill video dataset with information from folders
+    for entry in video_dataset.values():
+        if entry["first_coding_file"]:
+            if entry["first_coding_file"].is_file():
+                entry["has_1coding"] = True
+        if entry["second_coding_file"]:
+            if entry["second_coding_file"].is_file():
+                entry["has_2coding"] = True
+        if entry["has_2coding"]:  # just a small sanity check
+            assert entry["has_1coding"]
+    return video_dataset
+
+
+def build_lookit_video_dataset(raw_dataset_path, tsv_location):
     """
     given the raw dataset path and the tsv file location, creates a dictionary describing the dataset
     :param raw_dataset_path:
@@ -103,6 +157,7 @@ def preprocess_raw_lookit_dataset(args, force_create=False):
     Organizes the raw videos downloaded from the Lookit platform.
     It puts the videos with annotations into raw_videos folder and
     the annotation from the first and second human annotators into coding_first and coding_second folders respectively.
+    :param args: cmd line arguments
     :param force_create: forces creation of files even if they exist
     :return:
     """
@@ -112,7 +167,7 @@ def preprocess_raw_lookit_dataset(args, force_create=False):
     args.label2_folder.mkdir(parents=True, exist_ok=True)
     args.faces_folder.mkdir(parents=True, exist_ok=True)
     tsv_file = Path(args.raw_dataset_path / "prephys_split0_videos.tsv")
-    video_dataset = build_video_dataset(args.raw_dataset_path, tsv_file)
+    video_dataset = build_lookit_video_dataset(args.raw_dataset_path, tsv_file)
     # print some stats
     with open(tsv_file, 'r') as tsv_fp:
         tsv_videos = len(tsv_fp.readlines())
@@ -203,6 +258,116 @@ def preprocess_raw_lookit_dataset(args, force_create=False):
         shutil.copyfile(second_coding_file_path, Path(args.label2_folder / (video_file["video_id"] + second_coding_file_path.suffix)))
 
 
+def preprocess_raw_marchman_dataset(args, force_create=False):
+    """
+    Organizes raw videos from the full marchman dataset
+    It puts the videos with annotations into raw_videos folder and
+    the annotation from the first and second human annotators into coding_first and coding_second folders respectively.
+    :param args: cmd line arguments
+    :param force_create: forces creation of files even if they exist
+    :return:
+    """
+    args.video_folder.mkdir(parents=True, exist_ok=True)
+    args.label_folder.mkdir(parents=True, exist_ok=True)
+    args.label2_folder.mkdir(parents=True, exist_ok=True)
+    args.faces_folder.mkdir(parents=True, exist_ok=True)
+
+    csv_file = Path(args.raw_dataset_path / "Cal_BW_March_split0_participants.csv")
+    video_dataset = build_marchman_video_dataset(args.raw_dataset_path, csv_file)
+
+    # print some stats
+    with open(csv_file, 'r') as csv_fp:
+        csv_videos = len(csv_fp.readlines()) - 1
+    valid_videos = len(video_dataset.keys())
+    valid_videos_in_csv = len([x for x in video_dataset.values() if x["in_csv"] and x["has_1coding"]])
+    doubly_coded = len([x for x in video_dataset.values() if x["in_csv"] and x["has_2coding"]])
+    unique_children = len(np.unique([x["child_id"] for x in video_dataset.values() if x["in_csv"] and x["has_1coding"]]))
+    logging.info("csv videos: {},"
+                 " found videos: {},"
+                 " found videos in csv: {},"
+                 " doubly coded: {},"
+                 " unique children: {}".format(csv_videos, valid_videos, valid_videos_in_csv, doubly_coded,
+                                               unique_children))
+
+    # filter out videos according to split type
+    if args.split_type == "all":
+        videos = [x for x in video_dataset.values() if x["in_csv"] and x["has_1coding"]]
+    elif args.split_type == "split0_train":
+        videos = [x for x in video_dataset.values() if
+                  x["in_csv"] and x["has_1coding"] and (x["split"] == "1_train" or x["split"] == "1_validate")]
+    elif args.split_type == "split0_test":
+        videos = [x for x in video_dataset.values() if x["in_csv"] and x["has_1coding"] and x["split"] == "2_test"]
+    else:
+        raise NotImplementedError
+    videos = np.array(videos)
+
+    # filter out videos according to one_video_per_child_policy and train_val_disjoint
+    if args.one_video_per_child_policy == "include_all":
+        double_coded = [x for x in videos if x["has_2coding"]]
+        threshold = int(len(videos) * args.val_percent)
+        val_set = np.random.choice(double_coded, size=threshold, replace=False)
+        if args.train_val_disjoint:
+            val_children_id = [x["child_id"] for x in val_set]
+            train_set = [x for x in videos if x["child_id"] not in val_children_id and x not in val_set]
+            train_set = np.array(train_set)
+        else:
+            train_set = [x for x in videos if x not in val_set]
+    elif args.one_video_per_child_policy == "unique_only":
+        video_children_id = [x["child_id"] for x in videos]
+        _, indices = np.unique(video_children_id, return_index=True)
+        unique_videos = videos[indices]
+        double_coded = [x for x in unique_videos if x["has_2coding"]]
+        threshold = min(int(len(unique_videos) * args.val_percent), len(double_coded))
+        val_set = np.random.choice(double_coded, size=threshold, replace=False)
+        train_set = np.array([x for x in unique_videos if x not in val_set])
+    elif args.one_video_per_child_policy == "unique_only_in_val":
+        video_children_id = [x["child_id"] for x in videos]
+        _, unique_indices = np.unique(video_children_id, return_index=True)
+        double_coded_and_unique_videos = [x for x in videos[unique_indices] if x["has_2coding"]]
+        threshold = min(int(len(videos) * args.val_percent), len(double_coded_and_unique_videos))
+        val_set = np.random.choice(double_coded_and_unique_videos, size=threshold, replace=False)
+        if args.train_val_disjoint:
+            val_children_id = [x["child_id"] for x in val_set]
+            train_set = [x for x in videos if x["child_id"] not in val_children_id and x not in val_set]
+            train_set = np.array(train_set)
+        else:
+            train_set = np.array([x for x in videos if x not in val_set])
+    elif args.one_video_per_child_policy == "unique_only_in_train":
+        val_set = [x for x in videos if x["has_2coding"]]
+        val_children_id = [x["child_id"] for x in val_set]
+        if args.train_val_disjoint:
+            temp_train_set = [x for x in videos if x["child_id"] not in val_children_id and x not in val_set]
+        else:
+            temp_train_set = [x for x in videos if x not in val_set]
+        temp_train_video_children_id = [x["child_id"] for x in temp_train_set]
+        _, unique_indices = np.unique(temp_train_video_children_id, return_index=True)
+        train_set = np.array(temp_train_video_children_id[unique_indices])
+    else:
+        raise NotImplementedError
+
+    # create final structured dataset
+    logging.info('[preprocess_raw] training set: {} validation set: {}'.format(len(train_set), len(val_set)))
+
+    for video_file in train_set:
+        video_file_path = video_file["video_path"]
+        coding_file_path = video_file["first_coding_file"]
+        assert video_file_path.is_file()
+        assert coding_file_path.is_file()
+        shutil.copyfile(video_file_path, Path(args.video_folder / (video_file["video_id"] + video_file_path.suffix)))
+        shutil.copyfile(coding_file_path, Path(args.label_folder / (video_file["video_id"] + coding_file_path.suffix)))
+
+    for video_file in val_set:
+        video_file_path = video_file["video_path"]
+        coding_file_path = video_file["first_coding_file"]
+        second_coding_file_path = video_file["second_coding_file"]
+        assert video_file_path.is_file()
+        assert coding_file_path.is_file()
+        shutil.copyfile(video_file_path, Path(args.video_folder / (video_file["video_id"] + video_file_path.suffix)))
+        shutil.copyfile(coding_file_path, Path(args.label_folder / (video_file["video_id"] + coding_file_path.suffix)))
+        shutil.copyfile(second_coding_file_path,
+                        Path(args.label2_folder / (video_file["video_id"] + second_coding_file_path.suffix)))
+
+
 def preprocess_raw_generic_dataset(args, force_create=False):
     args.video_folder.mkdir(parents=True, exist_ok=True)
     args.label_folder.mkdir(parents=True, exist_ok=True)
@@ -240,49 +405,6 @@ def preprocess_raw_generic_dataset(args, force_create=False):
         if not Path(args.label2_folder, (file + coding_ext)).is_file() or force_create:
             real_file = next(raw_coding_second_path.glob(file + "*"))
             shutil.copyfile(real_file, args.label2_folder / (file + coding_ext))
-
-
-def preprocess_raw_princeton_dataset(args, force_create=False):
-    """
-    Organizes the raw videos from marchman/princeton.
-    It puts the videos with annotations into raw_videos folder and
-    the annotation from the first and second human annotators into coding_first and coding_second folders respectively.
-    :param force_create: forces creation of files even if they exist
-    :return:
-    :param args:
-    :param force_create:
-    :return:
-    """
-    args.video_folder.mkdir(parents=True, exist_ok=True)
-    args.label_folder.mkdir(parents=True, exist_ok=True)
-    args.label2_folder.mkdir(parents=True, exist_ok=True)
-    args.faces_folder.mkdir(parents=True, exist_ok=True)
-    videos = [f.stem for f in Path(args.raw_dataset_path / 'Mov').glob("*.mov")]
-    coding_first = [f.stem for f in Path(args.raw_dataset_path / 'VCX').glob("*.vcx")]
-    coding_second = [f.stem for f in Path(args.raw_dataset_path / 'VCX2').glob("*.vcx")]
-
-    logging.info('[preprocess_raw] coding_first: {}'.format(len(coding_first)))
-    logging.info('[preprocess_raw] coding_second: {}'.format(len(coding_second)))
-    logging.info('[preprocess_raw] videos: {}'.format(len(videos)))
-
-    training_set = set(videos).intersection(set(coding_first))
-    test_set = set(videos).intersection(set(coding_first)).intersection(set(coding_second))
-    # val_percent = 20  # 20%
-    # train_factor = (100 - val_percent) / 100
-    # if i < (int(len(intersection) * train_factor)):
-    for i, file in enumerate(sorted(list(training_set))):
-        if not Path(args.video_folder, (file + '.mov')).is_file() or force_create:
-            shutil.copyfile(args.raw_dataset_path / 'Mov' / (file + '.mov'), args.video_folder / (file+'.mov'))
-        if not Path(args.label_folder, (file + '.vcx')).is_file() or force_create:
-            shutil.copyfile(args.raw_dataset_path / 'VCX' / (file + ".vcx"), args.label_folder / (file + ".vcx"))
-
-    for i, file in enumerate(sorted(list(test_set))):
-        if not Path(args.video_folder, (file + '.mov')).is_file() or force_create:
-            shutil.copyfile(args.raw_dataset_path / 'Mov' / (file + '.mov'), args.video_folder / (file+'.mov'))
-        if not Path(args.label_folder, (file + '.vcx')).is_file() or force_create:
-            shutil.copyfile(args.raw_dataset_path / 'VCX' / (file + ".vcx"), args.label_folder / (file + ".vcx"))
-        if not Path(args.label2_folder, (file + '.vcx')).is_file() or force_create:
-            shutil.copyfile(args.raw_dataset_path / 'VCX2' / (file + ".vcx"), args.label2_folder / (file + ".vcx"))
 
 
 def detect_face_opencv_dnn(net, frame, conf_threshold):
@@ -356,12 +478,12 @@ def process_dataset_lowest_face(args, gaze_labels_only=False, force_create=False
         else:
             print("video fps: {}".format(fps))
 
-        if args.raw_dataset_type == "princeton":
+        if args.raw_dataset_type == "vcx":
+            csv_file = Path(args.raw_dataset_path / "Cal_BW_March_split0_participants.csv")
             assert abs(fps - 30) < 0.1
-            parser = parsers.PrincetonParser(30,
-                                             ".vcx",
-                                             args.label_folder,
-                                             Path(args.raw_dataset_path, "start_times_visitA.csv"))
+            parser = parsers.VCXParser(30,
+                                       csv_file,
+                                       first_coder=True)
         elif args.raw_dataset_type == "generic":
             ext = next(Path(args.label_folder).glob("*")).suffix
             parser = parsers.PrefLookTimestampParser(fps=fps,
@@ -385,7 +507,7 @@ def process_dataset_lowest_face(args, gaze_labels_only=False, force_create=False
                     frame_stamp = frame_info[frame_counter]
                 else:
                     frame_stamp = frame_counter
-                if responses[0][0] <= frame_stamp <= end:  # only iterate on annotated frames
+                if responses[0][0] <= frame_stamp < end:  # only iterate on annotated frames
                     # find closest (previous) response this frame belongs to
                     q = [index for index, val in enumerate(responses) if frame_stamp >= val[0]]
                     response_index = max(q)
@@ -495,12 +617,12 @@ def generate_second_gaze_labels(args, force_create=False, visualize_confusion=Fa
                 logging.warning("video file: {} has variable frame rate".format(str(video_file)))
                 logging.info(str(meta_data))
                 frame_info, vfr_frame_counter, _ = video.get_frame_information(video_file)
-            if args.raw_dataset_type == "princeton":
+            if args.raw_dataset_type == "vcx":
+                csv_file = Path(args.raw_dataset_path / "Cal_BW_March_split0_participants.csv")
                 assert abs(fps - 30) < 0.1
-                parser = parsers.PrincetonParser(30,
-                                                 suffix,
-                                                 args.label2_folder,
-                                                 Path(args.raw_dataset_path, "start_times_visitA.csv"))
+                parser = parsers.VCXParser(30,
+                                           csv_file,
+                                           first_coder=False)
             elif args.raw_dataset_type == "generic":
                 parser = parsers.PrefLookTimestampParser(fps=fps,
                                                          labels_folder=args.label2_folder,
@@ -733,8 +855,8 @@ if __name__ == "__main__":
 
     if args.raw_dataset_type == "lookit":
         preprocess_raw_lookit_dataset(args, force_create=False)
-    elif args.raw_dataset_type == "princeton":
-        preprocess_raw_princeton_dataset(args, force_create=False)
+    elif args.raw_dataset_type == "vcx":
+        preprocess_raw_marchman_dataset(args, force_create=False)
     elif args.raw_dataset_type == "generic":
         preprocess_raw_generic_dataset(args, force_create=False)
     else:

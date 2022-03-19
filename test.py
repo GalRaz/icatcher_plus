@@ -1,7 +1,7 @@
 import cv2
 from pathlib import Path
 import numpy as np
-from preprocess import detect_face_opencv_dnn, build_video_dataset
+from preprocess import detect_face_opencv_dnn, build_lookit_video_dataset
 import options
 import visualize
 import logging
@@ -185,7 +185,7 @@ def predict_from_video(opt):
             if opt.video_filter:
                 if opt.video_filter.is_file():
                     if opt.video_filter.suffix == ".tsv":
-                        video_dataset = build_video_dataset(opt.raw_dataset_path, opt.video_filter)
+                        video_dataset = build_lookit_video_dataset(opt.raw_dataset_path, opt.video_filter)
                         filter_files = [x for x in video_dataset.values() if
                                         x["in_tsv"] and x["has_1coding"] and x["has_2coding"] and x["split"] == "2_test"]
                         video_ids = [x["video_id"] for x in filter_files]

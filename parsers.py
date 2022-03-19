@@ -3,6 +3,7 @@ import logging
 from pathlib import Path
 import numpy as np
 import csv
+import preprocess
 
 
 class BaseParser:
@@ -161,10 +162,10 @@ class LookitParser(BaseParser):
             for entry in output:
                 entry[0] = int(int(entry[0]) * self.fps / 1000)
         start = int(output[0][0])
+        trial_times = self.get_trial_intervals(start, labels)
+        last_trial_end = trial_times[-1][1]
         annotations_end = int(output[-1][0])
-        trial_times = self.get_trial_end_times(labels)
-        trial_end = trial_times[-1]
-        return output, start, trial_end
+        return output, start, last_trial_end
 
     def find_exclude_regions(self, sorted_labels):
         regions = []
@@ -173,15 +174,23 @@ class LookitParser(BaseParser):
                 regions.append([int(entry[0]), int(entry[0]) + int(entry[1])])
         return regions
 
-    def get_trial_end_times(self, sorted_labels):
+    def get_trial_intervals(self, start, sorted_labels):
+        """
+        gets trial interval times where beginning is included and end isn't: [)
+        :param sorted_labels:
+        :return:
+        """
         trials = []
+        prev_frame = start
         for i in range(len(sorted_labels)):
             if sorted_labels[i, 2] == "end":
+                frame_number = int(sorted_labels[i, 0]) + 1  # trial labels are inclusive, i.e. they include last frame.
                 if not self.return_time_stamps:  # convert to frame numbers
-                    frame = int(int(sorted_labels[i, 0]) * self.fps / 1000)
+                    frame = int(frame_number * self.fps / 1000)
                 else:
-                    frame = int(sorted_labels[i, 0])
-                trials.append(frame)
+                    frame = frame_number
+                trials.append([prev_frame, frame])
+                prev_frame = frame
         return trials
 
     def merge_overlapping_intervals(self, arr):
@@ -254,49 +263,47 @@ class PrefLookTimestampParser(BaseParser):
             return None
 
 
-class PrincetonParser(BaseParser):
+class VCXParser(BaseParser):
     """
-    A parser that can parse vcx files that are used in princeton laboratories
+    A parser that can parse vcx files that are used in princeton / marchman laboratories
     """
-    def __init__(self, fps, ext=None, labels_folder=None, start_time_file=None):
+    def __init__(self, fps, csv_file, first_coder=True):
         super().__init__()
         self.fps = fps
-        if ext:
-            self.ext = ext
-        if labels_folder:
-            self.labels_folder = Path(labels_folder)
-        self.start_times = None
-        if start_time_file:
-            self.start_times = self.process_start_times(start_time_file)
+        self.video_dataset = preprocess.build_marchman_video_dataset(csv_file.parent, csv_file)
+        self.first_coder = first_coder
+        self.start_times = self.process_start_times()
 
-    def process_start_times(self, start_time_file):
+    def process_start_times(self):
         start_times = {}
-        with open(start_time_file, newline='') as csvfile:
-            my_reader = csv.reader(csvfile, delimiter=',')
-            next(my_reader, None)  # skip the headers
-            for row in my_reader:
-                numbers = [int(x) for x in row[1].split(":")]
-                time_stamp = numbers[0]*60*60*self.fps + numbers[1]*60*self.fps + numbers[2]*self.fps + numbers[3]
-                start_times[Path(row[0]).stem] = time_stamp
+        for entry in self.video_dataset.values():
+            if entry["start_timestamp"]:
+                time = entry["start_timestamp"]
+                time_parts = [int(x) for x in time.split(":")]
+                timestamp = time_parts[0]*60*60*self.fps +\
+                            time_parts[1]*60*self.fps +\
+                            time_parts[2]*self.fps +\
+                            time_parts[3]
+                start_times[entry["video_id"]] = timestamp
         return start_times
 
-    def parse(self, file, file_is_fullpath=False):
+    def parse(self, video_id):
         """
         parse a coding file, see base class for output format
         :param file: coding file to parse
         :param file_is_fullpath: if true, the file is a full path with extension, else uses values from initialization
         :return:
         """
-        if file_is_fullpath:
-            label_path = Path(file)
+        if self.first_coder:
+            label_path = self.video_dataset[video_id]["first_coding_file"]
         else:
-            label_path = Path(self.labels_folder, file + self.ext)
+            label_path = self.video_dataset[video_id]["second_coding_file"]
         if not label_path.is_file():
-            logging.warning("For the file: " + str(file) + " no matching xml was found.")
+            logging.warning("For the file: " + str(label_path) + " no matching vcx was found.")
             return None
-        return self.xml_parse(label_path, True)
+        return self.xml_parse(label_path, video_id, True)
 
-    def xml_parse(self, input_file, encode=False):
+    def xml_parse(self, input_file, video_id, encode=False):
         tree = ET.parse(input_file)
         root = tree.getroot()
         counter = 0
@@ -334,7 +341,7 @@ class PrincetonParser(BaseParser):
                                int(response[1][8]) * 60 * self.fps +\
                                int(response[1][6]) * 60 * 60 * self.fps
                 if self.start_times:
-                    start_time = self.start_times[input_file.stem]
+                    start_time = self.start_times[video_id]
                     frame_number -= start_time
                 assert frame_number < 60 * 60 * self.fps
                 encoded_responses.append([frame_number, response[1][14], response[1][16]])
@@ -345,5 +352,20 @@ class PrincetonParser(BaseParser):
                 item[2] = 'away'
                 sorted_responses[i] = item
         start = sorted_responses[0][0]
-        end = sorted_responses[-1][0]
+        assert (sorted_responses[-1][1] == 0)  # last response must be trial end
+        end = sorted_responses[-1][0]  # are trial times inclusive or not?
         return sorted_responses, start, end
+
+    def get_trial_end_times(self, start, sorted_responses):
+        """
+        gets trial ending times, in a non-inclusive manner (the frames indicate where the trial is not acive anymore)
+        :param label_path: path to label file
+        :return:
+        """
+        trials_times = []
+        prev_frame = start
+        for response in sorted_responses:
+            if response[1] == 0:
+                trials_times.append([prev_frame, response[0]])  # are trial times inclusive or not?
+                prev_frame = response[0]
+        return trials_times

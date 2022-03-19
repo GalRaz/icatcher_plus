@@ -3,7 +3,6 @@ from pathlib import Path
 import pickle
 import itertools
 import csv
-import preprocess
 import logging
 from tqdm import tqdm
 import numpy as np
@@ -248,26 +247,21 @@ def compare_coding_files(human_coding_file, human_coding_file2, machine_coding_f
     :param args:
     :return:
     """
-    if args.machine_coding_format == "PrefLookTimestamp":
-        parser = parsers.PrefLookTimestampParser(30)
-    elif args.machine_coding_format == "princeton":
-        parser = parsers.PrincetonParser(30, start_time_file=Path(args.raw_dataset_folder, "start_times_visitA.csv"))
+    if args.machine_coding_format == "vcx":
+        parser = parsers.VCXParser(30, start_time_file=Path(args.raw_dataset_folder, "start_times_visitA.csv"))
     elif args.machine_coding_format == "compressed":
         parser = parsers.CompressedParser()
     machine, mstart, mend = parser.parse(machine_coding_file)
     trial_times = None
-    if args.human_coding_format == "PrefLookTimestamp":
-        parser = parsers.PrefLookTimestampParser(30)
-    elif args.human_coding_format == "princeton":
-        parser = parsers.PrincetonParser(30, start_time_file=Path(args.raw_dataset_folder, "start_times_visitA.csv"))
+    if args.human_coding_format == "vcx":
+        parser = parsers.VCXParser(30, start_time_file=Path(args.raw_dataset_folder, "start_times_visitA.csv"))
     elif args.human_coding_format == "lookit":
         parser = parsers.LookitParser(30)
-        labels = parser.load_and_sort(human_coding_file)
-        trial_times = parser.get_trial_end_times(labels)
-        trial_times.insert(0, 0)
-        trial_times = [[trial_times[i-1], trial_times[i]] for i, _ in enumerate(trial_times) if i > 0]
     human, start1, end1 = parser.parse(human_coding_file, file_is_fullpath=True)
     human2, start2, end2 = parser.parse(human_coding_file2, file_is_fullpath=True)
+    if args.human_coding_format == "lookit":
+        labels = parser.load_and_sort(human_coding_file)
+        trial_times = parser.get_trial_intervals(start1, labels)
     if end1 != end2:
         logging.warning("critical failure: humans don't agree on ending: {}".format(human_coding_file))
         return None

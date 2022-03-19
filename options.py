@@ -152,14 +152,14 @@ def parse_arguments_for_visualizations():
                         choices=["PrefLookTimestamp",
                                  "lookit",
                                  "compressed",
-                                 "princeton"])
+                                 "vcx"])
     parser.add_argument("--machine_coding_format",
                         type=str,
                         default="PrefLookTimestamp",
                         choices=["PrefLookTimestamp",
                                  "lookit",
                                  "compressed",
-                                 "princeton"])
+                                 "vcx"])
     parser.add_argument("--log", help="If present, writes log to this path")
     parser.add_argument("-v", "--verbosity", type=str, choices=["debug", "info", "warning"], default="info",
                         help="Selects verbosity level")
@@ -185,7 +185,7 @@ def parse_arguments_for_preprocess():
     parser = argparse.ArgumentParser()
     parser.add_argument("raw_dataset_path", type=str, help="path to raw dataset to preprocess")
     parser.add_argument("output_folder", type=str, help="path to put preprocessed dataset")
-    parser.add_argument("--raw_dataset_type", type=str, choices=["lookit", "princeton", "generic"], default="lookit",
+    parser.add_argument("--raw_dataset_type", type=str, choices=["lookit", "vcx", "generic"], default="lookit",
                         help="the type of dataset to preprocess")
     parser.add_argument("--fc_model", type=str, default="models/face_classifier_weights_best.pt", help="path to face classifier model if it was trained")
     parser.add_argument("--split_type", type=str, choices=["split0_train", "split0_test", "all"], default="split0_train")
