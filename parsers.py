@@ -303,71 +303,83 @@ class VCXParser(BaseParser):
             return None
         return self.xml_parse(label_path, video_id, True)
 
+    def parse_response_list(self, response_array):
+        response_index = response_array[0]
+        response_index = int(response_index.split()[-1])
+        frame = response_array[response_array.index("Frame") + 1]
+        hour = response_array[response_array.index("Hour") + 1]
+        minute = response_array[response_array.index("Minute") + 1]
+        second = response_array[response_array.index("Second") + 1]
+        status = response_array[response_array.index("Trial Status") + 1]
+        label = response_array[response_array.index("Type") + 1]
+        timestamp = int(frame) +\
+                    int(second) * self.fps +\
+                    int(minute) * 60 * self.fps +\
+                    int(hour) * 60 * 60 * self.fps
+        return [response_index, timestamp, int(status.lower() == "true"), label]
+
     def xml_parse(self, input_file, video_id, encode=False):
         tree = ET.parse(input_file)
         root = tree.getroot()
-        counter = 0
-        frames = {}
-        current_frame = ""
+        # find "Responses" child, and return the child right after it.
+        flag = False
         for child in root.iter('*'):
+            if flag:
+                responses_element = child
+                break
             if child.text is not None:
-                if 'Response ' in child.text:
-                    current_frame = child.text
-                    frames[current_frame] = []
-                    counter = 16
-                else:
-                    if counter > 0:
-                        counter -= 1
-                        frames[current_frame].append(child.text)
-            else:
-                if counter > 0:
-                    if child.tag == 'true':
-                        frames[current_frame].append(1)  # append 1 for true
-                    else:
-                        frames[current_frame].append(0)  # append 0 for false
+                if "Responses" == child.text:
+                    flag = True
+        # iterate over children, creating a response string
+        state = 0
         responses = []
-        for key, val in frames.items():
-            [num] = [int(s) for s in key.split() if s.isdigit()]
-            responses.append([num, val])
+        for child in responses_element:
+            if state == 0:  # new response
+                response_list = []
+                response_list.append(child.text)
+                state = 1
+            elif state == 1:  # inside a response
+                for gchild in child.iter("*"):
+                    if gchild.text is not None:
+                        response_list.append(gchild.text)
+                    else:
+                        response_list.append(gchild.tag)
+                responses.append(self.parse_response_list(response_list))
+                state = 0
+        # sort by response index
         sorted_responses = sorted(responses)
-        if encode:
-            encoded_responses = []
-            # response_hours = [int(x[1][6]) for x in sorted_responses]
-            # if not response_hours.count(response_hours[0]) == len(response_hours):
-            #     logging.warning("response")
-            for response in sorted_responses:
-                frame_number = int(response[1][4]) +\
-                               int(response[1][10]) * self.fps +\
-                               int(response[1][8]) * 60 * self.fps +\
-                               int(response[1][6]) * 60 * 60 * self.fps
-                if self.start_times:
-                    start_time = self.start_times[video_id]
-                    frame_number -= start_time
-                assert frame_number < 60 * 60 * self.fps
-                encoded_responses.append([frame_number, response[1][14], response[1][16]])
-            sorted_responses = encoded_responses
-        # replace offs with aways, they are equivalent
-        for i, item in enumerate(sorted_responses):
-            if item[2] == 'off' or item[2] == 'center':
-                item[2] = 'away'
-                sorted_responses[i] = item
-        start = sorted_responses[0][0]
-        intervals = self.get_trial_intervals(start, sorted_responses)
+        # assemble final response list as required by parser API
+        final_responses = []
+        cur_timestamp = -1
+        for response in sorted_responses:
+            timestamp = response[1]
+            assert timestamp > cur_timestamp
+            cur_timestamp = timestamp
+            status = response[2]
+            label = response[3]
+            if label == 'off' or label == 'center':
+                label = 'away'
+            if self.start_times:
+                start_time = self.start_times[video_id]
+                timestamp -= start_time
+            assert 0 <= timestamp < 60 * 60 * self.fps
+            final_responses.append([timestamp, status, label])
+        start = final_responses[0][0]
+        intervals = self.get_trial_intervals(start, final_responses)
         end = intervals[-1][1]
-        annotation_end = sorted_responses[-1][0]  # are trial times inclusive or not?
-        # assert (sorted_responses[-1][1] == 0)  # last response must be trial end
-        return sorted_responses, start, end
+        return final_responses, start, end
 
-    def get_trial_intervals(self, start, sorted_responses):
+    def get_trial_intervals(self, start, responses):
         """
-        gets trial ending times, in a non-inclusive manner (the frames indicate where the trial is not acive anymore)
+        gets trial ending times, in a non-inclusive manner
+         i.e. open ended interval [)
         :param label_path: path to label file
         :return:
         """
         trials_times = []
         prev_frame = start
-        for response in sorted_responses:
+        for response in responses:
             if response[1] == 0:
-                trials_times.append([prev_frame, response[0]])  # are trial times inclusive or not?
+                trials_times.append([prev_frame, response[0]])
                 prev_frame = response[0]
         return trials_times

@@ -518,7 +518,7 @@ def process_dataset_lowest_face(args, gaze_labels_only=False, force_create=False
                                           return_time_stamps=vfr)
         else:
             raise NotImplementedError
-        responses, _, end = parser.parse(video_file.stem)
+        responses, start, end = parser.parse(video_file.stem)
         ret_val, frame = cap.read()
         while ret_val:
             if responses:
@@ -527,7 +527,7 @@ def process_dataset_lowest_face(args, gaze_labels_only=False, force_create=False
                     frame_stamp = frame_info[frame_counter]
                 else:
                     frame_stamp = frame_counter
-                if responses[0][0] <= frame_stamp < end:  # only iterate on annotated frames
+                if start <= frame_stamp < end:  # only iterate on annotated frames
                     # find closest (previous) response this frame belongs to
                     q = [index for index, val in enumerate(responses) if frame_stamp >= val[0]]
                     response_index = max(q)
