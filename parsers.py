@@ -352,11 +352,13 @@ class VCXParser(BaseParser):
                 item[2] = 'away'
                 sorted_responses[i] = item
         start = sorted_responses[0][0]
-        assert (sorted_responses[-1][1] == 0)  # last response must be trial end
-        end = sorted_responses[-1][0]  # are trial times inclusive or not?
+        intervals = self.get_trial_intervals(start, sorted_responses)
+        end = intervals[-1][1]
+        annotation_end = sorted_responses[-1][0]  # are trial times inclusive or not?
+        # assert (sorted_responses[-1][1] == 0)  # last response must be trial end
         return sorted_responses, start, end
 
-    def get_trial_end_times(self, start, sorted_responses):
+    def get_trial_intervals(self, start, sorted_responses):
         """
         gets trial ending times, in a non-inclusive manner (the frames indicate where the trial is not acive anymore)
         :param label_path: path to label file

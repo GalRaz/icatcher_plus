@@ -1,3 +1,4 @@
+import os
 import shutil
 from pathlib import Path
 import cv2
@@ -244,8 +245,12 @@ def preprocess_raw_lookit_dataset(args, force_create=False):
         coding_file_path = video_file["first_coding_file"]
         assert video_file_path.is_file()
         assert coding_file_path.is_file()
-        shutil.copyfile(video_file_path, Path(args.video_folder / (video_file["video_id"] + video_file_path.suffix)))
-        shutil.copyfile(coding_file_path, Path(args.label_folder / (video_file["video_id"] + coding_file_path.suffix)))
+        src1 = video_file_path
+        dst1 = Path(args.video_folder / (video_file["video_id"] + video_file_path.suffix))
+        os.symlink(str(src1), str(dst1))
+        src2 = coding_file_path
+        dst2 = Path(args.label_folder / (video_file["video_id"] + coding_file_path.suffix))
+        os.symlink(str(src2), str(dst2))
 
     for video_file in val_set:
         video_file_path = video_file["video_path"]
@@ -253,9 +258,15 @@ def preprocess_raw_lookit_dataset(args, force_create=False):
         second_coding_file_path = video_file["second_coding_file"]
         assert video_file_path.is_file()
         assert coding_file_path.is_file()
-        shutil.copyfile(video_file_path, Path(args.video_folder / (video_file["video_id"] + video_file_path.suffix)))
-        shutil.copyfile(coding_file_path, Path(args.label_folder / (video_file["video_id"] + coding_file_path.suffix)))
-        shutil.copyfile(second_coding_file_path, Path(args.label2_folder / (video_file["video_id"] + second_coding_file_path.suffix)))
+        src1 = video_file_path
+        dst1 = Path(args.video_folder / (video_file["video_id"] + video_file_path.suffix))
+        os.symlink(str(src1), str(dst1))
+        src2 = coding_file_path
+        dst2 = Path(args.label_folder / (video_file["video_id"] + coding_file_path.suffix))
+        os.symlink(str(src2), str(dst2))
+        src3 = second_coding_file_path
+        dst3 = Path(args.label2_folder / (video_file["video_id"] + second_coding_file_path.suffix))
+        os.symlink(str(src3), str(dst3))
 
 
 def preprocess_raw_marchman_dataset(args, force_create=False):
@@ -353,8 +364,12 @@ def preprocess_raw_marchman_dataset(args, force_create=False):
         coding_file_path = video_file["first_coding_file"]
         assert video_file_path.is_file()
         assert coding_file_path.is_file()
-        shutil.copyfile(video_file_path, Path(args.video_folder / (video_file["video_id"] + video_file_path.suffix)))
-        shutil.copyfile(coding_file_path, Path(args.label_folder / (video_file["video_id"] + coding_file_path.suffix)))
+        src1 = video_file_path
+        dst1 = Path(args.video_folder / (video_file["video_id"] + video_file_path.suffix))
+        os.symlink(str(src1), str(dst1))
+        src2 = coding_file_path
+        dst2 = Path(args.label_folder / (video_file["video_id"] + coding_file_path.suffix))
+        os.symlink(str(src2), str(dst2))
 
     for video_file in val_set:
         video_file_path = video_file["video_path"]
@@ -362,10 +377,15 @@ def preprocess_raw_marchman_dataset(args, force_create=False):
         second_coding_file_path = video_file["second_coding_file"]
         assert video_file_path.is_file()
         assert coding_file_path.is_file()
-        shutil.copyfile(video_file_path, Path(args.video_folder / (video_file["video_id"] + video_file_path.suffix)))
-        shutil.copyfile(coding_file_path, Path(args.label_folder / (video_file["video_id"] + coding_file_path.suffix)))
-        shutil.copyfile(second_coding_file_path,
-                        Path(args.label2_folder / (video_file["video_id"] + second_coding_file_path.suffix)))
+        src1 = video_file_path
+        dst1 = Path(args.video_folder / (video_file["video_id"] + video_file_path.suffix))
+        os.symlink(str(src1), str(dst1))
+        src2 = coding_file_path
+        dst2 = Path(args.label_folder / (video_file["video_id"] + coding_file_path.suffix))
+        os.symlink(str(src2), str(dst2))
+        src3 = second_coding_file_path
+        dst3 = Path(args.label2_folder / (video_file["video_id"] + second_coding_file_path.suffix))
+        os.symlink(str(src3), str(dst3))
 
 
 def preprocess_raw_generic_dataset(args, force_create=False):
@@ -643,7 +663,7 @@ def generate_second_gaze_labels(args, force_create=False, visualize_confusion=Fa
                     frame_stamp = frame_info[frame]
                 else:
                     frame_stamp = frame
-                if responses[0][0] <= frame_stamp <= end:  # only iterate on annotated frames
+                if responses[0][0] <= frame_stamp < end:  # only iterate on annotated frames
                     q = [index for index, val in enumerate(responses) if frame_stamp >= val[0]]
                     response_index = max(q)
                     if responses[response_index][1]:
