@@ -348,7 +348,7 @@ class VCXParser(BaseParser):
             sorted_responses = encoded_responses
         # replace offs with aways, they are equivalent
         for i, item in enumerate(sorted_responses):
-            if item[2] == 'off':
+            if item[2] == 'off' or item[2] == 'center':
                 item[2] = 'away'
                 sorted_responses[i] = item
         start = sorted_responses[0][0]
