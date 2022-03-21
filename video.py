@@ -20,7 +20,7 @@ def get_fps(video_file_path):
 def is_video_vfr(video_file_path, get_meta_data=False):
     ENVBIN = Path(sys.exec_prefix, "bin", "ffmpeg")
     args = [str(ENVBIN)+" ",
-            "-i {}".format(str(video_file_path)),
+            "-i \"{}\"".format(str(video_file_path)),
             "-vf vfrdet",
             "-f null -"]
     p = subprocess.Popen(" ".join(args), stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
