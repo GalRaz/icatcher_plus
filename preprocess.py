@@ -163,10 +163,6 @@ def preprocess_raw_lookit_dataset(args, force_create=False):
     :return:
     """
     np.random.seed(seed=args.seed)  # seed the random generator
-    args.video_folder.mkdir(parents=True, exist_ok=True)
-    args.label_folder.mkdir(parents=True, exist_ok=True)
-    args.label2_folder.mkdir(parents=True, exist_ok=True)
-    args.faces_folder.mkdir(parents=True, exist_ok=True)
     tsv_file = Path(args.raw_dataset_path / "prephys_split0_videos.tsv")
     video_dataset = build_lookit_video_dataset(args.raw_dataset_path, tsv_file)
     # print some stats
@@ -237,36 +233,8 @@ def preprocess_raw_lookit_dataset(args, force_create=False):
     else:
         raise NotImplementedError
 
-    # create final structured dataset
     logging.info('[preprocess_raw] training set: {} validation set: {}'.format(len(train_set), len(val_set)))
-
-    for video_file in train_set:
-        video_file_path = video_file["video_path"]
-        coding_file_path = video_file["first_coding_file"]
-        assert video_file_path.is_file()
-        assert coding_file_path.is_file()
-        src1 = video_file_path
-        dst1 = Path(args.video_folder / (video_file["video_id"] + video_file_path.suffix))
-        os.symlink(str(src1), str(dst1))
-        src2 = coding_file_path
-        dst2 = Path(args.label_folder / (video_file["video_id"] + coding_file_path.suffix))
-        os.symlink(str(src2), str(dst2))
-
-    for video_file in val_set:
-        video_file_path = video_file["video_path"]
-        coding_file_path = video_file["first_coding_file"]
-        second_coding_file_path = video_file["second_coding_file"]
-        assert video_file_path.is_file()
-        assert coding_file_path.is_file()
-        src1 = video_file_path
-        dst1 = Path(args.video_folder / (video_file["video_id"] + video_file_path.suffix))
-        os.symlink(str(src1), str(dst1))
-        src2 = coding_file_path
-        dst2 = Path(args.label_folder / (video_file["video_id"] + coding_file_path.suffix))
-        os.symlink(str(src2), str(dst2))
-        src3 = second_coding_file_path
-        dst3 = Path(args.label2_folder / (video_file["video_id"] + second_coding_file_path.suffix))
-        os.symlink(str(src3), str(dst3))
+    create_symbolic_links(train_set, val_set, args)
 
 
 def preprocess_raw_marchman_dataset(args, force_create=False):
@@ -278,11 +246,6 @@ def preprocess_raw_marchman_dataset(args, force_create=False):
     :param force_create: forces creation of files even if they exist
     :return:
     """
-    args.video_folder.mkdir(parents=True, exist_ok=True)
-    args.label_folder.mkdir(parents=True, exist_ok=True)
-    args.label2_folder.mkdir(parents=True, exist_ok=True)
-    args.faces_folder.mkdir(parents=True, exist_ok=True)
-
     csv_file = Path(args.raw_dataset_path / "Cal_BW_March_split0_participants.csv")
     video_dataset = build_marchman_video_dataset(args.raw_dataset_path, csv_file)
 
@@ -356,9 +319,12 @@ def preprocess_raw_marchman_dataset(args, force_create=False):
     else:
         raise NotImplementedError
 
-    # create final structured dataset
+    # create final output (symbolic links to original raw folder)
     logging.info('[preprocess_raw] training set: {} validation set: {}'.format(len(train_set), len(val_set)))
+    create_symbolic_links(train_set, val_set, args)
 
+
+def create_symbolic_links(train_set, val_set, args):
     for video_file in train_set:
         video_file_path = video_file["video_path"]
         coding_file_path = video_file["first_coding_file"]
@@ -368,9 +334,14 @@ def preprocess_raw_marchman_dataset(args, force_create=False):
         dst1 = Path(args.video_folder / (video_file["video_id"] + video_file_path.suffix))
         os.symlink(str(src1), str(dst1))
         src2 = coding_file_path
-        dst2 = Path(args.label_folder / (video_file["video_id"] + coding_file_path.suffix))
+        dst2 = Path(args.train_coding1_folder / (video_file["video_id"] + coding_file_path.suffix))
         os.symlink(str(src2), str(dst2))
-
+        if video_file["second_coding_file"]:
+            second_coding_file_path = video_file["second_coding_file"]
+            assert second_coding_file_path.is_file()
+            src3 = second_coding_file_path
+            dst3 = Path(args.train_coding2_folder / (video_file["video_id"] + second_coding_file_path.suffix))
+            os.symlink(str(src3), str(dst3))
     for video_file in val_set:
         video_file_path = video_file["video_path"]
         coding_file_path = video_file["first_coding_file"]
@@ -381,50 +352,11 @@ def preprocess_raw_marchman_dataset(args, force_create=False):
         dst1 = Path(args.video_folder / (video_file["video_id"] + video_file_path.suffix))
         os.symlink(str(src1), str(dst1))
         src2 = coding_file_path
-        dst2 = Path(args.label_folder / (video_file["video_id"] + coding_file_path.suffix))
+        dst2 = Path(args.val_coding1_folder / (video_file["video_id"] + coding_file_path.suffix))
         os.symlink(str(src2), str(dst2))
         src3 = second_coding_file_path
-        dst3 = Path(args.label2_folder / (video_file["video_id"] + second_coding_file_path.suffix))
+        dst3 = Path(args.val_coding2_folder / (video_file["video_id"] + second_coding_file_path.suffix))
         os.symlink(str(src3), str(dst3))
-
-
-def preprocess_raw_generic_dataset(args, force_create=False):
-    args.video_folder.mkdir(parents=True, exist_ok=True)
-    args.label_folder.mkdir(parents=True, exist_ok=True)
-    args.label2_folder.mkdir(parents=True, exist_ok=True)
-    args.faces_folder.mkdir(parents=True, exist_ok=True)
-
-    raw_videos_path = Path(args.raw_dataset_path / 'videos')
-    raw_coding_first_path = Path(args.raw_dataset_path / 'coding_first')
-    raw_coding_second_path = Path(args.raw_dataset_path / 'coding_second')
-
-    videos = [f.stem for f in raw_videos_path.glob("*.mp4")]
-    coding_first = ["_".join(f.stem.split("_")[:-1]) for f in raw_coding_first_path.glob("*")]
-    coding_second = ["_".join(f.stem.split("_")[:-1]) for f in raw_coding_second_path.glob("*")]
-    coding_ext = next(raw_coding_first_path.glob("*")).suffix
-
-    logging.info('[preprocess_raw] coding_first: {}'.format(len(coding_first)))
-    logging.info('[preprocess_raw] coding_second: {}'.format(len(coding_second)))
-    logging.info('[preprocess_raw] videos: {}'.format(len(videos)))
-
-    training_set = set(videos).intersection(set(coding_first))
-    test_set = set(videos).intersection(set(coding_first)).intersection(set(coding_second))
-    for i, file in enumerate(sorted(list(training_set))):
-        if not Path(args.video_folder, (file + '.mp4')).is_file() or force_create:
-            shutil.copyfile(raw_videos_path / (file + '.mp4'), args.video_folder / (file + '.mp4'))
-        if not Path(args.label_folder, (file + coding_ext)).is_file() or force_create:
-            real_file = next(raw_coding_first_path.glob(file+"*"))
-            shutil.copyfile(real_file, args.label_folder / (file + coding_ext))
-
-    for i, file in enumerate(sorted(list(test_set))):
-        if not Path(args.video_folder, (file + '.mp4')).is_file() or force_create:
-            shutil.copyfile(raw_videos_path / (file + '.mp4'), args.video_folder / (file + '.mp4'))
-        if not Path(args.label_folder, (file + coding_ext)).is_file() or force_create:
-            real_file = next(raw_coding_first_path.glob(file + "*"))
-            shutil.copyfile(real_file, args.label_folder / (file + coding_ext))
-        if not Path(args.label2_folder, (file + coding_ext)).is_file() or force_create:
-            real_file = next(raw_coding_second_path.glob(file + "*"))
-            shutil.copyfile(real_file, args.label2_folder / (file + coding_ext))
 
 
 def detect_face_opencv_dnn(net, frame, conf_threshold):
@@ -504,20 +436,15 @@ def process_dataset_lowest_face(args, gaze_labels_only=False, force_create=False
             parser = parsers.VCXParser(30,
                                        csv_file,
                                        first_coder=True)
-        elif args.raw_dataset_type == "generic":
-            ext = next(Path(args.label_folder).glob("*")).suffix
-            parser = parsers.PrefLookTimestampParser(fps=fps,
-                                                     labels_folder=args.label_folder,
-                                                     ext=ext,
-                                                     return_time_stamps=vfr)
         elif args.raw_dataset_type == "lookit":
-            ext = next(Path(args.label_folder).glob("*")).suffix
-            parser = parsers.LookitParser(fps=fps,
-                                          labels_folder=args.label_folder,
-                                          ext=ext,
+            tsv_file = Path(args.raw_dataset_path / "prephys_split0_videos.tsv")
+            parser = parsers.LookitParser(fps,
+                                          tsv_file,
+                                          first_coder=True,
                                           return_time_stamps=vfr)
         else:
             raise NotImplementedError
+
         responses, start, end = parser.parse(video_file.stem)
         ret_val, frame = cap.read()
         while ret_val:
@@ -627,35 +554,42 @@ def generate_second_gaze_labels(args, force_create=False, visualize_confusion=Fa
     """
     classes = {"away": 0, "left": 1, "right": 2}
     video_list = list(args.video_folder.glob("*"))
-    suffix = next(Path(args.label_folder).glob("*")).suffix
-    for video_file in video_list:
+    suffix = next(Path(args.train_coding1_folder).glob("*")).suffix
+    for video_file in video_list[51:]:
         logging.info("[gen_2nd_labels] Video: %s" % video_file.name)
-        if (args.label2_folder / (video_file.stem + suffix)).exists():
-            fps = video.get_fps(video_file)
-            vfr, meta_data = video.is_video_vfr(video_file, get_meta_data=True)
-            if vfr:
-                logging.warning("video file: {} has variable frame rate".format(str(video_file)))
-                logging.info(str(meta_data))
-                frame_info, vfr_frame_counter, _ = video.get_frame_information(video_file)
+        fps = video.get_fps(video_file)
+        vfr, meta_data = video.is_video_vfr(video_file, get_meta_data=True)
+        if vfr:
+            logging.warning("video file: {} has variable frame rate".format(str(video_file)))
+            logging.info(str(meta_data))
+            frame_info, vfr_frame_counter, _ = video.get_frame_information(video_file)
+
+        if not (args.train_coding1_folder / (video_file.stem + suffix)).exists() and \
+                not (args.train_coding2_folder / (video_file.stem + suffix)).exists() and \
+                not (args.val_coding1_folder / (video_file.stem + suffix)).exists() and \
+                not (args.val_coding2_folder / (video_file.stem + suffix)).exists():
+            logging.info('[gen_2nd_labels] No label!')
+            continue
+        else:
             if args.raw_dataset_type == "vcx":
                 csv_file = Path(args.raw_dataset_path / "Cal_BW_March_split0_participants.csv")
                 assert abs(fps - 30) < 0.1
                 parser = parsers.VCXParser(30,
                                            csv_file,
                                            first_coder=False)
-            elif args.raw_dataset_type == "generic":
-                parser = parsers.PrefLookTimestampParser(fps=fps,
-                                                         labels_folder=args.label2_folder,
-                                                         ext=suffix,
-                                                         return_time_stamps=vfr)
             elif args.raw_dataset_type == "lookit":
-                parser = parsers.LookitParser(fps=fps,
-                                              labels_folder=args.label2_folder,
-                                              ext=suffix,
+                tsv_file = Path(args.raw_dataset_path / "prephys_split0_videos.tsv")
+                parser = parsers.LookitParser(fps,
+                                              tsv_file,
+                                              first_coder=False,
                                               return_time_stamps=vfr)
             else:
                 raise NotImplementedError
-            responses, _, end = parser.parse(video_file.stem)
+            try:
+                responses, start, end = parser.parse(video_file.stem)
+            except IndexError:
+                logging.info('[gen_2nd_labels] Failed to parse!')
+                continue
             gaze_labels = np.load(str(Path.joinpath(args.faces_folder, video_file.stem, 'gaze_labels.npy')))
             gaze_labels_second = []
             for frame in range(gaze_labels.shape[0]):
@@ -663,7 +597,7 @@ def generate_second_gaze_labels(args, force_create=False, visualize_confusion=Fa
                     frame_stamp = frame_info[frame]
                 else:
                     frame_stamp = frame
-                if responses[0][0] <= frame_stamp < end:  # only iterate on annotated frames
+                if start <= frame_stamp < end:  # only iterate on annotated frames
                     q = [index for index, val in enumerate(responses) if frame_stamp >= val[0]]
                     response_index = max(q)
                     if responses[response_index][1]:
@@ -678,30 +612,28 @@ def generate_second_gaze_labels(args, force_create=False, visualize_confusion=Fa
             gaze_labels_second_filename = Path.joinpath(args.faces_folder, video_file.stem, 'gaze_labels_second.npy')
             if not gaze_labels_second_filename.is_file() or force_create:
                 np.save(str(gaze_labels_second_filename), gaze_labels_second)
-        else:
-            logging.info('[gen_2nd_labels] No label!')
     if visualize_confusion:
         visualize_human_confusion_matrix(Path(args.output_folder, "confusion.pdf"))
 
 
 def visualize_human_confusion_matrix(path):
     """
-    wrapper for calculating and visualizing confusion matrix with human annotations
+    wrapper for calculating and visualizing confusion matrix with human annotations in the validation set
     :return:
     """
     labels = []
     preds = []
     video_list = list(args.video_folder.glob("*"))
+    val_video_list = [x.stem for x in list(args.val_coding1_folder.glob("*"))]
     for video_file in video_list:
-        gaze_labels_second_filename = Path.joinpath(args.faces_folder, video_file.stem, 'gaze_labels_second.npy')
-        if gaze_labels_second_filename.is_file():
-            gaze_labels = np.load(str(Path.joinpath(args.faces_folder, video_file.stem, 'gaze_labels.npy')))
-            gaze_labels_second = np.load(str(gaze_labels_second_filename))
-            idxs = np.where((gaze_labels >= 0) & (gaze_labels_second >= 0))
-            labels.extend(list(gaze_labels[idxs]))
-            preds.extend(list(gaze_labels_second[idxs]))
-    # human_dir = Path('plots', 'human')
-    # human_dir.mkdir(exist_ok=True, parents=True)
+        if video_file.stem in val_video_list:
+            gaze_labels_second_filename = Path.joinpath(args.faces_folder, video_file.stem, 'gaze_labels_second.npy')
+            if gaze_labels_second_filename.is_file():
+                gaze_labels = np.load(str(Path.joinpath(args.faces_folder, video_file.stem, 'gaze_labels.npy')))
+                gaze_labels_second = np.load(str(gaze_labels_second_filename))
+                idxs = np.where((gaze_labels >= 0) & (gaze_labels_second >= 0))
+                labels.extend(list(gaze_labels[idxs]))
+                preds.extend(list(gaze_labels_second[idxs]))
     _, _, _ = visualize.calculate_confusion_matrix(labels, preds, path)
 
 
@@ -749,8 +681,8 @@ def gen_lookit_multi_face_subset(force_create=False):
                         dst_box_file = (dst_folder / 'box' / f'{name}_{face}.npy')
                         if not dst_box_file.is_file() or force_create:
                             shutil.copy((src_folder / 'box' / (face + '.npy')), dst_box_file)
-                # if num_datapoint >= 1000:
-                #     break
+                if num_datapoint >= 1000:
+                    break
         logging.info('# multi-face datapoint:{}'.format(num_datapoint))
     logging.info('total # multi-face datapoint:{}'.format(total_datapoint))
     logging.info(face_hist)
@@ -763,22 +695,7 @@ def process_dataset_face_classifier(args, force_create=False):
     :param force_create: forces creation of files even if they exist
     :return:
     """
-
-    ## todo: remove test code from here
-    # val_infant_files = [f.stem for f in (face_data_folder / 'val' / 'infant').glob('*.png')]
-    # val_others_files = [f.stem for f in (face_data_folder / 'val' / 'others').glob('*.png')]
-    # num_correct = 0
-    # total = len(val_infant_files) + len(val_others_files)
-    # for f in val_infant_files:
-    #     if f[-1] == f[-3]:
-    #         num_correct += 1
-    # for f in val_others_files:
-    #     if f[-1] != f[-3]:
-    #         num_correct += 1
-    # logging.info("\n[process_lkt] {}, {}, {}".format(num_correct, total, num_correct / total))
-
     # emulate command line arguments
-    # replace with what was used to train the face classifier!
     class Args:
         def __init__(self):
             self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
@@ -850,19 +767,69 @@ def report_dataset_stats(args):
     prints out a list of training and test videos according to the heuristic that doubly coded videos are test set.
     :return:
     """
-    all_videos = []
+    train_videos = []
     test_videos = []
     raw_videos = []
-    for path in sorted(args.label_folder.glob("*")):
-        all_videos.append(path.name)
-    for path in sorted(args.label2_folder.glob("*")):
+    for path in sorted(args.train_coding1_folder.glob("*")):
+        train_videos.append(path.name)
+    for path in sorted(args.val_coding1_folder.glob("*")):
         test_videos.append(path.name)
     for path in sorted(args.video_folder.glob("*")):
         raw_videos.append(path)
-    train_videos = [x for x in all_videos if x not in test_videos]
     logging.info("train videos: [{0}]".format(', '.join(map(str, train_videos))))
     logging.info("test videos: [{0}]".format(', '.join(map(str, test_videos))))
     visualize_human_confusion_matrix(Path(args.output_folder, "confusion.pdf"))
+
+
+def preprocess_raw_generic_dataset(args, force_create=False):
+    """
+    deprecated
+    :param args:
+    :param force_create:
+    :return:
+    """
+    args.video_folder.mkdir(parents=True, exist_ok=True)
+    args.label_folder.mkdir(parents=True, exist_ok=True)
+    args.label2_folder.mkdir(parents=True, exist_ok=True)
+    args.faces_folder.mkdir(parents=True, exist_ok=True)
+
+    raw_videos_path = Path(args.raw_dataset_path / 'videos')
+    raw_coding_first_path = Path(args.raw_dataset_path / 'coding_first')
+    raw_coding_second_path = Path(args.raw_dataset_path / 'coding_second')
+
+    # quick hack to deal with spaces in name of files
+    import os
+    for f in raw_coding_first_path.glob("*"):
+        os.rename(str(f), str(Path(f.parent, f.name.strip())))
+    # end quick hack
+
+    videos = [f.stem for f in raw_videos_path.glob("*.mp4")]
+    coding_first = ["_".join(f.stem.split("_")[:-1]) for f in raw_coding_first_path.glob("*")]
+    coding_second = ["_".join(f.stem.split("_")[:-1]) for f in raw_coding_second_path.glob("*")]
+    coding_ext = next(raw_coding_first_path.glob("*")).suffix
+
+    logging.info('[preprocess_raw] coding_first: {}'.format(len(coding_first)))
+    logging.info('[preprocess_raw] coding_second: {}'.format(len(coding_second)))
+    logging.info('[preprocess_raw] videos: {}'.format(len(videos)))
+
+    training_set = set(videos).intersection(set(coding_first))
+    test_set = set(videos).intersection(set(coding_first)).intersection(set(coding_second))
+    for i, file in enumerate(sorted(list(training_set))):
+        if not Path(args.video_folder, (file + '.mp4')).is_file() or force_create:
+            shutil.copyfile(raw_videos_path / (file + '.mp4'), args.video_folder / (file + '.mp4'))
+        if not Path(args.label_folder, (file + coding_ext)).is_file() or force_create:
+            real_file = next(raw_coding_first_path.glob(file+"*"))
+            shutil.copyfile(real_file, args.label_folder / (file + coding_ext))
+
+    for i, file in enumerate(sorted(list(test_set))):
+        if not Path(args.video_folder, (file + '.mp4')).is_file() or force_create:
+            shutil.copyfile(raw_videos_path / (file + '.mp4'), args.video_folder / (file + '.mp4'))
+        if not Path(args.label_folder, (file + coding_ext)).is_file() or force_create:
+            real_file = next(raw_coding_first_path.glob(file + "*"))
+            shutil.copyfile(real_file, args.label_folder / (file + coding_ext))
+        if not Path(args.label2_folder, (file + coding_ext)).is_file() or force_create:
+            real_file = next(raw_coding_second_path.glob(file + "*"))
+            shutil.copyfile(real_file, args.label2_folder / (file + coding_ext))
 
 
 if __name__ == "__main__":
@@ -885,6 +852,6 @@ if __name__ == "__main__":
     process_dataset_lowest_face(args, gaze_labels_only=False, force_create=False)
     generate_second_gaze_labels(args, force_create=False, visualize_confusion=False)
     report_dataset_stats(args)
-    # gen_lookit_multi_face_subset(force_create=False)
-    # uncomment next line if face classifier was trained:
-    process_dataset_face_classifier(args, force_create=False)
+    # gen_lookit_multi_face_subset(force_create=False)  # creates training set for face classifier
+    if args.fc_model:
+        process_dataset_face_classifier(args, force_create=False)

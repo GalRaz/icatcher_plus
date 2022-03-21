@@ -16,10 +16,12 @@ def parse_arguments_for_training():
     parser.add_argument("--number_of_classes", type=int, default=3, help="number of classes to predict")
     parser.add_argument("--batch_size", type=int, default=16, help="Batch size to train with")
     parser.add_argument("--image_size", type=int, default=100, help="All images will be resized to this size")
-    parser.add_argument("--frames_per_datapoint", type=int, default=10, help="Number of frames in each datapoint")
-    parser.add_argument("--frames_stride_size", type=int, default=2, help="Stride between frames")
+    parser.add_argument("--frames_per_datapoint", type=int, default=10, help="Number of frames in rolling window of each datapoint")
+    parser.add_argument("--frames_stride_size", type=int, default=2, help="Stride between frames in rolling window")
     parser.add_argument("--eliminate_transitions", action="store_true",
                         help="If true, does not use frames where transitions occur (train only!)")
+    parser.add_argument("--use_only_mutually_agreed", action="store_true",
+                        help="use only datapoints where coders mutually agreed on label. note: requires all dataset to be doubly coded")
     parser.add_argument("--architecture", type=str, choices=["fc", "icatcher_vanilla", "icatcher+", "rnn"],
                         default="icatcher+",
                         help="Selects architecture to use")
@@ -148,18 +150,18 @@ def parse_arguments_for_visualizations():
     parser.add_argument("machine_codings_folder", type=str, help="the codings from machine")
     parser.add_argument("--human_coding_format",
                         type=str,
-                        default="PrefLookTimestamp",
-                        choices=["PrefLookTimestamp",
-                                 "lookit",
+                        default="lookit",
+                        choices=["lookit",
                                  "compressed",
-                                 "vcx"])
+                                 "vcx",
+                                 "PrefLookTimestamp"])
     parser.add_argument("--machine_coding_format",
                         type=str,
-                        default="PrefLookTimestamp",
-                        choices=["PrefLookTimestamp",
-                                 "lookit",
+                        default="lookit",
+                        choices=["lookit",
                                  "compressed",
-                                 "vcx"])
+                                 "vcx",
+                                 "PrefLookTimestamp"])
     parser.add_argument("--log", help="If present, writes log to this path")
     parser.add_argument("-v", "--verbosity", type=str, choices=["debug", "info", "warning"], default="info",
                         help="Selects verbosity level")
@@ -207,8 +209,20 @@ def parse_arguments_for_preprocess():
     args.output_folder.mkdir(parents=True, exist_ok=True)
     args.video_folder = args.output_folder / "raw_videos"
     args.faces_folder = args.output_folder / "faces"
-    args.label_folder = args.output_folder / "coding_first"
-    args.label2_folder = args.output_folder / "coding_second"
+    # args.label_folder = args.output_folder / "coding_first"
+    # args.label2_folder = args.output_folder / "coding_second"
+    args.train_folder = args.output_folder / "train"
+    args.val_folder = args.output_folder / "validation"
+    args.train_coding1_folder = args.train_folder / "coding_first"
+    args.train_coding2_folder = args.train_folder / "coding_second"
+    args.val_coding1_folder = args.val_folder / "coding_first"
+    args.val_coding2_folder = args.val_folder / "coding_second"
+    args.video_folder.mkdir(parents=True, exist_ok=True)
+    args.train_coding1_folder.mkdir(parents=True, exist_ok=True)
+    args.train_coding2_folder.mkdir(parents=True, exist_ok=True)
+    args.val_coding1_folder.mkdir(parents=True, exist_ok=True)
+    args.val_coding2_folder.mkdir(parents=True, exist_ok=True)
+    args.faces_folder.mkdir(parents=True, exist_ok=True)
     args.multi_face_folder = args.output_folder / "multi_face"
     args.face_data_folder = args.output_folder / "infant_vs_others"
     args.fc_model = Path(args.fc_model)

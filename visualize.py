@@ -248,17 +248,20 @@ def compare_coding_files(human_coding_file, human_coding_file2, machine_coding_f
     :return:
     """
     if args.machine_coding_format == "vcx":
-        parser = parsers.VCXParser(30, start_time_file=Path(args.raw_dataset_folder, "start_times_visitA.csv"))
+        csv_file = Path(args.raw_dataset_folder / "Cal_BW_March_split0_participants.csv")
+        parser = parsers.VCXParser(30, csv_file)
     elif args.machine_coding_format == "compressed":
         parser = parsers.CompressedParser()
-    machine, mstart, mend = parser.parse(machine_coding_file)
+    machine, mstart, mend = parser.parse(machine_coding_file.stem, machine_coding_file)
     trial_times = None
     if args.human_coding_format == "vcx":
-        parser = parsers.VCXParser(30, start_time_file=Path(args.raw_dataset_folder, "start_times_visitA.csv"))
+        csv_file = Path(args.raw_dataset_folder / "Cal_BW_March_split0_participants.csv")
+        parser = parsers.VCXParser(30, csv_file)
     elif args.human_coding_format == "lookit":
-        parser = parsers.LookitParser(30)
-    human, start1, end1 = parser.parse(human_coding_file, file_is_fullpath=True)
-    human2, start2, end2 = parser.parse(human_coding_file2, file_is_fullpath=True)
+        tsv_file = Path(args.raw_dataset_folder / "prephys_split0_videos.tsv")
+        parser = parsers.LookitParser(30, tsv_file)
+    human, start1, end1 = parser.parse(human_coding_file.stem, human_coding_file)
+    human2, start2, end2 = parser.parse(human_coding_file2.stem, human_coding_file2)
     if args.human_coding_format == "lookit":
         labels = parser.load_and_sort(human_coding_file)
         trial_times = parser.get_trial_intervals(start1, labels)

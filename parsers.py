@@ -10,7 +10,7 @@ class BaseParser:
     def __init__(self):
         self.classes = {'away': 0, 'left': 1, 'right': 2}
 
-    def parse(self, file):
+    def parse(self, video_id, label_path):
         """
         returns a list of lists. each list contains the frame number (or timestamps), valid_flag, class
         where:
@@ -22,7 +22,8 @@ class BaseParser:
         i.e. if the video is labeled ["away","away","away","right","right"]
         then only frame 0 and frame 3 will appear on the output list.
 
-        :param file: the label file to parse.
+        :param video_id: the id of the video that label_path belongs to.
+        :param label_path: the label file to parse.
         :return: None if failed, else: list of lists as described above, the frame which codings starts, and frame at which it ends
         """
         raise NotImplementedError
@@ -64,8 +65,8 @@ class TrivialParser(BaseParser):
     def __init__(self):
         super().__init__()
 
-    def parse(self, file):
-        if file:
+    def parse(self, video_id, label_path=None):
+        if label_path:
             return [[0, 1, "left"]], 0, 10
         else:
             return None
@@ -78,8 +79,8 @@ class CompressedParser(BaseParser):
     def __init__(self):
         super().__init__()
 
-    def parse(self, file):
-        data = np.load(file)
+    def parse(self, video_id, label_path=None):
+        data = np.load(label_path)
         data = data["arr_0"]
         data[:4] = -3  # mark first frames as invalid
         data[-4:] = -3  # mark last frames as invalid
@@ -90,32 +91,31 @@ class LookitParser(BaseParser):
     """
     a parser that parses Lookit format, a slightly different version of PrefLookTimestampParser.
     """
-    def __init__(self, fps, labels_folder=None, ext=None, return_time_stamps=False):
+    def __init__(self, fps, tsv_file, first_coder=True, return_time_stamps=False):
         super().__init__()
         self.fps = fps
         self.return_time_stamps = return_time_stamps
-        if ext:
-            self.ext = ext
-        if labels_folder:
-            self.labels_folder = Path(labels_folder)
+        self.video_dataset = preprocess.build_lookit_video_dataset(tsv_file.parent, tsv_file)
+        self.first_coder = first_coder
         self.classes = ["away", "left", "right"]
         self.exclude = ["outofframe", "preview", "instructions"]
         self.special = ["codingactive"]
 
-    def load_and_sort(self, label_path):
-        # load label file
-        labels = np.genfromtxt(open(label_path, "rb"), dtype='str', delimiter=",", skip_header=3)
-        # sort by time
-        times = labels[:, 0].astype(np.int)
-        sorting_indices = np.argsort(times)
-        sorted_labels = labels[sorting_indices]
-        return sorted_labels
-
-    def parse(self, file, file_is_fullpath=False):
-        if file_is_fullpath:
-            label_path = Path(file)
-        else:
-            label_path = Path(self.labels_folder, file + self.ext)
+    def parse(self, video_id, label_path=None):
+        """
+        parse a coding file, see base class for output format
+        :param video_id: video_id of video
+        :param label_path: if provided, will parse this file instead
+        :return: see base class
+        """
+        if not label_path:
+            if self.first_coder:
+                label_path = self.video_dataset[video_id]["first_coding_file"]
+            else:
+                label_path = self.video_dataset[video_id]["second_coding_file"]
+            if not label_path.is_file():
+                logging.warning("For the file: " + str(label_path) + " no matching vcx was found.")
+                return None
         labels = self.load_and_sort(label_path)
         # initialize
         output = []
@@ -166,6 +166,15 @@ class LookitParser(BaseParser):
         last_trial_end = trial_times[-1][1]
         annotations_end = int(output[-1][0])
         return output, start, last_trial_end
+
+    def load_and_sort(self, label_path):
+        # load label file
+        labels = np.genfromtxt(open(label_path, "rb"), dtype='str', delimiter=",", skip_header=3)
+        # sort by time
+        times = labels[:, 0].astype(np.int)
+        sorting_indices = np.argsort(times)
+        sorted_labels = labels[sorting_indices]
+        return sorted_labels
 
     def find_exclude_regions(self, sorted_labels):
         regions = []
@@ -287,41 +296,24 @@ class VCXParser(BaseParser):
                 start_times[entry["video_id"]] = timestamp
         return start_times
 
-    def parse(self, video_id):
+    def parse(self, video_id, label_path=None):
         """
         parse a coding file, see base class for output format
-        :param file: coding file to parse
-        :param file_is_fullpath: if true, the file is a full path with extension, else uses values from initialization
-        :return:
+        :param video_id: video_id of video
+        :param label_path: if provided, will parse this file instead
+        :return: see base class
         """
-        if self.first_coder:
-            label_path = self.video_dataset[video_id]["first_coding_file"]
-        else:
-            label_path = self.video_dataset[video_id]["second_coding_file"]
-        if not label_path.is_file():
-            logging.warning("For the file: " + str(label_path) + " no matching vcx was found.")
-            return None
-        return self.xml_parse(label_path, video_id, True)
+        if not label_path:
+            if self.first_coder:
+                label_path = self.video_dataset[video_id]["first_coding_file"]
+            else:
+                label_path = self.video_dataset[video_id]["second_coding_file"]
+            if not label_path.is_file():
+                logging.warning("For the file: " + str(label_path) + " no matching vcx was found.")
+                return None
+        return self.xml_parse(video_id, label_path)
 
-    def parse_response_list(self, response_array):
-        response_index = response_array[0]
-        response_index = int(response_index.split()[-1])
-        frame = response_array[response_array.index("Frame") + 1]
-        hour = response_array[response_array.index("Hour") + 1]
-        minute = response_array[response_array.index("Minute") + 1]
-        second = response_array[response_array.index("Second") + 1]
-        try:
-            status = response_array[response_array.index("Trial Status") + 1]
-        except ValueError:
-            status = response_array[response_array.index("Slide") + 1]
-        label = response_array[response_array.index("Type") + 1]
-        timestamp = int(frame) +\
-                    int(second) * self.fps +\
-                    int(minute) * 60 * self.fps +\
-                    int(hour) * 60 * 60 * self.fps
-        return [response_index, timestamp, int(status.lower() == "true"), label]
-
-    def xml_parse(self, input_file, video_id, encode=False):
+    def xml_parse(self, video_id, input_file):
         tree = ET.parse(input_file)
         root = tree.getroot()
         # find "Responses" child, and return the child right after it.
@@ -371,6 +363,24 @@ class VCXParser(BaseParser):
         intervals = self.get_trial_intervals(start, final_responses)
         end = intervals[-1][1]
         return final_responses, start, end
+
+    def parse_response_list(self, response_array):
+        response_index = response_array[0]
+        response_index = int(response_index.split()[-1])
+        frame = response_array[response_array.index("Frame") + 1]
+        hour = response_array[response_array.index("Hour") + 1]
+        minute = response_array[response_array.index("Minute") + 1]
+        second = response_array[response_array.index("Second") + 1]
+        try:
+            status = response_array[response_array.index("Trial Status") + 1]
+        except ValueError:
+            status = response_array[response_array.index("Slide") + 1]
+        label = response_array[response_array.index("Type") + 1]
+        timestamp = int(frame) +\
+                    int(second) * self.fps +\
+                    int(minute) * 60 * self.fps +\
+                    int(hour) * 60 * 60 * self.fps
+        return [response_index, timestamp, int(status.lower() == "true"), label]
 
     def get_trial_intervals(self, start, responses):
         """
