@@ -310,7 +310,10 @@ class VCXParser(BaseParser):
         hour = response_array[response_array.index("Hour") + 1]
         minute = response_array[response_array.index("Minute") + 1]
         second = response_array[response_array.index("Second") + 1]
-        status = response_array[response_array.index("Trial Status") + 1]
+        try:
+            status = response_array[response_array.index("Trial Status") + 1]
+        except ValueError:
+            status = response_array[response_array.index("Slide") + 1]
         label = response_array[response_array.index("Type") + 1]
         timestamp = int(frame) +\
                     int(second) * self.fps +\
