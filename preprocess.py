@@ -91,7 +91,7 @@ def build_marchman_video_dataset(raw_dataset_path, csv_location):
             if entry["second_coding_file"].is_file():
                 entry["has_2coding"] = True
         if entry["has_2coding"]:  # just a small sanity check
-            assert entry["has_1coding"]
+            assert entry["has_1coding"], entry["video_id"]
     return video_dataset
 
 
@@ -555,7 +555,7 @@ def generate_second_gaze_labels(args, force_create=False, visualize_confusion=Fa
     classes = {"away": 0, "left": 1, "right": 2}
     video_list = list(args.video_folder.glob("*"))
     suffix = next(Path(args.train_coding1_folder).glob("*")).suffix
-    for video_file in video_list[51:]:
+    for video_file in video_list:
         logging.info("[gen_2nd_labels] Video: %s" % video_file.name)
         fps = video.get_fps(video_file)
         vfr, meta_data = video.is_video_vfr(video_file, get_meta_data=True)

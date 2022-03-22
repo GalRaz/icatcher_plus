@@ -136,7 +136,7 @@ class FullyConnected(torch.nn.Module):
     def __init__(self, args):
         self.network = torch.nn.ModuleList([
             torch.nn.Flatten(),
-            torch.nn.Linear((args.image_size**2)*3*args.frames_per_datapoint, 128),
+            torch.nn.Linear((args.image_size**2)*3*args.sliding_window_size, 128),
             torch.nn.ReLU(),
             torch.nn.Linear(128, 64),
             torch.nn.ReLU(),
@@ -197,7 +197,7 @@ class GazeCodingModel(torch.nn.Module):
     def __init__(self, args, add_box=True):
         super().__init__()
         self.args = args
-        self.n = args.frames_per_datapoint // args.frames_stride_size
+        self.n = (args.sliding_window_size + 1) // args.window_stride
         self.add_box = add_box
         self.encoder_img = resnet18(num_classes=256).to(self.args.device)
         self.encoder_box = Encoder_box().to(self.args.device)

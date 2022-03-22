@@ -14,42 +14,62 @@ from augmentations import RandAugment
 
 
 class DataTransforms:
-    def __init__(self, img_size):
+    def __init__(self, img_size, mean, std):
         self.transformations = {
             'train': transforms.Compose([
                 transforms.Resize((img_size, img_size)),
                 transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.05),
                 transforms.ToTensor(),
-                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+                transforms.Normalize(mean, std)
                 # transforms.RandomErasing()
             ]),
             'val': transforms.Compose([
                 transforms.Resize((img_size, img_size)),
                 transforms.ToTensor(),
-                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+                transforms.Normalize(mean, std)
             ]),
             'test': transforms.Compose([
                 transforms.Resize((img_size, img_size)),
                 transforms.ToTensor(),
-                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+                transforms.Normalize(mean, std)
             ])
 }
-
 
 class LookItDataset(data.Dataset):
     def __init__(self, opt):
         super(LookItDataset, self).__init__()
         self.opt = copy.deepcopy(opt)
-        self.img_processor = DataTransforms(self.opt.image_size).transformations[self.opt.phase]  # ew.
-        self.random_augmentor = RandAugment(2, 9)
-        if self.opt.filter_validation and self.opt.phase == "val":
-            self.file_filter = self.parse_filter_file()
-        else:
-            self.file_filter = None
         self.paths = self.collect_paths("face_labels_fc")  # change to "face_labels" if face classifier wasn't used
+        # self.get_mean_std()
+        self.img_processor = DataTransforms(self.opt.image_size,
+                                            self.opt.per_channel_mean,
+                                            self.opt.per_channel_std).transformations[self.opt.phase]  # ew.
+        self.random_augmentor = RandAugment(2, 9)
 
     def __len__(self):
         return len(self.paths)
+
+    def get_mean_std(self, count=20000):
+        """
+        calculates mean and std over dataset using count points.
+        :param count: the number of iamges to use for calculating statistics
+        :return:
+        """
+        # marchman_bw: mean: [0.48202555, 0.4854607 , 0.48115342], std: [0.1883308 , 0.19372367, 0.18606699]
+        permute = np.random.permutation(count)
+        psum = np.array([0, 0, 0], dtype=np.float64)
+        psum_sq = np.array([0, 0, 0], dtype=np.float64)
+        for i in range(count):
+            logging.info("{} / {}".format(i, count))
+            img_files_seg, box_files_seg, class_seg = self.paths[permute[i]]
+            img = Image.open(self.opt.dataset_folder / "faces" / img_files_seg[2]).convert('RGB')
+            img = np.array(img.resize((100, 100))) / 255
+            psum += np.sum(img, axis=(0, 1))
+            psum_sq += np.sum(img ** 2, axis=(0, 1))
+        honest_count = 100*100*count
+        total_mean = psum / honest_count
+        total_std = np.sqrt((psum_sq / honest_count) - (total_mean ** 2))
+        return total_mean, total_std
 
     def check_all_same(self, seg):
         """
@@ -62,43 +82,26 @@ class LookItDataset(data.Dataset):
                 return False
         return True
 
-    def parse_filter_file(self):
-        validation_videos = []
-        disjoint = "FALSE" if self.opt.use_disjoint else "TRUE"
-        with open(self.opt.filter_validation, newline='') as csvfile:
-            my_reader = csv.reader(csvfile, delimiter=',', quotechar='|')
-            for row in my_reader:
-                if row[0] == "test" and row[-1] == disjoint:
-                    validation_videos.append(Path(row[1]).stem)
-        return validation_videos
-
     def collect_paths(self, face_label_name):
         """
         process dataset into tuples of frames
         :param face_label_name: file with face labels
         :return:
         """
-        all_names_path = Path(self.opt.dataset_folder, "coding_first")
-        test_names_path = Path(self.opt.dataset_folder, "coding_second")
+        logging.info("{}: Collecting paths for dataloader".format(self.opt.phase))
+        if self.opt.phase == "train":
+            coding_path = Path(self.opt.dataset_folder, "train", "coding_first")
+        else:
+            coding_path = Path(self.opt.dataset_folder, "validation", "coding_first")
+        coding_names = [f.stem for f in coding_path.glob("*")]
         dataset_folder_path = Path(self.opt.dataset_folder, "faces")
-        all_names = [f.stem for f in all_names_path.glob('*')]
-        test_names = [f.stem for f in test_names_path.glob('*')]
         my_list = []
         logging.info("{}: Collecting paths for dataloader".format(self.opt.phase))
         video_counter = 0
-        for name in all_names:
-            if self.opt.phase == "val":
-                if name not in test_names:
-                    continue
-                if self.file_filter:
-                    if name not in self.file_filter:
-                        continue
-            elif self.opt.phase == "train":
-                if name in test_names:
-                    continue
-            else:
-                raise NotImplementedError
+        for name in coding_names:
             gaze_labels = np.load(str(Path.joinpath(dataset_folder_path, name, f'gaze_labels.npy')))
+            if self.opt.use_only_mutually_agreed:
+                gaze_labels_second = np.load(str(Path.joinpath(dataset_folder_path, name, f'gaze_labels_second.npy')))
             face_labels = np.load(str(Path.joinpath(dataset_folder_path, name, f'{face_label_name}.npy')))
             cur_video_counter = 0
             sequence_fail_counter = 0
@@ -113,9 +116,9 @@ class LookItDataset(data.Dataset):
                                                       cur_video_fd_fail,
                                                       cur_video_total))
             for frame_number in range(gaze_labels.shape[0]):
-                gaze_label_seg = gaze_labels[frame_number:frame_number + self.opt.frames_per_datapoint]
-                face_label_seg = face_labels[frame_number:frame_number + self.opt.frames_per_datapoint]
-                if len(gaze_label_seg) != self.opt.frames_per_datapoint:
+                gaze_label_seg = gaze_labels[frame_number:frame_number + self.opt.sliding_window_size]
+                face_label_seg = face_labels[frame_number:frame_number + self.opt.sliding_window_size]
+                if len(gaze_label_seg) != self.opt.sliding_window_size:
                     sequence_fail_counter += 1
                     break
                 if any(face_label_seg < 0):  # a tidy bit too strict?...we can basically afford 1 or two missing labels
@@ -125,14 +128,19 @@ class LookItDataset(data.Dataset):
                         sequence_fail_counter += 1
                     continue
                 if not self.opt.eliminate_transitions or self.check_all_same(gaze_label_seg):
-                    class_seg = gaze_label_seg[self.opt.frames_per_datapoint // 2]
+                    class_seg = gaze_label_seg[self.opt.sliding_window_size // 2]
+                    if self.opt.use_only_mutually_agreed:
+                        gaze_label_second = gaze_labels_second[frame_number + self.opt.sliding_window_size // 2]
+                        if class_seg != gaze_label_second:
+                            single_fail_counter += 1
+                            continue
                     img_files_seg = []
                     box_files_seg = []
-                    for i in range(self.opt.frames_per_datapoint):
+                    for i in range(self.opt.sliding_window_size):
                         img_files_seg.append(f'{name}/img/{frame_number + i:05d}_{face_label_seg[i]:01d}.png')
                         box_files_seg.append(f'{name}/box/{frame_number + i:05d}_{face_label_seg[i]:01d}.npy')
-                    img_files_seg = img_files_seg[::self.opt.frames_stride_size]
-                    box_files_seg = box_files_seg[::self.opt.frames_stride_size]
+                    img_files_seg = img_files_seg[::self.opt.window_stride]
+                    box_files_seg = box_files_seg[::self.opt.window_stride]
                     my_list.append((img_files_seg, box_files_seg, class_seg))
                     cur_video_counter += 1
             logging.info("{}/{} ({:.2f}%) usable datapoints with {} sequence failures\n".format(cur_video_counter,

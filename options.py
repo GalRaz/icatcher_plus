@@ -16,8 +16,8 @@ def parse_arguments_for_training():
     parser.add_argument("--number_of_classes", type=int, default=3, help="number of classes to predict")
     parser.add_argument("--batch_size", type=int, default=16, help="Batch size to train with")
     parser.add_argument("--image_size", type=int, default=100, help="All images will be resized to this size")
-    parser.add_argument("--frames_per_datapoint", type=int, default=10, help="Number of frames in rolling window of each datapoint")
-    parser.add_argument("--frames_stride_size", type=int, default=2, help="Stride between frames in rolling window")
+    parser.add_argument("--sliding_window_size", type=int, default=9, help="Number of frames in rolling window of each datapoint")
+    parser.add_argument("--window_stride", type=int, default=2, help="Stride between frames in rolling window")
     parser.add_argument("--eliminate_transitions", action="store_true",
                         help="If true, does not use frames where transitions occur (train only!)")
     parser.add_argument("--use_only_mutually_agreed", action="store_true",
@@ -34,14 +34,16 @@ def parse_arguments_for_training():
                         help="learning rate scheduler policy")
     parser.add_argument("--lr_decay_rate", type=int, default=0.98, help="Decay rate for lamda lr policy.")
     parser.add_argument("--continue_train", action="store_true", help="Continue training from latest iteration")
-    parser.add_argument("--filter_validation", type=str,
-                        help="if present, uses this file to filter out certain data from validation set")
     parser.add_argument("--use_disjoint", action="store_true",
                         help="if true, uses only disjoint subjects videos, else uses only subjects who appeared in train set")
     parser.add_argument("--rand_augment", default=False, action="store_true",
                         help="if true, uses RandAugment for training augmentations")
     parser.add_argument("--horiz_flip", default=False, action="store_true",
                         help="if true, horizontally flips images in training (and flips labels as well)")
+    parser.add_argument('--per_channel_mean', nargs=3, metavar=('Channel1_mean', 'Channel2_mean', 'Channel3_mean'),
+                        type=float, default=[0.485, 0.456, 0.406], help='supply custom per-channel mean of data for normalization')
+    parser.add_argument('--per_channel_std', nargs=3, metavar=('Channel1_std', 'Channel2_std', 'Channel3_std'),
+                        type=float, default=[0.229, 0.224, 0.225], help='supply custom per-channel std of data for normalization')
     parser.add_argument("--number_of_epochs", type=int, default=100, help="Total number of epochs to train model")
     parser.add_argument("--seed", type=int, default=42, help="Random seed to train with")
     parser.add_argument("--gpu_id", type=str, default=-1, help="GPU ids to use, comma delimited (or -1 for cpu)")
@@ -93,10 +95,12 @@ def parse_arguments_for_testing():
     parser.add_argument("--image_size", type=int, default=100, help="All images will be resized to this size")
     parser.add_argument("--output_video_path", help="if present, annotated video will be saved to this folder")
     parser.add_argument("--show_output", action="store_true", help="show results online in a separate window")
-    parser.add_argument("--per_channel_mean", nargs=3, metavar=("Channel1_mean", "Channel2_mean", "Channel3_mean"),
-                        type=float, help="supply custom per-channel mean of data for normalization")
-    parser.add_argument("--per_channel_std", nargs=3, metavar=("Channel1_std", "Channel2_std", "Channel3_std"),
-                        type=float, help="supply custom per-channel std of data for normalization")
+    parser.add_argument('--per_channel_mean', nargs=3, metavar=('Channel1_mean', 'Channel2_mean', 'Channel3_mean'),
+                        type=float, default=[0.485, 0.456, 0.406],
+                        help='supply custom per-channel mean of data for normalization')
+    parser.add_argument('--per_channel_std', nargs=3, metavar=('Channel1_std', 'Channel2_std', 'Channel3_std'),
+                        type=float, default=[0.229, 0.224, 0.225],
+                        help='supply custom per-channel std of data for normalization')
     parser.add_argument("--gpu_id", type=int, default=-1, help="GPU id to use, use -1 for CPU.")
     parser.add_argument("--log",
                         help="If present, writes log to this path")

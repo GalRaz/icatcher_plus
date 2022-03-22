@@ -106,11 +106,9 @@ def extract_crop(frame, bbox, opt):
     face_box = np.array([bbox[1], bbox[1] + bbox[3], bbox[0], bbox[0] + bbox[2]])
     crop = frame[bbox[1]:bbox[1] + bbox[3], bbox[0]:bbox[0] + bbox[2]]
 
-    test_transforms = data.DataTransforms(opt.image_size).transformations["test"]
-    # crop2 = cv2.resize(crop, (opt.image_size, opt.image_size)) * 1. / 255
-    # crop2 = np.expand_dims(crop2, axis=0)
-    # crop2 -= np.array(opt.per_channel_mean)
-    # crop2 /= (np.array(opt.per_channel_std) + 1e-6)
+    test_transforms = data.DataTransforms(opt.image_size,
+                                          opt.per_channel_mean,
+                                          opt.per_channel_std).transformations["test"]
     crop = test_transforms(Image.fromarray(crop))
     crop = crop.permute(1, 2, 0).unsqueeze(0).numpy()
     ratio = np.array([face_box[0] / img_shape[0], face_box[1] / img_shape[0],
@@ -133,8 +131,8 @@ def predict_from_video(opt):
     """
     # todo: refactor, this function is too big
     # initialize
-    opt.frames_per_datapoint = 10
-    opt.frames_stride_size = 2
+    opt.sliding_window_size = 9
+    opt.window_stride = 2
     sequence_length = 9
     loc = -5
     classes = {'noface': -2, 'nobabyface': -1, 'away': 0, 'left': 1, 'right': 2}
