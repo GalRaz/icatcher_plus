@@ -100,8 +100,11 @@ class LookItDataset(data.Dataset):
         video_counter = 0
         for name in coding_names:
             gaze_labels = np.load(str(Path.joinpath(dataset_folder_path, name, f'gaze_labels.npy')))
-            if self.opt.use_only_mutually_agreed:
-                gaze_labels_second = np.load(str(Path.joinpath(dataset_folder_path, name, f'gaze_labels_second.npy')))
+            gaze_labels_second = None
+            if self.opt.use_mutually_agreed:
+                second_label_path = Path.joinpath(dataset_folder_path, name, f'gaze_labels_second.npy')
+                if second_label_path.exists():
+                    gaze_labels_second = np.load(str(second_label_path))
             face_labels = np.load(str(Path.joinpath(dataset_folder_path, name, f'{face_label_name}.npy')))
             cur_video_counter = 0
             sequence_fail_counter = 0
@@ -129,7 +132,7 @@ class LookItDataset(data.Dataset):
                     continue
                 if not self.opt.eliminate_transitions or self.check_all_same(gaze_label_seg):
                     class_seg = gaze_label_seg[self.opt.sliding_window_size // 2]
-                    if self.opt.use_only_mutually_agreed:
+                    if gaze_labels_second is not None:
                         gaze_label_second = gaze_labels_second[frame_number + self.opt.sliding_window_size // 2]
                         if class_seg != gaze_label_second:
                             single_fail_counter += 1

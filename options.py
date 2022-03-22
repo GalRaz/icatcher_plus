@@ -20,7 +20,7 @@ def parse_arguments_for_training():
     parser.add_argument("--window_stride", type=int, default=2, help="Stride between frames in rolling window")
     parser.add_argument("--eliminate_transitions", action="store_true",
                         help="If true, does not use frames where transitions occur (train only!)")
-    parser.add_argument("--use_only_mutually_agreed", action="store_true",
+    parser.add_argument("--use_mutually_agreed", action="store_true",
                         help="use only datapoints where coders mutually agreed on label. note: requires all dataset to be doubly coded")
     parser.add_argument("--architecture", type=str, choices=["fc", "icatcher_vanilla", "icatcher+", "rnn"],
                         default="icatcher+",
