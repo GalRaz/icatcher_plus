@@ -189,9 +189,12 @@ def predict_from_video(opt):
                         video_ids = [x["video_id"] for x in filter_files]
                         filter_files = [x["video_path"].stem for x in filter_files]
                     else:
-                        with open(opt.video_filter_file, "r") as f:
-                            filter_files = f.readlines()
-                            filter_files = [Path(line.rstrip()).stem for line in filter_files]
+                        video_dataset = build_marchman_video_dataset(opt.raw_dataset_path, opt.video_filter)
+                        filter_files = [x for x in video_dataset.values() if
+                                        x["in_csv"] and x["has_1coding"] and x["has_2coding"] and x[
+                                            "split"] == "2_test"]
+                        video_ids = [x["video_id"] for x in filter_files]
+                        filter_files = [x["video_path"].stem for x in filter_files]
                 else:  # directory
                     filter_files = [x.stem for x in opt.video_filter.glob("*")]
                 video_paths = [x for x in video_paths if x.stem in filter_files]

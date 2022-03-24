@@ -1,11 +1,10 @@
-from pytest import xfail
-import numpy as np
 import torch
 import copy
 from pathlib import Path
 import torch.nn.functional as F
 from torchvision.models.resnet import resnet18
 from collections import OrderedDict
+import logging
 
 
 class MyModel:
@@ -16,7 +15,7 @@ class MyModel:
         self.opt = copy.deepcopy(opt)
         self.loss_fn = self.get_loss_fn()
         self.network = self.get_network()
-        if opt.continue_train:
+        if self.opt.continue_train:
             self.load_network("latest")
         self.optimizer = self.get_optimizer()
         self.scheduler = self.get_scheduler()
@@ -96,7 +95,7 @@ class MyModel:
         net = self.network
         if isinstance(net, torch.nn.DataParallel):
             net = net.module
-        print('loading the model from {}'.format(str(load_path)))
+        logging.info('loading the model from {}'.format(str(load_path)))
         # PyTorch newer than 0.4 (e.g., built from
         # GitHub source), you can remove str() on self.device
         state_dict = torch.load(load_path, map_location=str(self.opt.device))
