@@ -6,8 +6,6 @@ from pathlib import Path
 import torch.nn.functional as F
 from torchvision.models.resnet import resnet18
 from collections import OrderedDict
-from torch.nn.parallel import DistributedDataParallel as DDP
-import logging
 
 
 class MyModel:
@@ -18,12 +16,11 @@ class MyModel:
         self.opt = copy.deepcopy(opt)
         self.loss_fn = self.get_loss_fn()
         self.network = self.get_network()
-        if self.opt.continue_train:
+        if opt.continue_train:
             self.load_network("latest")
-        if self.opt.distributed:
-            self.network = DDP(self.network, device_ids=[self.opt.rank])
         self.optimizer = self.get_optimizer()
         self.scheduler = self.get_scheduler()
+        self.network.to(self.opt.device)
 
     def get_loss_fn(self):
         if self.opt.loss == "cat_cross_entropy":
@@ -99,7 +96,7 @@ class MyModel:
         net = self.network
         if isinstance(net, torch.nn.DataParallel):
             net = net.module
-        logging.info('loading the model from {}'.format(str(load_path)))
+        print('loading the model from {}'.format(str(load_path)))
         # PyTorch newer than 0.4 (e.g., built from
         # GitHub source), you can remove str() on self.device
         state_dict = torch.load(load_path, map_location=str(self.opt.device))
@@ -115,6 +112,7 @@ class MyModel:
                 new_dict[new_k] = v
             net.load_state_dict(new_dict)
 
+
     def save_network(self, which_epoch):
         """
         save model to disk.
@@ -123,7 +121,8 @@ class MyModel:
         """
         save_filename = '{}_net.pth'.format(str(which_epoch))
         save_path = Path.joinpath(self.opt.experiment_path, save_filename)
-        torch.save(self.network.state_dict(), str(save_path))
+        torch.save(self.network.cpu().state_dict(), str(save_path))
+        self.network.to(self.opt.device)
 
     def count_parameters(self):
         """
@@ -140,7 +139,7 @@ class FullyConnected(torch.nn.Module):
     def __init__(self, args):
         self.network = torch.nn.ModuleList([
             torch.nn.Flatten(),
-            torch.nn.Linear((args.image_size**2)*3*args.sliding_window_size, 128),
+            torch.nn.Linear((args.image_size**2)*3*args.frames_per_datapoint, 128),
             torch.nn.ReLU(),
             torch.nn.Linear(128, 64),
             torch.nn.ReLU(),
@@ -235,7 +234,7 @@ class GazeCodingModel(torch.nn.Module):
     def __init__(self, args, add_box=True):
         super().__init__()
         self.args = args
-        self.n = (args.sliding_window_size + 1) // args.window_stride
+        self.n = args.frames_per_datapoint // args.frames_stride_size
         self.add_box = add_box
         self.encoder_img = resnet18(num_classes=256).to(self.args.device)
         self.encoder_box = Encoder_box().to(self.args.device)
