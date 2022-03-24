@@ -1,10 +1,26 @@
-### Latest Results (validation set, split0)
-| | | |
-|:-------------------------:|:-------------------------:|:-------------------------:|
-|<img width="1604" alt="screen shot 2017-08-07 at 12 18 15 pm" src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/human1_vs_human2.png">  Human vs Human|<img width="1604" alt="screen shot 2017-08-07 at 12 18 15 pm" src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/human1_vs_machine.png"> Human vs Machine||
-|<img width="1604" alt="screen shot 2017-08-07 at 12 18 15 pm" src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/frame_by_frame_00.png">|<img width="1604" alt="screen shot 2017-08-07 at 12 18 15 pm" src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/frame_by_frame_01.png">|<img width="1604" alt="screen shot 2017-08-07 at 12 18 15 pm" src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/frame_by_frame_02.png">
-|<img width="1604" alt="screen shot 2017-08-07 at 12 18 15 pm" src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/frame_by_frame_03.png">|<img width="1604" alt="screen shot 2017-08-07 at 12 18 15 pm" src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/frame_by_frame_04.png">|<img width="1604" alt="screen shot 2017-08-07 at 12 18 15 pm" src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/frame_by_frame_05.png">
-|<img width="1604" alt="screen shot 2017-08-07 at 12 18 15 pm" src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/frame_by_frame_06.png">|<img width="1604" alt="screen shot 2017-08-07 at 12 18 15 pm" src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/frame_by_frame_07.png">||
+### Latest Results (test set, split0)
+<table>
+        <tr>
+                <td align="center"> <img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/collage.png"  alt="collage" width = 300px height = 400px ></td>
+                <td align="center"> <img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/collage2.png"  alt="collage2" width = 300px height = 400px ></td>
+        </tr>
+        <tr>
+                <td><img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/frame_by_frame_00.png" alt="0" width = 1000px height = 100px></td>
+                <td><img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/frame_by_frame_01.png" alt="1" width = 1000px height = 100px></td>
+        </tr>
+        <tr>
+                <td><img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/frame_by_frame_02.png" alt="0" width = 1000px height = 100px></td>
+                <td><img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/frame_by_frame_03.png" alt="1" width = 1000px height = 100px></td>
+        </tr>
+        <tr>
+                <td><img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/frame_by_frame_04.png" alt="0" width = 1000px height = 100px></td>
+                <td><img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/frame_by_frame_05.png" alt="1" width = 1000px height = 100px></td>
+        </tr>
+        <tr>
+                <td><img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/frame_by_frame_06.png" alt="0" width = 1000px height = 100px></td>
+                <td><img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/frame_by_frame_07.png" alt="1" width = 1000px height = 100px></td>
+        </tr>
+</table>
 
 structure of project is as follows:
 

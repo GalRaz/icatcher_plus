@@ -1,7 +1,7 @@
 import cv2
 from pathlib import Path
 import numpy as np
-from preprocess import detect_face_opencv_dnn
+from preprocess import detect_face_opencv_dnn, build_lookit_video_dataset
 import options
 import visualize
 import logging
@@ -36,7 +36,7 @@ def prep_frame(popped_frame, bbox, class_text, face):
     :return:
     """
     popped_frame = visualize.put_text(popped_frame, class_text)
-    if bbox:
+    if bbox is not None:
         popped_frame = visualize.put_rectangle(popped_frame, face)
         if not class_text == "away" and not class_text == "off" and not class_text == "on":
             popped_frame = visualize.put_arrow(popped_frame, class_text, face)
@@ -106,11 +106,9 @@ def extract_crop(frame, bbox, opt):
     face_box = np.array([bbox[1], bbox[1] + bbox[3], bbox[0], bbox[0] + bbox[2]])
     crop = frame[bbox[1]:bbox[1] + bbox[3], bbox[0]:bbox[0] + bbox[2]]
 
-    test_transforms = data.DataTransforms(opt.image_size).transformations["test"]
-    # crop2 = cv2.resize(crop, (opt.image_size, opt.image_size)) * 1. / 255
-    # crop2 = np.expand_dims(crop2, axis=0)
-    # crop2 -= np.array(opt.per_channel_mean)
-    # crop2 /= (np.array(opt.per_channel_std) + 1e-6)
+    test_transforms = data.DataTransforms(opt.image_size,
+                                          opt.per_channel_mean,
+                                          opt.per_channel_std).transformations["test"]
     crop = test_transforms(Image.fromarray(crop))
     crop = crop.permute(1, 2, 0).unsqueeze(0).numpy()
     ratio = np.array([face_box[0] / img_shape[0], face_box[1] / img_shape[0],
@@ -131,13 +129,14 @@ def predict_from_video(opt):
     :param opt:
     :return:
     """
+    # todo: refactor, this function is too big
     # initialize
-    opt.frames_per_datapoint = 10
-    opt.frames_stride_size = 2
+    opt.sliding_window_size = 9
+    opt.window_stride = 2
     sequence_length = 9
     loc = -5
-    classes = {'away': 0, 'left': 1, 'right': 2}
-    reverse_classes = {0: 'away', 1: 'left', 2: 'right'}
+    classes = {'noface': -2, 'nobabyface': -1, 'away': 0, 'left': 1, 'right': 2}
+    reverse_classes = {-2: 'away', -1: 'away', 0: 'away', 1: 'left', 2: 'right'}
     logging.info("using the following values for per-channel mean: {}".format(opt.per_channel_mean))
     logging.info("using the following values for per-channel std: {}".format(opt.per_channel_std))
     face_detector_model_file = Path("models", "face_model.caffemodel")
@@ -183,9 +182,16 @@ def predict_from_video(opt):
             video_paths = list(video_path.glob("*"))
             if opt.video_filter:
                 if opt.video_filter.is_file():
-                    with open(opt.video_filter_file, "r") as f:
-                        filter_files = f.readlines()
-                        filter_files = [Path(line.rstrip()).stem for line in filter_files]
+                    if opt.video_filter.suffix == ".tsv":
+                        video_dataset = build_lookit_video_dataset(opt.raw_dataset_path, opt.video_filter)
+                        filter_files = [x for x in video_dataset.values() if
+                                        x["in_tsv"] and x["has_1coding"] and x["has_2coding"] and x["split"] == "2_test"]
+                        video_ids = [x["video_id"] for x in filter_files]
+                        filter_files = [x["video_path"].stem for x in filter_files]
+                    else:
+                        with open(opt.video_filter_file, "r") as f:
+                            filter_files = f.readlines()
+                            filter_files = [Path(line.rstrip()).stem for line in filter_files]
                 else:  # directory
                     filter_files = [x.stem for x in opt.video_filter.glob("*")]
                 video_paths = [x for x in video_paths if x.stem in filter_files]
@@ -220,8 +226,14 @@ def predict_from_video(opt):
             my_video_path = Path(opt.output_video_path, video_path.stem + "_output{}".format(my_suffix))
             video_output = cv2.VideoWriter(str(my_video_path), fourcc, framerate, resolution, True)
         if opt.output_annotation:
-            my_output_file_path = Path(opt.output_annotation, video_path.stem + opt.output_file_suffix)
-            output_file = open(my_output_file_path, "w", newline="")
+            if opt.output_format == "compressed":
+                if video_ids:
+                    my_output_file_path = Path(opt.output_annotation, video_ids[i])
+                    if Path(str(my_output_file_path) + ".npz").is_file():
+                        continue
+            else:
+                my_output_file_path = Path(opt.output_annotation, video_path.stem + opt.output_file_suffix)
+                output_file = open(my_output_file_path, "w", newline="")
             if opt.output_format == "PrefLookTimestamp":
                 # Write header
                 output_file.write(
@@ -234,7 +246,7 @@ def predict_from_video(opt):
             cv2_bboxes = detect_face_opencv_dnn(face_detector_model, frame, 0.7)
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)  # network was trained on RGB images.
             if not cv2_bboxes:
-                answers.append(classes['away'])  # if face detector fails, treat as away and mark invalid
+                answers.append(classes['noface'])  # if face detector fails, treat as away and mark invalid
                 image = np.zeros((1, opt.image_size, opt.image_size, 3), np.float64)
                 my_box = np.array([0, 0, 0, 0, 0])
                 box_sequence.append(my_box)
@@ -243,7 +255,7 @@ def predict_from_video(opt):
                 selected_bbox = select_face(cv2_bboxes, frame, fc_model, fc_data_transforms, hor, ver)
                 crop, my_box = extract_crop(frame, selected_bbox, opt)
                 if selected_bbox is None:
-                    answers.append(classes['away'])  # if extracting crop fails, treat as away and mark invalid
+                    answers.append(classes['nobabyface'])  # if selecting face fails, treat as away and mark invalid
                     image = np.zeros((1, opt.image_size, opt.image_size, 3), np.float64)
                     image_sequence.append((image, True))
                     my_box = np.array([0, 0, 0, 0, 0])
@@ -288,12 +300,10 @@ def predict_from_video(opt):
                     if opt.output_format == "raw_output":
                         output_file.write("{}, {}\n".format(frame_count + loc + 1, class_text))
                     elif opt.output_format == "PrefLookTimestamp":
-                        if class_text != last_class_text: # Record "event" for change of direction if code has changed
+                        if class_text != last_class_text:  # Record "event" for change of direction if code has changed
                             frame_ms = int((frame_count + loc + 1) * (1000. / framerate))
                             output_file.write("{},0,{}\n".format(frame_ms, class_text))
                             last_class_text = class_text
-                    else:
-                        raise NotImplementedError
                 logging.info("frame: {}, class: {}".format(str(frame_count + loc + 1), class_text))
             ret_val, frame = cap.read()
             frame_count += 1
@@ -308,6 +318,8 @@ def predict_from_video(opt):
                 end_ms = int((1000. / framerate) * frame_count)
                 output_file.write("{},{},codingactive\n".format(start_ms, end_ms))
                 output_file.close()
+            elif opt.output_format == "compressed":
+                np.savez(my_output_file_path, answers)
         cap.release()
 
 

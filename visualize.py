@@ -1,28 +1,39 @@
-import random
-import seaborn as sns
-from sklearn.metrics import confusion_matrix
-import itertools
-import parsers
 import os
-import matplotlib.pyplot as plt
+from pathlib import Path
 import pickle
-import numpy as np
-from tqdm import tqdm
-from matplotlib.ticker import (MultipleLocator, FormatStrFormatter, AutoMinorLocator)
+import itertools
 import csv
 import logging
+from tqdm import tqdm
+import numpy as np
 import cv2
-from pathlib import Path
-from options import parse_arguments_for_visualizations
+import seaborn as sns
+import pandas as pd
+from sklearn.metrics import confusion_matrix
+import pingouin as pg
+import matplotlib.pyplot as plt
+from matplotlib.ticker import (MultipleLocator, FormatStrFormatter, AutoMinorLocator)
+from matplotlib.patches import Patch
 import textwrap
-
-### todo: retrieve globals from command line arguments ###
-LABEL_TO_COLOR = {"left": (0.5, 0.6, 0.9), "right": (0.6, 0.8, 0), "away": (0.95, 0.5, 0.4), "none": "lightgrey"}
-# logging.basicConfig(level=logging.CRITICAL)
-###########################################################
+from options import parse_arguments_for_visualizations
+import parsers
 
 
-def calculate_confusion_matrix(label, pred, save_path, mat=None, class_num=3):
+def label_to_color(label):
+    mapping = {"left": (0.5, 0.6, 0.9),
+               "right": (0.9, 0.6, 0.5),
+               "away": "lightgrey",
+               "invalid": "white",
+               "lblue": (0.5, 0.6, 0.9),
+               "lred": (0.9, 0.6, 0.5),
+               "lgreen": (0.6, 0.8, 0.0),
+               "lorange": (0.94, 0.78, 0.0),
+               "lyellow": (0.9, 0.9, 0.0),
+               "mblue": (0.12, 0.41, 0.87)}
+    return mapping[label]
+
+
+def calculate_confusion_matrix(label, pred, save_path=None, mat=None, class_num=3, verbose=True):
     """
     creates a plot of the confusion matrix given the gt labels abd the predictions.
     if mat is supplied, ignores other inputs and uses that.
@@ -37,23 +48,30 @@ def calculate_confusion_matrix(label, pred, save_path, mat=None, class_num=3):
         mat = np.zeros([class_num, class_num])
         pred = np.array(pred)
         label = np.array(label)
-        logging.info('# datapoint: {}'.format(len(label)))
+        if verbose:
+            logging.info('# datapoint: {}'.format(len(label)))
         for i in range(class_num):
             for j in range(class_num):
                 mat[i][j] = sum((label == i) & (pred == j))
-    total_acc = (mat.diagonal().sum() / mat.sum()) * 100
-    norm_mat = mat / np.sum(mat, -1, keepdims=True)
-    fig, ax = plt.subplots(figsize=(3, 3))
-    ax = sns.heatmap(norm_mat, ax=ax, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues')
-    ax.set_xticklabels(['away', 'left', 'right'])
-    ax.set_yticklabels(['away', 'left', 'right'])
-    plt.axis('equal')
-    plt.tight_layout(pad=0.1)
-    plt.savefig(save_path)
-    logging.info('acc:{:.4f}%'.format(total_acc))
-    logging.info('confusion matrix: {}'.format(mat))
-    logging.info('normalized confusion matrix: {}'.format(norm_mat))
-    return norm_mat, total_acc
+    if np.all(np.sum(mat, -1, keepdims=True) != 0):
+        total_acc = (mat.diagonal().sum() / mat.sum()) * 100
+        norm_mat = mat / np.sum(mat, -1, keepdims=True)
+    else:
+        total_acc = 0
+        norm_mat = mat
+    if save_path:
+        fig, ax = plt.subplots(figsize=(3, 3))
+        ax = sns.heatmap(norm_mat, ax=ax, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues')
+        ax.set_xticklabels(['away', 'left', 'right'])
+        ax.set_yticklabels(['away', 'left', 'right'])
+        plt.axis('equal')
+        plt.tight_layout(pad=0.1)
+        plt.savefig(save_path)
+    if verbose:
+        logging.info('acc:{:.4f}%'.format(total_acc))
+        logging.info('confusion matrix: {}'.format(mat))
+        logging.info('normalized confusion matrix: {}'.format(norm_mat))
+    return norm_mat, mat, total_acc
 
 
 def confusion_mat(targets, preds, classes, normalize=False, plot=False, title="Confusion Matrix", cmap=plt.cm.Blues):
@@ -119,144 +137,195 @@ def frame_to_time_ms(frame, fps=30):
     return int(frame * 1000 / fps)
 
 
-def compare_two_coding_files(coding1, coding2):
+def get_stats_in_interval(start, end, coding1, coding2):
     """
-    given two codings in the format described below, returns some relevant metrics in a dictionary
-    format:
-    [list of [frame number, valid, class], first annotated frame, last annotated frame]
-    :param coding1: the "target"
-    :param coding2: the "prediction"
-    note: naming the codings as target and prediction is just a convention;
-    all functions and metrics are symmetric w.r.t. the codings.
+    given two codings (single dimensional numpy arrays) and a start and end time,
+    calculates various metrics we care about. assumes coding1[i], coding2[i] refer to same time
+    :param start: start time of interval
+    :param end: end time of interval
+    :param coding1: np array (1 dimensional)
+    :param coding2: np array (1 dimensional)
     :return:
     """
-    start1 = coding1[1]
-    end1 = coding1[2]
-    start2 = coding2[1]
-    end2 = coding2[2]
-    coding1_np = np.array([x[0] for x in coding1[0]])
-    coding2_np = np.array([x[0] for x in coding2[0]])
+    coding1_interval = coding1[start:end]
+    coding2_interval = coding2[start:end]
+    mutually_valid_frames = np.logical_and(coding1_interval >= 0, coding2_interval >= 0)
+    coding1_interval_mut_valid = coding1_interval[mutually_valid_frames]
+    coding2_interval_mut_valid = coding2_interval[mutually_valid_frames]
 
-    classes = {"away": 0, "left": 1, "right": 2}
-    ON_CLASSES = ["left", "right"]
-    same_count = 0
-    diff_count = 0
-    times_coding1 = {"left": [],
-                    "right": [],
-                    "away": [],
-                    "none": []}
+    coding1_away = np.where(coding1_interval == 0)[0]
+    coding2_away = np.where(coding2_interval == 0)[0]
+    coding1_left = np.where(coding1_interval == 1)[0]
+    coding2_left = np.where(coding2_interval == 1)[0]
+    coding1_right = np.where(coding1_interval == 2)[0]
+    coding2_right = np.where(coding2_interval == 2)[0]
+    coding1_invalid = np.where(coding1_interval < 0)[0]
+    coding2_invalid = np.where(coding2_interval < 0)[0]
 
-    times_coding2 = {"left": [],
-                      "right": [],
-                      "away": [],
-                      "none": []}
 
-    coding1_by_label = [0, 0, 0]
-    coding2_by_label = [0, 0, 0]
+    n_transitions_1 = np.count_nonzero(np.diff(coding1_interval[mutually_valid_frames]))
+    n_transitions_2 = np.count_nonzero(np.diff(coding2_interval[mutually_valid_frames]))
 
-    left_right_agree = 0
-    c1_left_right_total = 0
-    c2_left_right_total = 0
+    on_screen_1 = np.sum(coding1_interval_mut_valid == 1) + np.sum(coding1_interval_mut_valid == 2)
+    on_screen_2 = np.sum(coding2_interval_mut_valid == 1) + np.sum(coding2_interval_mut_valid == 2)
+    off_screen_1 = np.sum(coding1_interval_mut_valid == 0)
+    off_screen_2 = np.sum(coding2_interval_mut_valid == 0)
 
-    valid_labels_coding1 = 0
-    valid_labels_coding2 = 0
-    start = min(start1, start2)
-    end = max(end1, end2)
-    total_frames_coding1 = end1 - start1
-    total_frames_coding2 = end2 - start2
-    for frame_index in range(start, end):
-        if frame_index < coding1[0][0][0]:
-            coding1_label = [None, None, "none"]
-            times_coding1["none"].append(frame_index)
-        else:
-            target_q_np = np.nonzero(frame_index >= coding1_np)[0][-1]
-            coding1_label = coding1[0][target_q_np]
-            if coding1_label[1] == 1:
-                assert coding1_label[2] in classes.keys()
-                times_coding1[coding1_label[2]].append(frame_index)
-                valid_labels_coding1 += 1
-            else:
-                coding1_label = [None, None, "none"]
-                times_coding1["none"].append(frame_index)
-        if frame_index < coding2[0][0][0]:
-            coding2_label = [None, None, "none"]
-            times_coding2["none"].append(frame_index)
-        else:
-            inferred_q_np = np.nonzero(frame_index >= coding2_np)[0][-1]
-            coding2_label = coding2[0][inferred_q_np]
-            if coding2_label[1] == 1:
-                assert coding2_label[2] in classes.keys()
-                times_coding2[coding2_label[2]].append(frame_index)
-                valid_labels_coding2 += 1
-            else:
-                coding2_label = [None, None, "none"]
-                times_coding2["none"].append(frame_index)
+    if on_screen_1 == 0:
+        percent_r_1 = 0
+    else:
+        percent_r_1 = np.sum(coding1_interval_mut_valid == 2) / on_screen_1
+    if on_screen_2 == 0:
+        percent_r_2 = 0
+    else:
+        percent_r_2 = np.sum(coding2_interval_mut_valid == 2) / on_screen_2
 
-        if coding1_label[2] != "none":
-            assert coding1_label[2] in classes.keys()
-            coding1_by_label[classes[coding1_label[2]]] += 1
-        if coding2_label[2] != "none":
-            assert coding2_label[2] in classes.keys()
-            coding2_by_label[classes[coding2_label[2]]] += 1
-        if coding1_label[2] != "none" and coding2_label[2] != "none":
-            assert coding1_label[2] in classes.keys()
-            if coding1_label[2] == coding2_label[2]:
-                same_count += 1
-            else:
-                diff_count += 1
-        if coding1_label[2] in ON_CLASSES:
-            if coding1_label[2] == coding2_label[2]:
-                left_right_agree += 1
-            c1_left_right_total += 1
-        if coding2_label[2] in ON_CLASSES:
-            c2_left_right_total += 1
+    looking_time_1 = on_screen_1
+    looking_time_2 = on_screen_2
 
-    accuracy = 100 * same_count / (same_count + diff_count)
-    num_coding1_valid = valid_labels_coding1 / total_frames_coding1
-    num_coding2_valid = valid_labels_coding2 / total_frames_coding2
+    equal = coding1_interval == coding2_interval
 
-    coding1_on_vs_away = (coding1_by_label[0] + coding1_by_label[1]) / sum(coding1_by_label)
-    coding2_on_vs_away = (coding2_by_label[0] + coding2_by_label[1]) / sum(coding2_by_label)
-    c1_left_right_accuracy = left_right_agree / c1_left_right_total
-    c2_left_right_accuracy = left_right_agree / c2_left_right_total
+    equal_and_non_equal = np.sum(equal[mutually_valid_frames]) + np.sum(np.logical_not(equal[mutually_valid_frames]))
+    if equal_and_non_equal == 0:
+        agreement = 0
+    else:
+        agreement = np.sum(equal[mutually_valid_frames]) / equal_and_non_equal
+    _, mat, _ = calculate_confusion_matrix(coding1_interval_mut_valid, coding2_interval_mut_valid, verbose=False)
+    times_coding1 = {"away": coding1_away,
+                     "left": coding1_left,
+                     "right": coding1_right,
+                     "invalid": coding1_invalid}
+    times_coding2 = {"away": coding2_away,
+                     "left": coding2_left,
+                     "right": coding2_right,
+                     "invalid": coding2_invalid}
+    return {"n_frames_in_interval": end - start,
+            "mutual_valid_frame_count": np.sum(mutually_valid_frames),
+            "valid_frames_1": np.sum(coding1_interval >= 0),
+            "valid_frames_2": np.sum(coding2_interval >= 0),
+            "n_transitions_1": n_transitions_1,
+            "n_transitions_2": n_transitions_2,
+            "percent_r_1": percent_r_1,
+            "percent_r_2": percent_r_2,
+            "looking_time_1": looking_time_1,
+            "looking_time_2": looking_time_2,
+            "agreement": agreement,
+            "confusion_matrix": mat,
+            "start": start,
+            "end": end,
+            "times_coding1": times_coding1,
+            "times_coding2": times_coding2,
+            "label_count_1": [np.sum(coding1_away), np.sum(coding1_left), np.sum(coding1_right), np.sum(coding1_invalid)],
+            "label_count_2": [np.sum(coding2_away), np.sum(coding2_left), np.sum(coding2_right), np.sum(coding2_invalid)]
+            }
 
-    metrics = {"accuracy": accuracy,
-               "num_coding1_valid": num_coding1_valid,
-               "num_coding2_valid": num_coding2_valid,
-               "coding1_on_vs_away": coding1_on_vs_away,
-               "coding2_on_vs_away": coding2_on_vs_away,
-               "left_right_accuracy_c1": c1_left_right_accuracy,
-               "left_right_accuracy_c2": c2_left_right_accuracy,
-               "coding1_by_label": coding1_by_label,
-               "coding2_by_label": coding2_by_label,
-               "times_coding1": times_coding1,
-               "times_coding2": times_coding2,
-               "valid_range_coding1": [start1, end1],
-               "valid_range_coding2": [start2, end2]}
-    return metrics
+
+def compare_uncollapsed_coding_files(coding1, coding2, intervals):
+    """
+    computes various metrics between two codings on a set of intervals
+    :param coding1: first coding, uncollapsed numpyarray of events
+    :param coding2: second coding, uncollapsed numpyarray of events
+    :param intervals: list of lists where each internal list contains 2 entries indicating start and end time of interval.
+    note: intervals are considered as [) i.e. includes start time, but excludes end time.
+    :return: array of dictionaries containing various metrics (1 dict per interval)
+    """
+    results = []
+    for interval in intervals:
+        t_start, t_end = interval[0], interval[1]
+        results.append(get_stats_in_interval(t_start, t_end, coding1, coding2))
+    if len(results) == 1:
+        results = results[0]
+    return results
 
 
 def compare_coding_files(human_coding_file, human_coding_file2, machine_coding_file, args):
-    if args.machine_coding_format == "PrefLookTimestamp":
-        parser = parsers.PrefLookTimestampParser(30)
-    else:
-        parser = parsers.PrincetonParser(30, start_time_file=Path(args.raw_dataset_folder, "start_times_visitA.csv"))
-    machine, mstart, mend = parser.parse(machine_coding_file, file_is_fullpath=True)
-
-    if args.human_coding_format == "PrefLookTimestamp":
-        parser = parsers.PrefLookTimestampParser(30)
-    else:
-        parser = parsers.PrincetonParser(30, start_time_file=Path(args.raw_dataset_folder, "start_times_visitA.csv"))
-    human, start1, end1 = parser.parse(human_coding_file, file_is_fullpath=True)
-    human2, start2, end2 = parser.parse(human_coding_file2, file_is_fullpath=True)
-    # machine = machine[:-1]
+    """
+    compares human coders and machine annotations
+    :param human_coding_file:
+    :param human_coding_file2:
+    :param machine_coding_file:
+    :param args:
+    :return:
+    """
+    if args.machine_coding_format == "vcx":
+        csv_file = Path(args.raw_dataset_folder / "Cal_BW_March_split0_participants.csv")
+        parser = parsers.VCXParser(30, csv_file)
+    elif args.machine_coding_format == "compressed":
+        parser = parsers.CompressedParser()
+    machine, mstart, mend = parser.parse(machine_coding_file.stem, machine_coding_file)
+    trial_times = None
+    if args.human_coding_format == "vcx":
+        csv_file = Path(args.raw_dataset_folder / "Cal_BW_March_split0_participants.csv")
+        parser = parsers.VCXParser(30, csv_file)
+    elif args.human_coding_format == "lookit":
+        tsv_file = Path(args.raw_dataset_folder / "prephys_split0_videos.tsv")
+        parser = parsers.LookitParser(30, tsv_file)
+    human, start1, end1 = parser.parse(human_coding_file.stem, human_coding_file)
+    human2, start2, end2 = parser.parse(human_coding_file2.stem, human_coding_file2)
+    if args.human_coding_format == "lookit":
+        labels = parser.load_and_sort(human_coding_file)
+        trial_times = parser.get_trial_intervals(start1, labels)
+    if end1 != end2:
+        logging.warning("critical failure: humans don't agree on ending: {}".format(human_coding_file))
+        return None
     metrics = {}
-    metrics["human1_vs_machine"] = compare_two_coding_files([human, start1, end1], [machine, mstart, mend])
-    metrics["human1_vs_human2"] = compare_two_coding_files([human, start1, end1], [human2, start2, end2])
-    # total_h1_annotated_frames = end1 - start1
-    # total_h2_annotated_frames = end2 - start2
-    # total_m_annotated_frames = mend - mstart
+    machine_uncol = parser.uncollapse_labels(machine, mstart, mend)
+    special_machine = machine_uncol.copy()
+    special_machine[special_machine < 0] = 0
+    human1_uncol = parser.uncollapse_labels(human, start1, end1)
+    human2_uncol = parser.uncollapse_labels(human2, start2, end2)
+    # bins = [[x, x+30] for x in range(0, end1, 30)]
+    metrics["human1_vs_machine_trials"] = compare_uncollapsed_coding_files(human1_uncol, machine_uncol, trial_times)
+    # metrics["human1_vs_machine_100msbins"] = compare_uncollapsed_coding_files(human1_uncol, machine_uncol, bins)
+    metrics["human1_vs_machine_session"] = compare_uncollapsed_coding_files(human1_uncol,
+                                                                            machine_uncol,
+                                                                            [[0, max(end1, mend)]])
+    metrics["human1_vs_smachine_session"] = compare_uncollapsed_coding_files(human1_uncol,
+                                                                             special_machine,
+                                                                             [[0, max(end1, mend)]])
+    metrics["human1_vs_human2_trials"] = compare_uncollapsed_coding_files(human1_uncol, human2_uncol, trial_times)
+    # metrics["human1_vs_human2_100msbins"] = compare_uncollapsed_coding_files(human1_uncol, human2_uncol, bins)
+    metrics["human1_vs_human2_session"] = compare_uncollapsed_coding_files(human1_uncol,
+                                                                           human2_uncol,
+                                                                           [[0, max(end1, end2)]])
+    ICC_looking_time_hvm = calc_ICC(metrics["human1_vs_machine_trials"],
+                                    "looking_time_1", "looking_time_2",
+                                    len(trial_times))
+    ICC_looking_time_hvh = calc_ICC(metrics["human1_vs_human2_trials"],
+                                    "looking_time_1", "looking_time_2",
+                                    len(trial_times))
+    ICC_percent_r_hvm = calc_ICC(metrics["human1_vs_machine_trials"],
+                                 "percent_r_1", "percent_r_2",
+                                 len(trial_times))
+    ICC_percent_r_hvh = calc_ICC(metrics["human1_vs_human2_trials"],
+                                 "percent_r_1", "percent_r_2",
+                                 len(trial_times))
+    metrics["stats"] = {"ICC_LT_hvm": ICC_looking_time_hvm,
+                        "ICC_LT_hvh": ICC_looking_time_hvh,
+                        "ICC_PR_hvm": ICC_percent_r_hvm,
+                        "ICC_PR_hvh": ICC_percent_r_hvh
+                        }
     return metrics
+
+
+def calc_ICC(metrics, dependant_measure1, dependant_measure2, n_trials):
+    """
+    calculates ICC3 for single fixesd raters (https://pingouin-stats.org/generated/pingouin.intraclass_corr.html)
+    :param metrics: dictionary of results upon trials
+    :param dependant_measure1: the measure to calculate ICC over by coder1
+    :param dependant_measure2: the measure to calculate ICC over by coder2
+    :param trial_times: number of trials
+    :return: ICC3 metric
+    """
+    trial_n = np.repeat(np.arange(0, n_trials, 1), 2)
+    coders = np.array([[1, 2] for _ in range(n_trials)]).reshape(-1)
+    ratings = np.array([[x[dependant_measure1], x[dependant_measure2]] for x in metrics]).reshape(-1)
+    df = pd.DataFrame({'trial_n': trial_n,
+                       'coders': coders,
+                       'ratings': ratings})
+    icc = pg.intraclass_corr(data=df, targets='trial_n', raters='coders', ratings='ratings')
+    LT_ICC = icc["ICC"][2]
+    return LT_ICC
 
 
 def save_metrics_csv(sorted_IDs, all_metrics, inference):
@@ -321,47 +390,57 @@ def sample_luminance(ID, args, start, end, num_samples=10):
 
 
 def generate_frame_by_frame_comparisons(sorted_IDs, all_metrics, args):
-    GRAPH_CLASSES = ["left", "right", "away", "none"]
-    INFERENCE_METHODS = ["human1_vs_human2", "human1_vs_machine"]
+    GRAPH_CLASSES = ["left", "right", "away", "invalid"]
     widths = [20, 1, 5]
     heights = [1]
+    skip = 10
     gs_kw = dict(width_ratios=widths, height_ratios=heights)
-    # fig, axs = plt.subplots(len(sorted_IDs), 3, figsize=(30, 45), gridspec_kw=gs_kw)
-    # if len(axs.shape) == 1:
-    #     axs = np.expand_dims(axs, axis=0)
-    # plt.suptitle(f'Frame by frame comparisons per video', fontsize=40)
-    # color_gradient = list(Color("red").range_to(Color("green"), 100))
     frame_by_frame_path = Path(args.output_folder, "frame_by_frame")
     frame_by_frame_path.mkdir(exist_ok=True, parents=True)
     for i, target_ID in enumerate(tqdm(sorted_IDs)):
         fig, axs = plt.subplots(1, 3, figsize=(24.0, 8.0), gridspec_kw=gs_kw)
         timeline, accuracy, sample_frame = axs  # won't work with single video...
         plt.suptitle('Frame by frame comparisons: {}'.format(target_ID + ".mp4"))
-        start1, end1 = all_metrics[target_ID]["human1_vs_machine"]["valid_range_coding1"]
-        start2, end2 = all_metrics[target_ID]["human1_vs_machine"]["valid_range_coding2"]
+        start1, end1 = all_metrics[target_ID]["human1_vs_human2_session"]["start"],\
+                       all_metrics[target_ID]["human1_vs_human2_session"]["end"]
+        start2, end2 = all_metrics[target_ID]["human1_vs_machine_session"]["start"], \
+                       all_metrics[target_ID]["human1_vs_machine_session"]["end"]
         start = min(start1, start2)
         end = max(end1, end2)
         timeline.set_title("Frames: {} - {}".format(str(start), str(end)))
-        for j, name in enumerate(["times_coding1", "times_coding2"]):
-            times = all_metrics[target_ID]["human1_vs_machine"][name]
-            video_label = "human" if j==0 else "machine"
-            skip = 10  # frame comparison resolution. Increase to speed up plotting
-            for label in GRAPH_CLASSES:
-                timeline.barh(video_label, skip, left=times[label][::skip],
-                              height=1, label=label,
-                              color=LABEL_TO_COLOR[label])
+
+        times1 = all_metrics[target_ID]["human1_vs_human2_session"]["times_coding2"]
+        times2 = all_metrics[target_ID]["human1_vs_human2_session"]["times_coding1"]
+        times3 = all_metrics[target_ID]["human1_vs_machine_session"]["times_coding2"]
+        times = [times1, times2, times3]
+        video_label = ["coder 2", "coder 1", "machine"]
+        trial_times = [x["end"] for x in all_metrics[target_ID]["human1_vs_human2_trials"]]
+        vlines_handle = timeline.vlines(trial_times, -1, 3, ls='--', color='k', label="trial times")
+        for j, vid_label in enumerate(video_label):
             timeline.set_xlabel("Frame #")
+            for label in GRAPH_CLASSES:
+                timeline.barh(vid_label, skip, left=times[j][label][::skip],
+                              height=1, label=label,
+                              color=label_to_color(label))
             if j == 0:
-                timeline.legend(loc='upper right')
-                accuracy.set_title("Accuracy")
-        accuracies = [all_metrics[target_ID][inference]['accuracy'] for inference in INFERENCE_METHODS]
+                # timeline.legend(loc='upper right')
+                accuracy.set_title("Agreement")
+        artists = [Patch(facecolor=label_to_color("away"), label="Away"),
+                   Patch(facecolor=label_to_color("left"), label="Left"),
+                   Patch(facecolor=label_to_color("right"), label="Right"),
+                   Patch(facecolor=label_to_color("invalid"), label="Invalid"),
+                   vlines_handle]
+        timeline.legend(handles=artists, bbox_to_anchor=(0.95, 1.0), loc='upper left')
+
+        inference = ["human1_vs_human2_session", "human1_vs_machine_session"]
+        accuracies = [all_metrics[target_ID][entry]['agreement']*100 for entry in inference]
         # colors = [color_gradient[int(acc * 100)].rgb for acc in accuracies]
 
-        accuracy.bar(range(len(INFERENCE_METHODS)), accuracies, color="black")
-        accuracy.set_xticks(range(len(INFERENCE_METHODS)))
-        accuracy.set_xticklabels(INFERENCE_METHODS, rotation=45, ha="right")
+        accuracy.bar(range(len(inference)), accuracies, color="black")
+        accuracy.set_xticks(range(len(inference)))
+        accuracy.set_xticklabels(inference, rotation=45, ha="right")
         accuracy.set_ylim([0, 100])
-        accuracy.set_ylabel("Accuracy")
+        accuracy.set_ylabel("Agreement")
         # sample_frame_index = min(
         #     [all_metrics[target_ID][ICATCHER]['times_target'][label][0] for label in VALID_CLASSES])
         imgs, times = select_frames_from_video(target_ID, args.raw_video_folder, start, end)
@@ -375,125 +454,289 @@ def generate_frame_by_frame_comparisons(sorted_IDs, all_metrics, args):
         plt.tight_layout()
 
         plt.savefig(Path(frame_by_frame_path, 'frame_by_frame_{}.png'.format(target_ID + ".mp4")))
-    # plt.subplots_adjust(left=0.075, bottom=0.075, right=0.925, top=0.925, wspace=0.2, hspace=0.8)
+        # plt.subplots_adjust(left=0.075, bottom=0.075, right=0.925, top=0.925, wspace=0.2, hspace=0.8)
         plt.cla()
         plt.clf()
 
 
-def generate_plot_collage(sorted_IDs, all_metrics, inference, save_path):
+def generate_collage_plot2(sorted_IDs, all_metrics, save_path):
     """
     plots one image with various selected stats
     :param sorted_IDs: ids of videos sorted by accuracy score
     :param all_metrics: all metrics per video
-    :param inference: what to compare against eachother
     :param save_path: where to save the image
     :return:
     """
-    inf_target = inference.split("_")[-1]
     classes = {"away": 0, "left": 1, "right": 2}
-    fig, axs = plt.subplots(3, 2, figsize=(10, 12))
-    accuracy_bar = axs[0, 0]
-    axs[0, 1].axis('off')
-    target_valid_scatter = axs[1, 0]
-    on_away_scatter = axs[1, 1]
-    label_scatter = axs[2, 0]
-    label_bar = axs[2, 1]
-    scatter_plots = [target_valid_scatter, on_away_scatter, label_scatter]
-    for ax in scatter_plots:
-        if ax == target_valid_scatter:
-            #             pass
-            ax.set_xlim([0, 100])
-            ax.set_ylim([0, 100])
-        else:
-            ax.set_xlim([0, 1])
-            ax.set_ylim([0, 1])
-        ax.plot([0, 1], [0, 1], transform=ax.transAxes, color="black", label="Ideal trend")
-    x = np.arange(len(sorted_IDs))
-    labels = range(len(sorted_IDs))
-    ticks = range(len(sorted_IDs))
-    accuracies = [all_metrics[ID][inference]['accuracy'] for ID in sorted_IDs]
-    accuracy_bar.bar(x, accuracies, color='purple')
-    mean = np.mean(accuracies)
-    accuracy_bar.axhline(y=mean, color='black', linestyle='-', label="mean (" + str(mean)[:4] + ")")
+    # fig, axs = plt.subplots(3, 2, figsize=(10, 12))
+    fig = plt.figure(figsize=(10, 12))
 
-    accuracy_bar.set_title('Accuracy (over mutually valid frames)')
-    accuracy_bar.set_ylim([0, 100])
-    accuracy_bar.set_xticks(ticks)
-    accuracy_bar.set_xticklabels(labels, rotation='vertical', fontsize=8)
+    # confusion matrix
+    conf_mat_h2h = fig.add_subplot(3, 3, 1)  # three rows, three columns
+    total_confusion_h2h = np.sum([all_metrics[ID]["human1_vs_human2_session"]["confusion_matrix"] for ID in sorted_IDs],
+                                 axis=0)
+    total_confusion_h2h /= np.sum(total_confusion_h2h, -1, keepdims=True)
+    sns.heatmap(total_confusion_h2h, ax=conf_mat_h2h, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues')
+    conf_mat_h2h.set_xticklabels(['away', 'left', 'right'])
+    conf_mat_h2h.set_yticklabels(['away', 'left', 'right'])
+    conf_mat_h2h.set_ylabel('Coder 1')
+    conf_mat_h2h.set_xlabel('Coder 2')
+    conf_mat_h2h.set_title('Coder 1 vs Coder 2')
+
+    # confusion matrix 2
+    conf_mat_h2h = fig.add_subplot(3, 3, 2)
+    total_confusion_h2h = np.sum([all_metrics[ID]["human1_vs_machine_session"]["confusion_matrix"] for ID in sorted_IDs],
+                                 axis=0)
+    total_confusion_h2h /= np.sum(total_confusion_h2h, -1, keepdims=True)
+    sns.heatmap(total_confusion_h2h, ax=conf_mat_h2h, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues')
+    conf_mat_h2h.set_xticklabels(['away', 'left', 'right'])
+    conf_mat_h2h.set_yticklabels(['away', 'left', 'right'])
+    conf_mat_h2h.set_ylabel('Coder 1')
+    conf_mat_h2h.set_xlabel('Machine')
+    conf_mat_h2h.set_title('Coder 1 vs Machine')
+
+    # confusion matrix 3
+    conf_mat_h2h = fig.add_subplot(3, 3, 3)
+    total_confusion_h2h = np.sum([all_metrics[ID]["human1_vs_smachine_session"]["confusion_matrix"] for ID in sorted_IDs],
+                                 axis=0)
+    total_confusion_h2h /= np.sum(total_confusion_h2h, -1, keepdims=True)
+    sns.heatmap(total_confusion_h2h, ax=conf_mat_h2h, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues')
+    conf_mat_h2h.set_xticklabels(['away', 'left', 'right'])
+    conf_mat_h2h.set_yticklabels(['away', 'left', 'right'])
+    conf_mat_h2h.set_ylabel('Coder 1')
+    conf_mat_h2h.set_xlabel('Machine')
+    conf_mat_h2h.set_title(r'Coder 1 vs Machine w "invlid$\leftarrow$away"')
+
+    # LR ICC plot
+    lr_icc_scatter = fig.add_subplot(3, 3, 4)
+    lr_icc_scatter.plot([0, 1], [0, 1], transform=lr_icc_scatter.transAxes, color="black", label="Ideal trend")
+    lr_icc_scatter.set_xlim([0, 1])
+    lr_icc_scatter.set_ylim([0, 1])
+    x_target = [all_metrics[ID]["stats"]["ICC_LT_hvh"] for ID in sorted_IDs]
+    y_target = [all_metrics[ID]["stats"]["ICC_LT_hvm"] for ID in sorted_IDs]
+    lr_icc_scatter.scatter(x_target, y_target, color=label_to_color("lorange"),
+                       label='Session')
+    lr_icc_scatter.set_xlabel("Coder 1 vs Coder 2")
+    lr_icc_scatter.set_ylabel("Coder 1 vs Machine")
+    lr_icc_scatter.set_title("Looking Time ICC")
+    lr_icc_scatter.legend(loc='upper left')
+
+    # PR ICC plot
+    pr_icc_scatter = fig.add_subplot(3, 3, 5)
+    pr_icc_scatter.plot([0, 1], [0, 1], transform=pr_icc_scatter.transAxes, color="black", label="Ideal trend")
+    pr_icc_scatter.set_xlim([0, 1])
+    pr_icc_scatter.set_ylim([0, 1])
+    x_target = [all_metrics[ID]["stats"]["ICC_PR_hvh"] for ID in sorted_IDs]
+    y_target = [all_metrics[ID]["stats"]["ICC_PR_hvm"] for ID in sorted_IDs]
+    pr_icc_scatter.scatter(x_target, y_target, color=label_to_color("lorange"),
+                        label='Session')
+    pr_icc_scatter.set_xlabel("Coder 1 vs Coder 2")
+    pr_icc_scatter.set_ylabel("Coder 1 vs Machine")
+    pr_icc_scatter.set_title("Percent Right ICC")
+    pr_icc_scatter.legend(loc='upper left')
+
+    # LT plot
+    lt_scatter = fig.add_subplot(3, 3, 6)
+    lt_scatter.plot([0, 1], [0, 1], transform=lt_scatter.transAxes, color="black", label="Ideal trend")
+    lt_scatter.set_xlim([0, 80])
+    lt_scatter.set_ylim([0, 80])
+    x_target = []
+    y_target = []
+    for ID in sorted_IDs:
+        x_target += [x["looking_time_1"]/30 for x in all_metrics[ID]["human1_vs_machine_trials"]]
+        y_target += [x["looking_time_2"]/30 for x in all_metrics[ID]["human1_vs_machine_trials"]]
+    lt_scatter.scatter(x_target, y_target, color=label_to_color("lorange"),
+                       label='Trial', alpha=0.3)
+    lt_scatter.set_xlabel("Coder 1")
+    lt_scatter.set_ylabel("Machine")
+    lt_scatter.set_title("Looking time [s]")
+    lt_scatter.legend(loc='upper left')
+
+    # %R plot
+    pr_scatter = fig.add_subplot(3, 3, 7)
+    pr_scatter.plot([0, 1], [0, 1], transform=pr_scatter.transAxes, color="black", label="Ideal trend")
+    pr_scatter.set_xlim([0, 100])
+    pr_scatter.set_ylim([0, 100])
+    x_target = []
+    y_target = []
+    for ID in sorted_IDs:
+        x_target += [x["percent_r_1"] * 100 for x in all_metrics[ID]["human1_vs_machine_trials"]]
+        y_target += [x["percent_r_2"] * 100 for x in all_metrics[ID]["human1_vs_machine_trials"]]
+    pr_scatter.scatter(x_target, y_target, color=label_to_color("lorange"),
+                       label='Trial', alpha=0.3)
+    pr_scatter.set_xlabel("Coder 1")
+    pr_scatter.set_ylabel("Machine")
+    pr_scatter.set_title("Percent Right")
+    pr_scatter.legend(loc='lower center')
+
+    # percent agreement plot
+    pa_scatter = fig.add_subplot(3, 3, 8)
+    pa_scatter.plot([0, 1], [0, 1], transform=pa_scatter.transAxes, color="black", label="Ideal trend")
+    pa_scatter.set_xlim([0, 100])
+    pa_scatter.set_ylim([0, 100])
+    x_target = []
+    y_target = []
+    for ID in sorted_IDs:
+        x_target += [x["agreement"] * 100 for x in all_metrics[ID]["human1_vs_human2_trials"]]
+        y_target += [x["agreement"] * 100 for x in all_metrics[ID]["human1_vs_machine_trials"]]
+    pa_scatter.scatter(x_target, y_target, color=label_to_color("lorange"),
+                       label='Trial', alpha=0.3)
+    pa_scatter.set_xlabel("Coder 1 vs Coder 2")
+    pa_scatter.set_ylabel("Coder 1 vs Machine")
+    pa_scatter.set_title("Percent Agreement")
+    pa_scatter.legend(loc='upper left')
+
+    plt.subplots_adjust(left=0.1, bottom=0.075, right=0.9, top=0.925, wspace=0.5, hspace=0.5)
+    plt.savefig(Path(save_path, "collage2.png"))
+    plt.cla()
+    plt.clf()
+
+
+def generate_collage_plot(sorted_IDs, all_metrics, save_path):
+    """
+    plots one image with various selected stats
+    :param sorted_IDs: ids of videos sorted by accuracy score
+    :param all_metrics: all metrics per video
+    :param save_path: where to save the image
+    :return:
+    """
+    classes = {"away": 0, "left": 1, "right": 2}
+    # fig, axs = plt.subplots(3, 2, figsize=(10, 12))
+    fig = plt.figure(figsize=(10, 12))
+
+    # accuracies plot
+    accuracy_bar = fig.add_subplot(3, 2, (1, 2))  # three rows, two columns
+    # accuracy_bar = axs[0, :]
+    accuracies_hvh = [all_metrics[ID]["human1_vs_human2_session"]['agreement']*100 for ID in sorted_IDs]
+    mean_hvh = np.mean(accuracies_hvh)
+    accuracies_hvm = [all_metrics[ID]["human1_vs_machine_session"]['agreement']*100 for ID in sorted_IDs]
+    mean_hvm = np.mean(accuracies_hvm)
+    labels = sorted_IDs
+    width = 0.35  # the width of the bars
+    x = np.arange(len(labels))
+    accuracy_bar.bar(x - width / 2, accuracies_hvh, width, color=label_to_color("lorange"), label='Human vs Human')
+    accuracy_bar.bar(x + width / 2, accuracies_hvm, width, color=label_to_color("mblue"), label='Human vs Machine')
+    accuracy_bar.set_ylabel('Percent Agreement')
     accuracy_bar.set_xlabel('Video')
-    accuracy_bar.set_ylabel('Accuracy')
-
+    accuracy_bar.set_title('Percent agreement per video')
+    accuracy_bar.set_xticks(x)
+    accuracy_bar.axhline(y=mean_hvh, color=label_to_color("lorange"), linestyle='-', label="mean (" + str(mean_hvh)[:4] + ")")
+    accuracy_bar.axhline(y=mean_hvm, color=label_to_color("mblue"), linestyle='-', label="mean (" + str(mean_hvm)[:4] + ")")
+    accuracy_bar.set_ylim([0, 100])
     accuracy_bar.legend()
 
-    # ID_index = axs[0, 1]
-    # cell_text = [[i, sorted_IDs[i]] for i in range(len(sorted_IDs))]
-    # ID_index.table(cell_text, loc='center', fontsize=18)
-    # ID_index.set_title("Video index to ID")
+    # target valid plot
+    transitions_bar = fig.add_subplot(3, 2, 3)  # three rows, two columns
+    width = 0.66  # the width of the bars
+    x = np.arange(len(sorted_IDs))
+    transitions_h1 = [100*all_metrics[ID]["human1_vs_human2_session"]['n_transitions_1'] /
+                          all_metrics[ID]["human1_vs_human2_session"]['valid_frames_1'] for ID in sorted_IDs]
+    transitions_h2 = [100*all_metrics[ID]["human1_vs_human2_session"]['n_transitions_2'] /
+                          all_metrics[ID]["human1_vs_human2_session"]['valid_frames_2'] for ID in sorted_IDs]
+    transitions_m = [100*all_metrics[ID]["human1_vs_machine_session"]['n_transitions_2'] /
+                          all_metrics[ID]["human1_vs_machine_session"]['valid_frames_2'] for ID in sorted_IDs]
 
-    x_target_valid = [all_metrics[ID][inference]['num_coding1_valid']*100 for ID in sorted_IDs]
-    y_target_valid = [all_metrics[ID][inference]['num_coding2_valid']*100 for ID in sorted_IDs]
-    target_valid_scatter.scatter(x_target_valid, y_target_valid)
+    transitions_bar.bar(x - width / 3, transitions_h1, width=(width / 3) - 0.1, label="Human 1", color=label_to_color("lorange"))
+    transitions_bar.bar(x, transitions_h2, width=(width / 3) - 0.1, label="Human 2", color=label_to_color("lgreen"))
+    transitions_bar.bar(x + width / 3, transitions_m, width=(width / 3) - 0.1, label="Machine", color=label_to_color("mblue"))
+    transitions_bar.set_xticks(x)
+    transitions_bar.set_title('# Transitions per 100 frames')
+    transitions_bar.legend()
+    transitions_bar.set_ylabel('# Transitions per 100 frames')
+    transitions_bar.set_xlabel('Video')
+
+    # Looking time plot
+    on_away_scatter = fig.add_subplot(3, 2, 4)  # three rows, two columns
+    # on_away_scatter = axs[1, 1]
+    on_away_scatter.plot([0, 1], [0, 1], transform=on_away_scatter.transAxes, color="black", label="Ideal trend")
+    on_away_scatter.set_xlim([0, 600])
+    on_away_scatter.set_ylim([0, 600])
+    x_target_away_hvh = [all_metrics[ID]["human1_vs_human2_session"]['looking_time_1']/30 for ID in sorted_IDs]
+    y_target_away_hvh = [all_metrics[ID]["human1_vs_human2_session"]['looking_time_2']/30 for ID in sorted_IDs]
+    x_target_away_hvm = [all_metrics[ID]["human1_vs_machine_session"]['looking_time_1']/30 for ID in sorted_IDs]
+    y_target_away_hvm = [all_metrics[ID]["human1_vs_machine_session"]['looking_time_2']/30 for ID in sorted_IDs]
+    on_away_scatter.scatter(x_target_away_hvh, y_target_away_hvh, color=label_to_color("lorange"), label='Human vs Human')
     for i in range(len(sorted_IDs)):
-        target_valid_scatter.annotate(i, (x_target_valid[i], y_target_valid[i]))
-    target_valid_scatter.set_xlabel("Human annotated labels")
-    target_valid_scatter.set_ylabel(f'{inf_target} labels')
-
-    target_valid_scatter.set_title(
-        f'Percent of valid frames\nfor human1 vs {inf_target}')
-
-    x_target_away = [all_metrics[ID][inference]['coding1_on_vs_away'] for ID in sorted_IDs]
-    y_target_away = [all_metrics[ID][inference]['coding2_on_vs_away'] for ID in sorted_IDs]
-    on_away_scatter.scatter(x_target_away, y_target_away)
+        on_away_scatter.annotate(i, (x_target_away_hvh[i], y_target_away_hvh[i]))
+    on_away_scatter.scatter(x_target_away_hvm, y_target_away_hvm, color=label_to_color("mblue"), label='Human vs Machine')
     for i in range(len(sorted_IDs)):
-        on_away_scatter.annotate(i, (x_target_away[i], y_target_away[i]))
+        on_away_scatter.annotate(i, (x_target_away_hvm[i], y_target_away_hvm[i]))
+    on_away_scatter.set_xlabel("Human 1")
+    on_away_scatter.set_ylabel("Human 2 or Machine")
+    on_away_scatter.set_title("Looking time [s]")
+    on_away_scatter.legend(loc='upper right')
 
-    on_away_scatter.set_xlabel("Human1 valid frames percent")
-    on_away_scatter.set_ylabel(f'{inf_target} valid frames percent')
-    on_away_scatter.set_title(
-        f'ratio between left-right and left-right-away\n for {inf_target} vs human data')
+    # label distribution plot
+    # label_scatter = fig.add_subplot(3, 2, 5)  # three rows, two columns
+    # # label_scatter = axs[2, 0]
+    # label_scatter.plot([0, 1], [0, 1], transform=label_scatter.transAxes, color="black", label="Ideal trend")
+    # label_scatter.set_xlim([0, 1])
+    # label_scatter.set_ylim([0, 1])
+    # for i, label in enumerate(sorted(classes.keys())):
+    #     y_labels = [y[i] / sum(y) for y in [all_metrics[ID]["human1_vs_human2"]['coding1_by_label'] for ID in sorted_IDs]]
+    #     x_labels = [y[i] / sum(y) for y in [all_metrics[ID]["human1_vs_human2"]['coding2_by_label'] for ID in sorted_IDs]]
+    #     label_scatter.scatter(x_labels, y_labels, color=label_to_color(label), label="hvh: " + label, marker='^')
+    #     for n in range(len(sorted_IDs)):
+    #         label_scatter.annotate(n, (x_labels[n], y_labels[n]))
+    # for i, label in enumerate(sorted(classes.keys())):
+    #     y_labels = [y[i] / sum(y) for y in [all_metrics[ID]["human1_vs_machine"]['coding1_by_label'] for ID in sorted_IDs]]
+    #     x_labels = [y[i] / sum(y) for y in [all_metrics[ID]["human1_vs_machine"]['coding2_by_label'] for ID in sorted_IDs]]
+    #     label_scatter.scatter(x_labels, y_labels, color=label_to_color(label), label="hvh: " + label, marker='o')
+    #     for n in range(len(sorted_IDs)):
+    #         label_scatter.annotate(n, (x_labels[n], y_labels[n]))
+    #
+    # label_scatter.set_xlabel('Human 1 label proportion')
+    # label_scatter.set_ylabel('Human 2 / Machine labels proportion')
+    # label_scatter.set_title('labels distribution')
+    # label_scatter.legend()  # loc='upper center'
 
+    # label distribution bar plot
+    label_bar = fig.add_subplot(3, 2, (5, 6))  # three rows, two columns
+    # label_bar = axs[2, 1]
+    ticks = range(len(sorted_IDs))
+    bottoms_h1 = np.zeros(shape=(len(sorted_IDs)))
+    bottoms_h2 = np.zeros(shape=(len(sorted_IDs)))
+    bottoms_m = np.zeros(shape=(len(sorted_IDs)))
+    width = 0.66
+    patterns = [None, "O", "*"]
     for i, label in enumerate(sorted(classes.keys())):
-        x_labels = [y[i] / sum(y) for y in [all_metrics[ID][inference]['coding2_by_label'] for ID in sorted_IDs]]
-        y_labels = [y[i] / sum(y) for y in [all_metrics[ID][inference]['coding1_by_label'] for ID in sorted_IDs]]
-        label_scatter.scatter(x_labels, y_labels, color=LABEL_TO_COLOR[label], label=label)
-        for n in range(len(sorted_IDs)):
-            label_scatter.annotate(n, (x_labels[n], y_labels[n]))
-    label_scatter.set_xlabel(f'{inf_target} label proportion')
-    label_scatter.set_ylabel('human1 label proportion')
-    label_scatter.set_title(
-        f'label distribution for human data vs {inf_target}')
-    label_scatter.legend(loc='upper center')
+        label_counts_h1 = [y[i] / sum(y[:3]) for y in [all_metrics[ID]["human1_vs_human2_session"]['label_count_1'] for ID in sorted_IDs]]
+        label_counts_h2 = [y[i] / sum(y[:3]) for y in [all_metrics[ID]["human1_vs_human2_session"]['label_count_2'] for ID in sorted_IDs]]
+        label_counts_m = [y[i] / sum(y[:3]) for y in [all_metrics[ID]["human1_vs_machine_session"]['label_count_2'] for ID in sorted_IDs]]
 
-    bottoms_inf = np.zeros(shape=(len(sorted_IDs)))
-    bottoms_tar = np.zeros(shape=(len(sorted_IDs)))
-    for i, label in enumerate(sorted(classes.keys())):
-        label_counts_inf = [y[i] / sum(y) for y in
-                            [all_metrics[ID][inference]['coding2_by_label'] for ID in sorted_IDs]]
-        label_counts_tar = [y[i] / sum(y) for y in [all_metrics[ID][inference]['coding1_by_label'] for ID in sorted_IDs]]
-
-        label_bar.bar(x - 0.22, label_counts_inf, bottom=bottoms_inf, width=0.4, label=label,
-                      color=LABEL_TO_COLOR[label])
-        label_bar.bar(x + 0.22, label_counts_tar, bottom=bottoms_tar, width=0.4, label=label,
-                      color=LABEL_TO_COLOR[label])
-
-        bottoms_inf += label_counts_inf
-        bottoms_tar += label_counts_tar
+        label_bar.bar(x - width/3, label_counts_h1, bottom=bottoms_h1, width=(width / 3)-0.1, label=label,
+                      color=label_to_color(label), edgecolor='black', hatch=patterns[0], linewidth=0)
+        label_bar.bar(x, label_counts_h2, bottom=bottoms_h2, width=(width / 3)-0.1, label=label,
+                      color=label_to_color(label), edgecolor='black', hatch=patterns[1], linewidth=0)
+        label_bar.bar(x + width/3, label_counts_m, bottom=bottoms_m, width=(width / 3)-0.1, label=label,
+                      color=label_to_color(label), edgecolor='black', hatch=patterns[2], linewidth=0)
+        if i == 0:
+            artists = [Patch(facecolor=label_to_color("away"), label="Away"),
+                       Patch(facecolor=label_to_color("left"), label="Left"),
+                       Patch(facecolor=label_to_color("right"), label="Right"),
+                       Patch(facecolor="white", edgecolor='black', hatch=patterns[0], label="Human 1"),
+                       Patch(facecolor="white", edgecolor='black', hatch=patterns[1], label="Human 2"),
+                       Patch(facecolor="white", edgecolor='black', hatch=patterns[2], label="Machine")]
+            label_bar.legend(handles=artists, bbox_to_anchor=(0.95, 1.0), loc='upper left')
+        bottoms_h1 += label_counts_h1
+        bottoms_h2 += label_counts_h2
+        bottoms_m += label_counts_m
     label_bar.xaxis.set_major_locator(MultipleLocator(1))
     label_bar.set_xticks(ticks)
-    label_bar.set_title('Percent of each label\ntype for each video\n(left side is predictions)')
-    label_bar.set_ylabel('Percent')
+    label_bar.set_title('Proportion of looking left, right, and away per video')
+    label_bar.set_ylabel('Proportion')
     label_bar.set_xlabel('Video')
+
     plt.subplots_adjust(left=0.1, bottom=0.075, right=0.9, top=0.925, wspace=0.2, hspace=0.5)
-    plt.suptitle(f'{inference} evaluation', fontsize=24)
-    plt.savefig(Path(save_path, "{}.png".format(inference)))
+    plt.savefig(Path(save_path, "collage.png"))
     plt.cla()
     plt.clf()
 
 
 def plot_inference_accuracy_vs_human_agreement(sorted_IDs, all_metrics, args):
     plt.figure(figsize=(8.0, 6.0))
-    plt.scatter([all_metrics[id]["human1_vs_human2"]["accuracy"] for id in sorted_IDs],
-                [all_metrics[id]["human1_vs_machine"]["accuracy"] for id in sorted_IDs])
+    plt.scatter([all_metrics[id]["human1_vs_human2_session"]["agreement"] for id in sorted_IDs],
+                [all_metrics[id]["human1_vs_machine_session"]["agreement"] for id in sorted_IDs])
     plt.xlim([0, 100])
     plt.ylim([0, 100])
     plt.xlabel("Human accuracy")
@@ -506,8 +749,10 @@ def plot_inference_accuracy_vs_human_agreement(sorted_IDs, all_metrics, args):
 
 def plot_luminance_vs_accuracy(sorted_IDs, all_metrics, args):
     plt.figure(figsize=(8.0, 6.0))
-    plt.scatter([sample_luminance(id, args, *all_metrics[id]["human1_vs_machine"]['valid_range_coding2']) for id in sorted_IDs],
-                [all_metrics[id]["human1_vs_machine"]["accuracy"] for id in sorted_IDs])
+    plt.scatter([sample_luminance(id, args,
+                                  all_metrics[id]["human1_vs_machine_session"]['start'],
+                                  all_metrics[id]["human1_vs_machine_session"]['end']) for id in sorted_IDs],
+                [all_metrics[id]["human1_vs_machine_session"]["agreement"] for id in sorted_IDs])
     # plt.xlim([0, 1])
     # plt.ylim([0, 1])
     plt.xlabel("Luminance")
@@ -526,15 +771,19 @@ def get_face_pixel_density(id, faces_folder):
     :return:
     """
     face_areas = []
-    face_labels = np.load(Path(faces_folder, id, 'face_labels_fc.npy'))
-    for i, face_id in enumerate(face_labels):
-        if face_id >= 0:
-            box_file = Path(faces_folder, id, "box", "{:05d}_{:01d}.npy".format(i, face_id))
-            '{name}/box/{frame_number + i:05d}_{face_label_seg[i]:01d}.npy.format()'
-            box = np.load(box_file, allow_pickle=True).item()
-            face_area = (box['face_box'][1] - box['face_box'][0]) * (box['face_box'][3] - box['face_box'][2])
-            face_areas.append(face_area)
-    return np.mean(face_areas)
+    file = Path(faces_folder, id, 'face_labels_fc.npy')
+    if file.is_file():
+        face_labels = np.load(file)
+        for i, face_id in enumerate(face_labels):
+            if face_id >= 0:
+                box_file = Path(faces_folder, id, "box", "{:05d}_{:01d}.npy".format(i, face_id))
+                '{name}/box/{frame_number + i:05d}_{face_label_seg[i]:01d}.npy.format()'
+                box = np.load(box_file, allow_pickle=True).item()
+                face_area = (box['face_box'][1] - box['face_box'][0]) * (box['face_box'][3] - box['face_box'][2])
+                face_areas.append(face_area)
+        return np.mean(face_areas)
+    else:
+        return None
 
 
 def get_face_location_std(id, faces_folder):
@@ -545,23 +794,27 @@ def get_face_location_std(id, faces_folder):
     :return:
     """
     movements = []
-    face_labels = np.load(Path(faces_folder, id, 'face_labels_fc.npy'))
-    for i, face_id in enumerate(face_labels):
-        if face_id >= 0:
-            box_file = Path(faces_folder, id, "box", "{:05d}_{:01d}.npy".format(i, face_id))
-            '{name}/box/{frame_number + i:05d}_{face_label_seg[i]:01d}.npy.format()'
-            box = np.load(box_file, allow_pickle=True).item()
-            face_loc = np.array([box['face_box'][1] - box['face_box'][0], box['face_box'][3] - box['face_box'][2]])
-            movements.append(face_loc)
-    movements = np.array(movements)
-    stds = np.mean(np.std(movements, axis=0))
-    return stds
+    file = Path(faces_folder, id, 'face_labels_fc.npy')
+    if file.is_file():
+        face_labels = np.load(file)
+        for i, face_id in enumerate(face_labels):
+            if face_id >= 0:
+                box_file = Path(faces_folder, id, "box", "{:05d}_{:01d}.npy".format(i, face_id))
+                '{name}/box/{frame_number + i:05d}_{face_label_seg[i]:01d}.npy.format()'
+                box = np.load(box_file, allow_pickle=True).item()
+                face_loc = np.array([box['face_box'][1] - box['face_box'][0], box['face_box'][3] - box['face_box'][2]])
+                movements.append(face_loc)
+        movements = np.array(movements)
+        stds = np.mean(np.std(movements, axis=0))
+        return stds
+    else:
+        return None
 
 
 def plot_face_pixel_density_vs_accuracy(sorted_IDs, all_metrics, args):
     plt.figure(figsize=(8.0, 6.0))
     densities = [all_metrics[x]["stats"]["avg_face_pixel_density"] for x in sorted_IDs]
-    plt.scatter(densities, [all_metrics[id]["human1_vs_machine"]["accuracy"] for id in sorted_IDs])
+    plt.scatter(densities, [all_metrics[id]["human1_vs_machine_session"]["agreement"] for id in sorted_IDs])
     plt.xlabel("Face pixel denisty")
     plt.ylabel("iCatcher accuracy")
     plt.title("iCatcher accuracy versus average face pixel density per video")
@@ -573,7 +826,7 @@ def plot_face_pixel_density_vs_accuracy(sorted_IDs, all_metrics, args):
 def plot_face_location_vs_accuracy(sorted_IDs, all_metrics, args):
     plt.figure(figsize=(8.0, 6.0))
     stds = [all_metrics[x]["stats"]["avg_face_loc_std"] for x in sorted_IDs]
-    plt.scatter(stds, [all_metrics[id]["human1_vs_machine"]["accuracy"] for id in sorted_IDs])
+    plt.scatter(stds, [all_metrics[id]["human1_vs_machine_session"]["agreement"] for id in sorted_IDs])
     plt.xlabel("Face location std in pixels")
     plt.ylabel("iCatcher accuracy")
     plt.title("iCatcher accuracy versus face location pixel std")
@@ -618,11 +871,12 @@ def create_cache_metrics(args, force_create=False):
             human_coding_file2 = Path(args.human2_codings_folder, code_file + human2_ext)
             machine_coding_file = Path(args.machine_codings_folder, code_file + machine_ext)
             key = human_coding_file.stem
-            all_metrics[key] = compare_coding_files(human_coding_file, human_coding_file2, machine_coding_file, args)
-            # other stats
-            all_metrics[key]["stats"] = {}
-            all_metrics[key]["stats"]["avg_face_pixel_density"] = get_face_pixel_density(key, args.faces_folder)
-            all_metrics[key]["stats"]["avg_face_loc_std"] = get_face_location_std(key, args.faces_folder)
+            res = compare_coding_files(human_coding_file, human_coding_file2, machine_coding_file, args)
+            if res:
+                all_metrics[key] = res
+                # other stats
+                all_metrics[key]["stats"]["avg_face_pixel_density"] = get_face_pixel_density(key, args.faces_folder)
+                all_metrics[key]["stats"]["avg_face_loc_std"] = get_face_location_std(key, args.faces_folder)
         # Store in disk for faster access next time:
         pickle.dump(all_metrics, open(metric_save_path, "wb"))
     return all_metrics
@@ -709,16 +963,13 @@ if __name__ == "__main__":
         logging.basicConfig(filename=args.log, filemode='w', level=args.verbosity.upper())
     else:
         logging.basicConfig(level=args.verbosity.upper())
-
+    # preprocess.create_annotation_split(Path(args.output_folder), Path(args.raw_dataset_folder))
     all_metrics = create_cache_metrics(args, force_create=False)
     # sort by accuracy
     sorted_ids = sorted(list(all_metrics.keys()),
-                        key=lambda x: all_metrics[x]["human1_vs_machine"]["accuracy"])
-    INFERENCE_METHODS = ["human1_vs_human2", "human1_vs_machine"]
-    # sandbox(all_metrics)
-    for inference in INFERENCE_METHODS:
-        generate_plot_collage(sorted_ids, all_metrics, inference, args.output_folder)
-    # generate_frame_comparison(random.sample(sorted_ids, min(len(sorted_ids), 8)), all_metrics, args)
+                        key=lambda x: all_metrics[x]["human1_vs_machine_session"]["agreement"])
+    generate_collage_plot(sorted_ids, all_metrics, args.output_folder)
+    generate_collage_plot2(sorted_ids, all_metrics, args.output_folder)
     generate_frame_by_frame_comparisons(sorted_ids, all_metrics, args)
     plot_face_pixel_density_vs_accuracy(sorted_ids, all_metrics, args)
     plot_face_location_vs_accuracy(sorted_ids, all_metrics, args)
