@@ -1,3 +1,5 @@
+from pytest import xfail
+import numpy as np
 import torch
 import copy
 from pathlib import Path
@@ -38,6 +40,8 @@ class MyModel:
             network = GazeCodingModel(self.opt)
         elif self.opt.architecture == "rnn":
             network = RNNModel(self.opt)
+        elif self.opt.architecture == "icatcher_vanilla":
+            network = iCatcherOriginal(self.opt)
         else:
             raise NotImplementedError
         network.to(self.opt.device)
@@ -150,13 +154,47 @@ class FullyConnected(torch.nn.Module):
         return x
 
 
-class iCatcherOriginal:
+class iCatcherOriginal(torch.nn.Module):
     """
     the vanilla iCatcher architecture
     """
     def __init__(self, args):
-        raise NotImplementedError
+        super().__init__()
+        self.args = args
+        # self.network = torch.nn.Sequential(
+        self.network = torch.nn.ModuleList([
+            torch.nn.Conv2d(3, 16, stride = (1,1), kernel_size = (3, 3), padding = (0, 0)).to(self.args.device),
+            torch.nn.ReLU(),
+            torch.nn.MaxPool2d((2, 2), stride = 1),
+            torch.nn.Conv2d(16, 32, stride = 1, kernel_size = (3, 3), padding = 0),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(32, 32, stride = 1, kernel_size = (3, 3), padding = 0),
+            torch.nn.ReLU(), 
+            torch.nn.MaxPool2d((2, 2), stride = 1),
+            torch.nn.Conv2d(32, 64, stride = 1, kernel_size = (3, 3), padding = 0),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(64, 64, stride = 1, kernel_size = (3, 3), padding = 0),
+            torch.nn.Flatten(),
+            torch.nn.Linear(495616, 32),
+            torch.nn.ReLU(),
+            torch.nn.Linear(32, 16),
+            torch.nn.ReLU(),
+            torch.nn.Linear(16, 3),
+        ])
 
+
+    def forward(self, x): #called whenever the __call__ function is invoked
+        x = x['imgs']
+        seq = []
+        out = x
+        for tt in range(x.shape[1]):
+            out = x[:, tt, :, :, :]
+            for i, layer in enumerate(self.network):
+                out = layer(out)
+            seq.append(out)
+        seq = torch.stack(seq, dim = 0)
+        seq = seq.transpose(1, 0)[:, 2, :]
+        return seq
 
 class RNNModel(torch.nn.Module):
     def __init__(self, args):
