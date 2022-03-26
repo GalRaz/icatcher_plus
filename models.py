@@ -4,6 +4,7 @@ from pathlib import Path
 import torch.nn.functional as F
 from torchvision.models.resnet import resnet18
 from collections import OrderedDict
+from torch.nn.parallel import DistributedDataParallel as DDP
 import logging
 
 
@@ -17,9 +18,10 @@ class MyModel:
         self.network = self.get_network()
         if self.opt.continue_train:
             self.load_network("latest")
+        if self.opt.distributed:
+            self.network = DDP(self.network, device_ids=[self.opt.rank])
         self.optimizer = self.get_optimizer()
         self.scheduler = self.get_scheduler()
-        self.network.to(self.opt.device)
 
     def get_loss_fn(self):
         if self.opt.loss == "cat_cross_entropy":
@@ -111,7 +113,6 @@ class MyModel:
                 new_dict[new_k] = v
             net.load_state_dict(new_dict)
 
-
     def save_network(self, which_epoch):
         """
         save model to disk.
@@ -120,8 +121,7 @@ class MyModel:
         """
         save_filename = '{}_net.pth'.format(str(which_epoch))
         save_path = Path.joinpath(self.opt.experiment_path, save_filename)
-        torch.save(self.network.cpu().state_dict(), str(save_path))
-        self.network.to(self.opt.device)
+        torch.save(self.network.state_dict(), str(save_path))
 
     def count_parameters(self):
         """
@@ -138,7 +138,7 @@ class FullyConnected(torch.nn.Module):
     def __init__(self, args):
         self.network = torch.nn.ModuleList([
             torch.nn.Flatten(),
-            torch.nn.Linear((args.image_size**2)*3*args.frames_per_datapoint, 128),
+            torch.nn.Linear((args.image_size**2)*3*args.sliding_window_size, 128),
             torch.nn.ReLU(),
             torch.nn.Linear(128, 64),
             torch.nn.ReLU(),
@@ -160,19 +160,18 @@ class iCatcherOriginal(torch.nn.Module):
     def __init__(self, args):
         super().__init__()
         self.args = args
-        # self.network = torch.nn.Sequential(
         self.network = torch.nn.ModuleList([
-            torch.nn.Conv2d(3, 16, stride = (1,1), kernel_size = (3, 3), padding = (0, 0)).to(self.args.device),
+            torch.nn.Conv2d(3, 16, stride=(1, 1), kernel_size=(3, 3), padding=(0, 0)),
             torch.nn.ReLU(),
-            torch.nn.MaxPool2d((2, 2), stride = 1),
-            torch.nn.Conv2d(16, 32, stride = 1, kernel_size = (3, 3), padding = 0),
+            torch.nn.MaxPool2d((2, 2), stride=1),
+            torch.nn.Conv2d(16, 32, stride=1, kernel_size=(3, 3), padding=0),
             torch.nn.ReLU(),
-            torch.nn.Conv2d(32, 32, stride = 1, kernel_size = (3, 3), padding = 0),
+            torch.nn.Conv2d(32, 32, stride=1, kernel_size=(3, 3), padding=0),
             torch.nn.ReLU(), 
-            torch.nn.MaxPool2d((2, 2), stride = 1),
-            torch.nn.Conv2d(32, 64, stride = 1, kernel_size = (3, 3), padding = 0),
+            torch.nn.MaxPool2d((2, 2), stride=1),
+            torch.nn.Conv2d(32, 64, stride=1, kernel_size=(3, 3), padding=0),
             torch.nn.ReLU(),
-            torch.nn.Conv2d(64, 64, stride = 1, kernel_size = (3, 3), padding = 0),
+            torch.nn.Conv2d(64, 64, stride=1, kernel_size=(3, 3), padding=0),
             torch.nn.Flatten(),
             torch.nn.Linear(495616, 32),
             torch.nn.ReLU(),
@@ -180,9 +179,9 @@ class iCatcherOriginal(torch.nn.Module):
             torch.nn.ReLU(),
             torch.nn.Linear(16, 3),
         ])
+        self.network.to(self.args.device)
 
-
-    def forward(self, x): #called whenever the __call__ function is invoked
+    def forward(self, x):
         x = x['imgs']
         seq = []
         out = x
@@ -191,9 +190,10 @@ class iCatcherOriginal(torch.nn.Module):
             for i, layer in enumerate(self.network):
                 out = layer(out)
             seq.append(out)
-        seq = torch.stack(seq, dim = 0)
+        seq = torch.stack(seq, dim=0)
         seq = seq.transpose(1, 0)[:, 2, :]
         return seq
+
 
 class RNNModel(torch.nn.Module):
     def __init__(self, args):
@@ -233,7 +233,7 @@ class GazeCodingModel(torch.nn.Module):
     def __init__(self, args, add_box=True):
         super().__init__()
         self.args = args
-        self.n = args.frames_per_datapoint // args.frames_stride_size
+        self.n = args.sliding_window_size // args.window_stride
         self.add_box = add_box
         self.encoder_img = resnet18(num_classes=256).to(self.args.device)
         self.encoder_box = Encoder_box().to(self.args.device)

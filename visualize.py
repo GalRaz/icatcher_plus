@@ -147,9 +147,18 @@ def get_stats_in_interval(start, end, coding1, coding2):
     :param coding2: np array (1 dimensional)
     :return:
     """
+    # fix in case one coding ends sooner than end
+    assert start >= 0
+    diff1 = end - len(coding1)
+    diff2 = end - len(coding2)
+    if diff1 > 0:
+        coding1 = np.concatenate((coding1, -3*np.ones(diff1, dtype=int)))
+    if diff2 > 0:
+        coding2 = np.concatenate((coding2, -3*np.ones(diff2, dtype=int)))
     coding1_interval = coding1[start:end]
     coding2_interval = coding2[start:end]
     mutually_valid_frames = np.logical_and(coding1_interval >= 0, coding2_interval >= 0)
+
     coding1_interval_mut_valid = coding1_interval[mutually_valid_frames]
     coding2_interval_mut_valid = coding2_interval[mutually_valid_frames]
 
@@ -199,8 +208,12 @@ def get_stats_in_interval(start, end, coding1, coding2):
                      "left": coding2_left,
                      "right": coding2_right,
                      "invalid": coding2_invalid}
+    raw_coding1 = coding1_interval
+    raw_coding2 = coding2_interval
     return {"n_frames_in_interval": end - start,
             "mutual_valid_frame_count": np.sum(mutually_valid_frames),
+            "raw_coding1": raw_coding1,
+            "raw_coding2": raw_coding2,
             "valid_frames_1": np.sum(coding1_interval >= 0),
             "valid_frames_2": np.sum(coding2_interval >= 0),
             "n_transitions_1": n_transitions_1,
@@ -247,29 +260,33 @@ def compare_coding_files(human_coding_file, human_coding_file2, machine_coding_f
     :param args:
     :return:
     """
-    if args.machine_coding_format == "vcx":
-        csv_file = Path(args.raw_dataset_folder / "Cal_BW_March_split0_participants.csv")
-        parser = parsers.VCXParser(30, csv_file)
-    elif args.machine_coding_format == "compressed":
+    if args.machine_coding_format == "compressed":
         parser = parsers.CompressedParser()
+    else:
+        raise NotImplementedError
     machine, mstart, mend = parser.parse(machine_coding_file.stem, machine_coding_file)
     trial_times = None
     if args.human_coding_format == "vcx":
         csv_file = Path(args.raw_dataset_folder / "Cal_BW_March_split0_participants.csv")
         parser = parsers.VCXParser(30, csv_file)
     elif args.human_coding_format == "lookit":
-        tsv_file = Path(args.raw_dataset_folder / "prephys_split0_videos.tsv")
-        parser = parsers.LookitParser(30, tsv_file)
+        csv_file = Path(args.raw_dataset_folder / "prephys_split0_videos.tsv")
+        parser = parsers.LookitParser(30, csv_file)
+    else:
+        raise NotImplementedError
     human, start1, end1 = parser.parse(human_coding_file.stem, human_coding_file)
     human2, start2, end2 = parser.parse(human_coding_file2.stem, human_coding_file2)
     if args.human_coding_format == "lookit":
         labels = parser.load_and_sort(human_coding_file)
         trial_times = parser.get_trial_intervals(start1, labels)
+    elif args.human_coding_format == "vcx":
+        trial_times = parser.get_trial_intervals(start1, human)
     if end1 != end2:
-        logging.warning("critical failure: humans don't agree on ending: {}".format(human_coding_file))
-        return None
+        logging.warning("humans don't agree on ending: {}".format(human_coding_file))
+        logging.warning("diff: {}".format(np.abs(end1 - end2)))
     metrics = {}
     machine_uncol = parser.uncollapse_labels(machine, mstart, mend)
+    # create a version of machine annotation where machine "invalid" is replaced with "away"
     special_machine = machine_uncol.copy()
     special_machine[special_machine < 0] = 0
     human1_uncol = parser.uncollapse_labels(human, start1, end1)
@@ -342,30 +359,110 @@ def save_metrics_csv(sorted_IDs, all_metrics, inference):
             csv_writer.writerow(row)
 
 
-def select_frames_from_video(ID, video_folder, start, end):
+def pick_interesting_frames(coding1, coding2, machine_code):
     """
-    selects 9 random frames from a video for display
+    given 3 coding files, selects interesting frames where annotators agree and disagree
+    :param coding1: human coding1
+    :param coding2: human coding2
+    :param machine_code: machine coding
+    :return: the relevant frame indices
+    """
+    start1 = np.where(coding1 > 0)[0][0]
+    start2 = np.where(coding2 > 0)[0][0]
+    start3 = np.where(machine_code > 0)[0][0]
+    start = max(max(start1, start2), start3)
+    end1 = np.where(coding1 > 0)[0][-1]
+    end2 = np.where(coding2 > 0)[0][-1]
+    end3 = np.where(machine_code > 0)[0][-1]
+    end = min(min(end1, end2), end3)
+    default_tuple = (np.array([np.NAN]),)
+    agree_away = np.where((machine_code[start:end] == 0) & (coding1[start:end] == 0) & (coding2[start:end] == 0))
+    agree_left = np.where((machine_code[start:end] == 1) & (coding1[start:end] == 1) & (coding2[start:end] == 1))
+    agree_right = np.where((machine_code[start:end] == 2) & (coding1[start:end] == 2) & (coding2[start:end] == 2))
+
+    disagree_mleft_haway = np.where((machine_code[start:end] == 1) & (coding1[start:end] == 0) & (coding2[start:end] == 0))
+    disagree_mright_haway = np.where((machine_code[start:end] == 2) & (coding1[start:end] == 0) & (coding2[start:end] == 0))
+    disagree_mx_haway = (np.concatenate((disagree_mleft_haway[0], disagree_mright_haway[0])),)
+    disagree_mleft_hright = np.where((machine_code[start:end] == 1) & (coding1[start:end] == 2) & (coding2[start:end] == 2))
+    disagree_mright_hleft = np.where((machine_code[start:end] == 2) & (coding1[start:end] == 1) & (coding2[start:end] == 1))
+
+    invalidm_away = np.where((machine_code[start:end] < 0) & (coding1[start:end] == 0) & (coding2[start:end] == 0))
+    invalidm_left = np.where((machine_code[start:end] < 0) & (coding1[start:end] == 1) & (coding2[start:end] == 1))
+    invalidm_right = np.where((machine_code[start:end] < 0) & (coding1[start:end] == 2) & (coding2[start:end] == 2))
+
+    if agree_away[0].size == 0:
+        agree_away = default_tuple
+    if agree_left[0].size == 0:
+        agree_left = default_tuple
+    if agree_right[0].size == 0:
+        agree_right = default_tuple
+
+    if disagree_mx_haway[0].size == 0:
+        disagree_mx_haway = default_tuple
+    if disagree_mleft_hright[0].size == 0:
+        disagree_mleft_hright = default_tuple
+    if disagree_mright_hleft[0].size == 0:
+        disagree_mright_hleft = default_tuple
+
+    if invalidm_away[0].size == 0:
+        invalidm_away = default_tuple
+    if invalidm_left[0].size == 0:
+        invalidm_left = default_tuple
+    if invalidm_right[0].size == 0:
+        invalidm_right = default_tuple
+
+    selected_frames = [np.random.permutation(agree_left[0])[0],
+                       np.random.permutation(agree_away[0])[0],
+                       np.random.permutation(agree_right[0])[0],
+                       np.random.permutation(disagree_mright_hleft[0])[0],
+                       np.random.permutation(disagree_mx_haway[0])[0],
+                       np.random.permutation(disagree_mleft_hright[0])[0],
+                       np.random.permutation(invalidm_left[0])[0],
+                       np.random.permutation(invalidm_away[0])[0],
+                       np.random.permutation(invalidm_right[0])[0]]
+    selected_frames = np.array(selected_frames)
+    selected_frames += start
+    return selected_frames
+
+
+def select_frames_from_video(ID, video_folder, end, frames=None):
+    """
+    selects 9 frames from a video for display
     :param ID: the video id (no extension)
     :param video_folder: the raw video folder
     :param start: where annotation begins
     :param end: where annotation ends
     :return: an image grid of 9 frames and the corresponding frame numbers
     """
-    imgs_np = np.ones((480*3, 640*3, 3))
+    # imgs_np = np.ones((480*3, 640*3, 3))
+    imgs = [None]*9
+    filled_counter = 0
+    if frames is None:
+        frame_selections = np.random.choice(np.arange(0, end // 2), size=9, replace=False)
+    else:
+        frame_selections = frames
+        invalid_frames = [i for i, x in enumerate(frame_selections) if np.isnan(x)]
+        filled_counter += len(invalid_frames)
     for video_file in Path(video_folder).glob("*"):
         if ID in video_file.name:
-            imgs = []
             cap = cv2.VideoCapture(str(video_file))
-            frame_selections = np.random.choice(np.arange(start, end//2), size=9, replace=False)
-            for i in range(start, end//2):  # to avoid end of video
+            ret, frame = cap.read()
+            h, w = frame.shape[0:2]
+            frame_counter = 0
+            while ret:
+                if frame_counter in frame_selections:
+                    index = np.where(frame_selections == frame_counter)[0].item()
+                    imgs[index] = frame[..., ::-1]
+                    filled_counter += 1
+                    if filled_counter == 9:
+                        for inv_frame in invalid_frames:
+                            imgs[inv_frame] = 255*np.ones((h, w, 3), dtype=int)
+                        imgs_np = np.array(imgs)
+                        imgs_np = make_gridview(imgs_np)
+                        return imgs_np, frame_selections
                 ret, frame = cap.read()
-                if i in frame_selections:
-                    imgs.append(frame[..., ::-1])
-                    if len(imgs) >= 9:
-                        break
-            imgs_np = np.array(imgs)
-            imgs_np = make_gridview(imgs_np)
-    return imgs_np, frame_selections
+                frame_counter += 1
+    raise IndexError
 
 
 def sample_luminance(ID, args, start, end, num_samples=10):
@@ -415,7 +512,17 @@ def generate_frame_by_frame_comparisons(sorted_IDs, all_metrics, args):
         times = [times1, times2, times3]
         video_label = ["coder 2", "coder 1", "machine"]
         trial_times = [x["end"] for x in all_metrics[target_ID]["human1_vs_human2_trials"]]
+        coding1 = all_metrics[target_ID]["human1_vs_human2_session"]['raw_coding1']
+        coding2 = all_metrics[target_ID]["human1_vs_human2_session"]['raw_coding2']
+        machine_code = all_metrics[target_ID]["human1_vs_machine_session"]['raw_coding2']
+        intersting_frames = pick_interesting_frames(coding1, coding2, machine_code)
+        # valid_interesting_frames = [x for x in intersting_frames if not np.isnan(x)]
         vlines_handle = timeline.vlines(trial_times, -1, 3, ls='--', color='k', label="trial times")
+        # vlines_selected_frames_handle = timeline.vlines(valid_interesting_frames, -1, 3, ls="solid", color='red', label="selected frames")
+        # for i, x in enumerate(valid_interesting_frames):
+        #     timeline.text(x, 0, "frame %d" % i, rotation=90, verticalalignment='center')
+        # timeline.annotate([str(x) for x in range(len(intersting_frames))],
+        #                                        ([0 for _ in range(len(intersting_frames))], intersting_frames))
         for j, vid_label in enumerate(video_label):
             timeline.set_xlabel("Frame #")
             for label in GRAPH_CLASSES:
@@ -429,7 +536,7 @@ def generate_frame_by_frame_comparisons(sorted_IDs, all_metrics, args):
                    Patch(facecolor=label_to_color("left"), label="Left"),
                    Patch(facecolor=label_to_color("right"), label="Right"),
                    Patch(facecolor=label_to_color("invalid"), label="Invalid"),
-                   vlines_handle]
+                   vlines_handle] # vlines_selected_frames_handle
         timeline.legend(handles=artists, bbox_to_anchor=(0.95, 1.0), loc='upper left')
 
         inference = ["human1_vs_human2_session", "human1_vs_machine_session"]
@@ -443,7 +550,7 @@ def generate_frame_by_frame_comparisons(sorted_IDs, all_metrics, args):
         accuracy.set_ylabel("Agreement")
         # sample_frame_index = min(
         #     [all_metrics[target_ID][ICATCHER]['times_target'][label][0] for label in VALID_CLASSES])
-        imgs, times = select_frames_from_video(target_ID, args.raw_video_folder, start, end)
+        imgs, times = select_frames_from_video(target_ID, args.raw_video_folder, end, frames=intersting_frames)
         sample_frame.imshow(imgs)
         sample_frame.set_axis_off()
         # sample_frame_index = (end - start) / 2.0
@@ -457,6 +564,7 @@ def generate_frame_by_frame_comparisons(sorted_IDs, all_metrics, args):
         # plt.subplots_adjust(left=0.075, bottom=0.075, right=0.925, top=0.925, wspace=0.2, hspace=0.8)
         plt.cla()
         plt.clf()
+        plt.close(fig)
 
 
 def generate_collage_plot2(sorted_IDs, all_metrics, save_path):
@@ -590,6 +698,7 @@ def generate_collage_plot2(sorted_IDs, all_metrics, save_path):
     plt.savefig(Path(save_path, "collage2.png"))
     plt.cla()
     plt.clf()
+    plt.close(fig)
 
 
 def generate_collage_plot(sorted_IDs, all_metrics, save_path):
@@ -731,6 +840,7 @@ def generate_collage_plot(sorted_IDs, all_metrics, save_path):
     plt.savefig(Path(save_path, "collage.png"))
     plt.cla()
     plt.clf()
+    plt.close(fig)
 
 
 def plot_inference_accuracy_vs_human_agreement(sorted_IDs, all_metrics, args):
@@ -963,7 +1073,6 @@ if __name__ == "__main__":
         logging.basicConfig(filename=args.log, filemode='w', level=args.verbosity.upper())
     else:
         logging.basicConfig(level=args.verbosity.upper())
-    # preprocess.create_annotation_split(Path(args.output_folder), Path(args.raw_dataset_folder))
     all_metrics = create_cache_metrics(args, force_create=False)
     # sort by accuracy
     sorted_ids = sorted(list(all_metrics.keys()),

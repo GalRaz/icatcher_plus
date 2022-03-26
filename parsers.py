@@ -38,6 +38,8 @@ class BaseParser:
         if type(labels) == np.ndarray:
             return labels
         output = []
+        for _ in range(start):
+            output.append(-3)
         prev_entry = labels[0]
         for entry in labels[1:]:
             if prev_entry[1]:  # valid
@@ -53,8 +55,6 @@ class BaseParser:
             else:
                 output.append(-3)
         output = np.array(output)
-        output[:start] = -3
-        output[end:] = -3
         return output
 
 
@@ -91,11 +91,11 @@ class LookitParser(BaseParser):
     """
     a parser that parses Lookit format, a slightly different version of PrefLookTimestampParser.
     """
-    def __init__(self, fps, tsv_file, first_coder=True, return_time_stamps=False):
+    def __init__(self, fps, csv_file, first_coder=True, return_time_stamps=False):
         super().__init__()
         self.fps = fps
         self.return_time_stamps = return_time_stamps
-        self.video_dataset = preprocess.build_lookit_video_dataset(tsv_file.parent, tsv_file)
+        self.video_dataset = preprocess.build_lookit_video_dataset(csv_file.parent, csv_file)
         self.first_coder = first_coder
         self.classes = ["away", "left", "right"]
         self.exclude = ["outofframe", "preview", "instructions"]

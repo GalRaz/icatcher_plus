@@ -1,7 +1,7 @@
 import cv2
 from pathlib import Path
 import numpy as np
-from preprocess import detect_face_opencv_dnn, build_lookit_video_dataset
+from preprocess import detect_face_opencv_dnn, build_lookit_video_dataset, build_marchman_video_dataset
 import options
 import visualize
 import logging
@@ -182,19 +182,17 @@ def predict_from_video(opt):
             video_paths = list(video_path.glob("*"))
             if opt.video_filter:
                 if opt.video_filter.is_file():
-                    if opt.video_filter.suffix == ".tsv":
+                    if opt.raw_dataset_type == "lookit":
                         video_dataset = build_lookit_video_dataset(opt.raw_dataset_path, opt.video_filter)
-                        filter_files = [x for x in video_dataset.values() if
-                                        x["in_tsv"] and x["has_1coding"] and x["has_2coding"] and x["split"] == "2_test"]
-                        video_ids = [x["video_id"] for x in filter_files]
-                        filter_files = [x["video_path"].stem for x in filter_files]
-                    else:
+                    elif opt.raw_dataset_type == "vcx":
                         video_dataset = build_marchman_video_dataset(opt.raw_dataset_path, opt.video_filter)
-                        filter_files = [x for x in video_dataset.values() if
-                                        x["in_csv"] and x["has_1coding"] and x["has_2coding"] and x[
-                                            "split"] == "2_test"]
-                        video_ids = [x["video_id"] for x in filter_files]
-                        filter_files = [x["video_path"].stem for x in filter_files]
+                    else:
+                        raise NotImplementedError
+                    filter_files = [x for x in video_dataset.values() if
+                                    x["in_csv"] and x["has_1coding"] and x["has_2coding"] and x[
+                                        "split"] == "2_test"]
+                    video_ids = [x["video_id"] for x in filter_files]
+                    filter_files = [x["video_path"].stem for x in filter_files]
                 else:  # directory
                     filter_files = [x.stem for x in opt.video_filter.glob("*")]
                 video_paths = [x for x in video_paths if x.stem in filter_files]

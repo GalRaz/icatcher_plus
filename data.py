@@ -33,7 +33,8 @@ class DataTransforms:
                 transforms.ToTensor(),
                 transforms.Normalize(mean, std)
             ])
-}
+        }
+
 
 class LookItDataset(data.Dataset):
     def __init__(self, opt):
