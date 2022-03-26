@@ -843,20 +843,6 @@ def generate_collage_plot(sorted_IDs, all_metrics, save_path):
     plt.close(fig)
 
 
-def plot_inference_accuracy_vs_human_agreement(sorted_IDs, all_metrics, args):
-    plt.figure(figsize=(8.0, 6.0))
-    plt.scatter([all_metrics[id]["human1_vs_human2_session"]["agreement"] for id in sorted_IDs],
-                [all_metrics[id]["human1_vs_machine_session"]["agreement"] for id in sorted_IDs])
-    plt.xlim([0, 100])
-    plt.ylim([0, 100])
-    plt.xlabel("Human accuracy")
-    plt.ylabel("iCatcher accuracy")
-    plt.title("iCatcher accuracy vs human accuracy for all doubly coded videos")
-    plt.savefig(Path(args.output_folder, 'iCatcher_acc_vs_human_acc.png'))
-    plt.cla()
-    plt.clf()
-
-
 def plot_luminance_vs_accuracy(sorted_IDs, all_metrics, args):
     plt.figure(figsize=(8.0, 6.0))
     plt.scatter([sample_luminance(id, args,
@@ -1074,7 +1060,7 @@ if __name__ == "__main__":
     else:
         logging.basicConfig(level=args.verbosity.upper())
     all_metrics = create_cache_metrics(args, force_create=False)
-    # sort by accuracy
+    # sort by percent agreement
     sorted_ids = sorted(list(all_metrics.keys()),
                         key=lambda x: all_metrics[x]["human1_vs_machine_session"]["agreement"])
     generate_collage_plot(sorted_ids, all_metrics, args.output_folder)
@@ -1082,7 +1068,6 @@ if __name__ == "__main__":
     generate_frame_by_frame_comparisons(sorted_ids, all_metrics, args)
     plot_face_pixel_density_vs_accuracy(sorted_ids, all_metrics, args)
     plot_face_location_vs_accuracy(sorted_ids, all_metrics, args)
-    plot_inference_accuracy_vs_human_agreement(sorted_ids, all_metrics, args)
     plot_luminance_vs_accuracy(sorted_ids, all_metrics, args)
 
 
