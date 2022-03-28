@@ -28,10 +28,14 @@ def parse_arguments_for_training():
     parser.add_argument("--loss", type=str, choices=["cat_cross_entropy"], default="cat_cross_entropy",
                         help="Selects loss function to optimize")
     parser.add_argument("--optimizer", type=str, choices=["adam", "SGD"], default="adam")
+    parser.add_argument("--inneroptimizer", type=str, choices=["adam", "SGD"], default="SGD")
     parser.add_argument("--lr", type=float, default=1e-5, help="Initial learning rate")
     parser.add_argument("--lr_policy", type=str, choices=["lambda", "plateau", "multi_step", "cyclic"],
                         default="plateau",
                         help="learning rate scheduler policy")
+    parser.add_argument("--inner_lr_policy", type=str, choices=["lambda", "plateau", "multi_step", "cyclic"],
+                        default="plateau",
+                        help="learning rate scheduler policy for inner loop")
     parser.add_argument("--lr_decay_rate", type=int, default=0.98, help="Decay rate for lamda lr policy.")
     parser.add_argument("--continue_train", action="store_true", help="Continue training from latest iteration")
     parser.add_argument("--use_disjoint", action="store_true",

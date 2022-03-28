@@ -106,6 +106,62 @@ def train_loop(rank, args):
             model.scheduler.step()
 
 
+def MAMLtrain(self, steps_outer, steps_inner=1, lr_inner=0.01, lr_outer=0.001,
+          disable_tqdm=False):
+    self.lr_inner = lr_inner
+    print('\nBeginning meta-learning for k = %d' % self.k)
+    print('> Please check tensorboard logs for progress.\n')
+
+    # Outer loop optimizer
+    optimizer = torch.optim.Adam(self.model.params(), lr=lr_outer)
+
+    # Model and optimizer for validation
+    valid_model = self.model.clone()
+    valid_optim = torch.optim.SGD(valid_model.params(), lr=self.lr_inner)
+
+    for i in tqdm(range(steps_outer), disable=disable_tqdm):
+        for j in range(steps_inner):
+            # Make copy of main model
+            self.meta_model.copy(self.model, same_var=True)
+
+            # Get a task
+            train_data, test_data = self.train_tasks.sample(num_train=self.k)
+
+            # Run the rest of the inner loop
+            task_loss = self.inner_loop(train_data, self.lr_inner)
+
+        # Calculate gradients on a held-out set
+        new_task_loss = forward_and_backward(
+            self.meta_model, test_data, train_data=train_data,
+        )
+
+        # Update the main model
+        optimizer.step()
+        optimizer.zero_grad()
+
+        if (i + 1) % 100 == 0:
+            # Log to Tensorflow
+            if self.tensorboard is not None:
+                self.tensorboard.add_scalar('meta-train/train-loss', task_loss, i)
+                self.tensorboard.add_scalar('meta-train/valid-loss', new_task_loss, i)
+
+            # Validation
+            losses = []
+            for j in range(self.valid_tasks.num_tasks):
+                valid_model.copy(self.model)
+                train_data, test_data = self.valid_tasks.sample_for_task(j, num_train=self.k)
+                train_loss = forward_and_backward(valid_model, train_data, valid_optim)
+                valid_loss = forward(valid_model, test_data, train_data=train_data)
+                losses.append((train_loss, valid_loss))
+            train_losses, valid_losses = zip(*losses)
+            if self.tensorboard is not None:
+                self.tensorboard.add_scalar('meta-valid/train-loss', np.mean(train_losses), i)
+                self.tensorboard.add_scalar('meta-valid/valid-loss', np.mean(valid_losses), i)
+
+    # Save MAML initial parameters
+    self.save_model_parameters()
+
+
 def setup(args):
     if args.rank == 0:  # setup logging
         if args.log:

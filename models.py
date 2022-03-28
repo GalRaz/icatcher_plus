@@ -12,7 +12,7 @@ class MyModel:
     """
     generic container class for network(torch Module), optimizer and scheduler.
     """
-    def __init__(self, opt):
+    def __init__(self, opt, MAMLFlag = False):
         self.opt = copy.deepcopy(opt)
         self.loss_fn = self.get_loss_fn()
         self.network = self.get_network()
@@ -20,7 +20,10 @@ class MyModel:
             self.load_network("latest")
         self.optimizer = self.get_optimizer()
         self.scheduler = self.get_scheduler()
-        self.network.to(self.opt.device)
+        if MAMLFlag == False:
+            self.network.to(self.opt.device)
+
+
 
     def get_loss_fn(self):
         if self.opt.loss == "cat_cross_entropy":
@@ -366,3 +369,51 @@ class Encoder_box_seq(torch.nn.Module):
         x = self.fc2(x)
 
         return x
+
+
+class MAMLmodel(MyModel):
+
+    def __init__(self, opt):
+        super().__init__(opt, True)
+
+        self.innerOptimizer = self.get_inner_optimizer(self.opt.inneroptimizer)
+        self.innerScheduler = self.get_inner_scheduler(self.opt.inner_lr_policy)
+        self.network.to(self.opt.device)
+
+
+    def get_inner_optimizer(self,optimizer):
+        if optimizer == "adam":
+            optimizer = torch.optim.Adam(self.network.parameters(),
+                                     lr=self.opt.lr,
+                                     betas=(0.9, 0.999),
+                                     weight_decay=1e-5)
+        elif optimizer == "SGD":
+            optimizer = torch.optim.SGD(self.network.parameters(),
+                                    lr=1e-2,
+                                    momentum=0.9,
+                                    weight_decay=1e-4)
+        else:
+            raise NotImplementedError
+        return optimizer
+
+
+    def get_inner_scheduler(self, lr_policy):
+        if lr_policy == 'lambda':
+            lambda_rule = lambda epoch: self.opt.lr_decay_rate ** epoch
+            scheduler = torch.optim.lr_scheduler.LambdaLR(self.innerOptimizer, lr_lambda=lambda_rule)
+        elif lr_policy == 'plateau':
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.innerOptimizer, 'min', verbose=True, patience=3)
+        elif lr_policy == 'multi_step':
+            scheduler = torch.optim.lr_scheduler.MultiStepLR(self.innerOptimizer, milestones=[10, 15], gamma=0.1)
+        elif lr_policy == "cyclic":
+            scheduler = torch.optim.lr_scheduler.CyclicLR(optimizer=self.innerOptimizer,
+                                                          base_lr=self.opt.lr,
+                                                          max_lr=self.opt.lr / 20,
+                                                          step_size_up=3,
+                                                          cycle_momentum=False,
+                                                          verbose=True)
+        else:
+            raise NotImplementedError
+        return scheduler
+
+
