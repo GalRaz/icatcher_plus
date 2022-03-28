@@ -348,7 +348,7 @@ class VCXParser(BaseParser):
         cur_timestamp = -1
         for response in sorted_responses:
             timestamp = response[1]
-            assert timestamp > cur_timestamp
+            assert timestamp > cur_timestamp, "Can't Have two responses for the same timestamp !"
             cur_timestamp = timestamp
             status = response[2]
             label = response[3]
@@ -357,8 +357,9 @@ class VCXParser(BaseParser):
             if self.start_times:
                 start_time = self.start_times[video_id]
                 timestamp -= start_time
-            assert 0 <= timestamp < 60 * 60 * self.fps
+            assert 0 <= timestamp < 60 * 60 * self.fps, "Starting time provided is after first response !"
             final_responses.append([timestamp, status, label])
+        assert len(final_responses) != 0, "No responses in file !"
         start = final_responses[0][0]
         intervals = self.get_trial_intervals(start, final_responses)
         end = intervals[-1][1]
