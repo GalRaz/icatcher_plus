@@ -118,7 +118,8 @@ def build_lookit_video_dataset(raw_dataset_path, csv_location):
                                    "first_coding_file": None,
                                    "second_coding_file": None,
                                    "child_id": None,
-                                   "split": None}
+                                   "split": None,
+                                   "public": False}
     # parse csv file
     rows = []
     with open(csv_location) as file:
@@ -130,6 +131,7 @@ def build_lookit_video_dataset(raw_dataset_path, csv_location):
     video_id = header.index("videoID")
     child_id = header.index("childID")
     which_dataset = header.index("which.dataset")  # train, val or test video
+    privacy = header.index("video.privacy")
     csv_videos = [row[video_id] for row in rows]
     for entry in video_dataset.values():
         if entry["video_id"] in csv_videos:
@@ -137,6 +139,7 @@ def build_lookit_video_dataset(raw_dataset_path, csv_location):
             index = csv_videos.index(entry["video_id"])
             entry["child_id"] = rows[index][child_id]
             entry["split"] = rows[index][which_dataset]
+            entry["public"] = "public" in rows[index][privacy]
     # fill video dataset with information from folders
     first_coding_files = [f for f in Path(raw_dataset_path / "annotations" / 'coder1').glob("*.txt")]
     first_coding_files_video_ids = ["-".join(f.stem.split("_")[2].split("-")[1:]) for f in first_coding_files]
