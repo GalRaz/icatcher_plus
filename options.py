@@ -75,10 +75,11 @@ def parse_arguments_for_testing():
     parser.add_argument("--source_type", type=str, default="file", choices=["file", "webcam"],
                         help="selects source of stream to use.")
     parser.add_argument("--video_filter", type=str,
-                        help="either a file consisting of a list of files used to filter videos in a folder,"
-                             " or a folder of files to filter the videos with. if file and suffix is .tsv,"
-                             " will assume certain structure using the lookit dataset")
-    parser.add_argument("--raw_dataset_path", type=str, help="path to raw dataset (required if video_filter is a .tsv file")
+                        help="provided file will be used to filter only test videos,"
+                             " will assume certain file structure using the lookit/marchman datasets")
+    parser.add_argument("--raw_dataset_path", type=str, help="path to raw dataset (required if --video_filter is passed")
+    parser.add_argument("--raw_dataset_type", type=str, choices=["lookit", "vcx", "generic"], default="lookit",
+                        help="the type of dataset to preprocess")
     parser.add_argument("--output_annotation", type=str, help="folder to output annotations to")
     parser.add_argument("--on_off", action="store_true",
                         help="left/right/away annotations will be swapped with on/off (only works with icatcher+)")
@@ -148,6 +149,8 @@ def parse_arguments_for_visualizations():
     parser = argparse.ArgumentParser()
     parser.add_argument("output_folder", type=str, default="output", help="path to output results.")
     parser.add_argument("raw_dataset_folder", type=str, help="path to raw dataset folder")
+    parser.add_argument("--raw_dataset_type", type=str, choices=["lookit", "vcx", "generic"], default="lookit",
+                        help="the type of dataset to preprocess")
     parser.add_argument("dataset_folder", type=str, help="path to preprocessed dataset folder")
     parser.add_argument("human_codings_folder", type=str, help="the codings from human1")
     parser.add_argument("human2_codings_folder", type=str, help="the codings from human12")
@@ -174,13 +177,28 @@ def parse_arguments_for_visualizations():
     args.output_folder.mkdir(parents=True, exist_ok=True)
     args.dataset_folder = Path(args.dataset_folder)
     assert args.dataset_folder.is_dir()
+    args.raw_dataset_folder = Path(args.raw_dataset_folder)
+    assert args.raw_dataset_folder.is_dir()
     args.human_codings_folder = Path(args.human_codings_folder)
-    assert args.human_codings_folder.is_dir()
     args.human2_codings_folder = Path(args.human2_codings_folder)
+    if not args.human_codings_folder.is_dir() or not args.human2_codings_folder.is_dir():
+        import preprocess
+        if args.raw_dataset_type == "lookit":
+            preprocess.create_annotation_split(args, "prephys_split0_videos.tsv")
+        elif args.raw_dataset_type == "vcx":
+            preprocess.create_annotation_split(args, "Cal_BW_March_split0_participants.csv")
+        else:
+            raise NotImplementedError
+    assert args.human_codings_folder.is_dir()
     assert args.human2_codings_folder.is_dir()
     args.machine_codings_folder = Path(args.machine_codings_folder)
     assert args.machine_codings_folder.is_dir()
-    args.raw_video_folder = Path(args.raw_dataset_folder, "videos")
+    if args.raw_dataset_type == "lookit":
+        args.raw_video_folder = Path(args.raw_dataset_folder, "videos")
+    elif args.raw_dataset_type == "vcx":
+        args.raw_video_folder = Path(args.raw_dataset_folder, "Cal_BW MOV")
+    else:
+        raise NotImplementedError
     assert args.raw_video_folder.is_dir()
     args.faces_folder = Path(args.dataset_folder, "faces")
     assert args.faces_folder.is_dir()

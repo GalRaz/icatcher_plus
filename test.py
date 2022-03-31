@@ -1,7 +1,7 @@
 import cv2
 from pathlib import Path
 import numpy as np
-from preprocess import detect_face_opencv_dnn, build_lookit_video_dataset
+from preprocess import detect_face_opencv_dnn, build_lookit_video_dataset, build_marchman_video_dataset
 import options
 import visualize
 import logging
@@ -133,7 +133,6 @@ def predict_from_video(opt):
     # initialize
     opt.sliding_window_size = 9
     opt.window_stride = 2
-    sequence_length = 9
     loc = -5
     classes = {'noface': -2, 'nobabyface': -1, 'away': 0, 'left': 1, 'right': 2}
     reverse_classes = {-2: 'away', -1: 'away', 0: 'away', 1: 'left', 2: 'right'}
@@ -149,14 +148,14 @@ def predict_from_video(opt):
         state_dict = torch.load(str(path_to_primary_model))
     try:
         primary_model.load_state_dict(state_dict)
-    except RuntimeError:  # deal with old models that were encapsulated with "net"
+    except RuntimeError as e:  # deal with models trained on distributed setup
         from collections import OrderedDict
-        new_dict = OrderedDict()
-        for i in range(len(state_dict)):
-            k, v = state_dict.popitem(False)
-            new_k = '.'.join(k.split(".")[1:])
-            new_dict[new_k] = v
-        primary_model.load_state_dict(new_dict)
+        new_state_dict = OrderedDict()
+        for k, v in state_dict.items():
+            name = k[7:]  # remove `module.`
+            new_state_dict[name] = v
+        # load params
+        primary_model.load_state_dict(new_state_dict)
     primary_model.eval()
 
     if opt.fc_model:
@@ -182,16 +181,17 @@ def predict_from_video(opt):
             video_paths = list(video_path.glob("*"))
             if opt.video_filter:
                 if opt.video_filter.is_file():
-                    if opt.video_filter.suffix == ".tsv":
+                    if opt.raw_dataset_type == "lookit":
                         video_dataset = build_lookit_video_dataset(opt.raw_dataset_path, opt.video_filter)
-                        filter_files = [x for x in video_dataset.values() if
-                                        x["in_tsv"] and x["has_1coding"] and x["has_2coding"] and x["split"] == "2_test"]
-                        video_ids = [x["video_id"] for x in filter_files]
-                        filter_files = [x["video_path"].stem for x in filter_files]
+                    elif opt.raw_dataset_type == "vcx":
+                        video_dataset = build_marchman_video_dataset(opt.raw_dataset_path, opt.video_filter)
                     else:
-                        with open(opt.video_filter_file, "r") as f:
-                            filter_files = f.readlines()
-                            filter_files = [Path(line.rstrip()).stem for line in filter_files]
+                        raise NotImplementedError
+                    filter_files = [x for x in video_dataset.values() if
+                                    x["in_csv"] and x["has_1coding"] and x["has_2coding"] and x[
+                                        "split"] == "2_test"]
+                    video_ids = [x["video_id"] for x in filter_files]
+                    filter_files = [x["video_path"].stem for x in filter_files]
                 else:  # directory
                     filter_files = [x.stem for x in opt.video_filter.glob("*")]
                 video_paths = [x for x in video_paths if x.stem in filter_files]
@@ -266,10 +266,10 @@ def predict_from_video(opt):
                     image_sequence.append((crop, False))
                     box_sequence.append(my_box)
                     hor, ver = my_box[2], my_box[1]
-            if len(image_sequence) == sequence_length:  # we have enough frames for prediction, predict for middle frame
+            if len(image_sequence) == opt.sliding_window_size:  # we have enough frames for prediction, predict for middle frame
                 popped_frame = frames[loc]
                 frames.pop(0)
-                if not image_sequence[sequence_length // 2][1]:  # if middle image is valid
+                if not image_sequence[opt.sliding_window_size // 2][1]:  # if middle image is valid
                     if opt.architecture == "icatcher+":
                         to_predict = {"imgs": torch.tensor([x[0] for x in image_sequence[0::2]], dtype=torch.float).squeeze().permute(0, 3, 1, 2).to(opt.device),
                                       "boxs": torch.tensor(box_sequence[::2], dtype=torch.float).to(opt.device)
@@ -314,7 +314,7 @@ def predict_from_video(opt):
             video_output.release()
         if opt.output_annotation:  # write footer to file
             if opt.output_format == "PrefLookTimestamp":
-                start_ms = int((1000. / framerate) * (sequence_length // 2))
+                start_ms = int((1000. / framerate) * (opt.sliding_window_size // 2))
                 end_ms = int((1000. / framerate) * frame_count)
                 output_file.write("{},{},codingactive\n".format(start_ms, end_ms))
                 output_file.close()

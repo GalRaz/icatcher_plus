@@ -18,7 +18,7 @@ import video
 import csv
 
 
-def create_annotation_split(output_location, raw_dataset_path):
+def create_annotation_split(args, csv_name):
     """
     creates a folder with 2 subfolders (coding1, coding2)
     each having an annotation by different coders for videos in the test set
@@ -27,13 +27,16 @@ def create_annotation_split(output_location, raw_dataset_path):
     :param raw_dataset_path: path to raw dataset
     :return:
     """
-    coding1_location = Path(output_location, "coding1")
-    coding2_location = Path(output_location, "coding2")
+    coding1_location = args.human_codings_folder
+    coding2_location = args.human2_codings_folder
     coding1_location.mkdir(parents=True, exist_ok=True)
     coding2_location.mkdir(parents=True, exist_ok=True)
-    tsv_location = Path(raw_dataset_path, "prephys_split0_videos.tsv")
-    db = build_lookit_video_dataset(raw_dataset_path, tsv_location)
-    test_subset = [x for x in db.values() if x["in_tsv"] and x["has_1coding"] and x["has_2coding"] and x["split"] == "2_test"]
+    csv_location = Path(args.raw_dataset_folder, csv_name)
+    if args.raw_dataset_type == "lookit":
+        db = build_lookit_video_dataset(args.raw_dataset_folder, csv_location)
+    elif args.raw_dataset_type == "vcx":
+        db = build_marchman_video_dataset(args.raw_dataset_folder, csv_location)
+    test_subset = [x for x in db.values() if x["in_csv"] and x["has_1coding"] and x["has_2coding"] and x["split"] == "2_test"]
     coding1_files = [(x["video_id"], x["first_coding_file"]) for x in test_subset]
     coding2_files = [(x["video_id"], x["second_coding_file"]) for x in test_subset]
     for i in range(len(coding1_files)):
@@ -57,7 +60,7 @@ def build_marchman_video_dataset(raw_dataset_path, csv_location):
                                         "child_id": None,
                                         "split": None,
                                         "start_timestamp": None}
-    # parse tsv file
+    # parse csv file
     rows = []
     with open(csv_location) as file:
         csv_file = csv.reader(file, delimiter="\t")
@@ -65,7 +68,7 @@ def build_marchman_video_dataset(raw_dataset_path, csv_location):
         header = header[0].split(",")
         for row in csv_file:
             rows.append(row[0].split(","))
-    # fill video dataset with information from tsv
+    # fill video dataset with information from csv
     video_id = header.index("videoFileName")
     child_id = header.index("childID")
     which_dataset = header.index("which.dataset")  # train, val or test video
@@ -95,11 +98,11 @@ def build_marchman_video_dataset(raw_dataset_path, csv_location):
     return video_dataset
 
 
-def build_lookit_video_dataset(raw_dataset_path, tsv_location):
+def build_lookit_video_dataset(raw_dataset_path, csv_location):
     """
-    given the raw dataset path and the tsv file location, creates a dictionary describing the dataset
+    given the raw dataset path and the csv file location, creates a dictionary describing the dataset
     :param raw_dataset_path:
-    :param tsv_location:
+    :param csv_location:
     :return:
     """
     video_dataset = {}
@@ -109,31 +112,34 @@ def build_lookit_video_dataset(raw_dataset_path, tsv_location):
             video_dataset[file] = {"video_id": "-".join(file.stem.split("_")[2].split("-")[1:]),
                                    "video_path": file,
                                    "video_suffix": file.suffix,
-                                   "in_tsv": False,
+                                   "in_csv": False,
                                    "has_1coding": False,
                                    "has_2coding": False,
                                    "first_coding_file": None,
                                    "second_coding_file": None,
                                    "child_id": None,
-                                   "split": None}
-    # parse tsv file
+                                   "split": None,
+                                   "public": False}
+    # parse csv file
     rows = []
-    with open(tsv_location) as file:
-        tsv_file = csv.reader(file, delimiter="\t")
-        header = next(tsv_file)
-        for row in tsv_file:
+    with open(csv_location) as file:
+        csv_file = csv.reader(file, delimiter="\t")
+        header = next(csv_file)
+        for row in csv_file:
             rows.append(row)
-    # fill video dataset with information from tsv
+    # fill video dataset with information from csv
     video_id = header.index("videoID")
     child_id = header.index("childID")
     which_dataset = header.index("which.dataset")  # train, val or test video
-    tsv_videos = [row[video_id] for row in rows]
+    privacy = header.index("video.privacy")
+    csv_videos = [row[video_id] for row in rows]
     for entry in video_dataset.values():
-        if entry["video_id"] in tsv_videos:
-            entry["in_tsv"] = True
-            index = tsv_videos.index(entry["video_id"])
+        if entry["video_id"] in csv_videos:
+            entry["in_csv"] = True
+            index = csv_videos.index(entry["video_id"])
             entry["child_id"] = rows[index][child_id]
             entry["split"] = rows[index][which_dataset]
+            entry["public"] = "public" in rows[index][privacy]
     # fill video dataset with information from folders
     first_coding_files = [f for f in Path(raw_dataset_path / "annotations" / 'coder1').glob("*.txt")]
     first_coding_files_video_ids = ["-".join(f.stem.split("_")[2].split("-")[1:]) for f in first_coding_files]
@@ -163,28 +169,28 @@ def preprocess_raw_lookit_dataset(args, force_create=False):
     :return:
     """
     np.random.seed(seed=args.seed)  # seed the random generator
-    tsv_file = Path(args.raw_dataset_path / "prephys_split0_videos.tsv")
-    video_dataset = build_lookit_video_dataset(args.raw_dataset_path, tsv_file)
+    csv_file = Path(args.raw_dataset_path / "prephys_split0_videos.tsv")
+    video_dataset = build_lookit_video_dataset(args.raw_dataset_path, csv_file)
     # print some stats
-    with open(tsv_file, 'r') as tsv_fp:
-        tsv_videos = len(tsv_fp.readlines())
+    with open(csv_file, 'r') as csv_fp:
+        csv_videos = len(csv_fp.readlines())
     valid_videos = len(video_dataset.keys())
-    valid_videos_in_tsv = len([x for x in video_dataset.values() if x["in_tsv"] and x["has_1coding"]])
-    doubly_coded = len([x for x in video_dataset.values() if x["in_tsv"] and x["has_2coding"]])
-    unique_children = len(np.unique([x["child_id"] for x in video_dataset.values() if x["in_tsv"] and x["has_1coding"]]))
-    logging.info("tsv videos: {},"
+    valid_videos_in_csv = len([x for x in video_dataset.values() if x["in_csv"] and x["has_1coding"]])
+    doubly_coded = len([x for x in video_dataset.values() if x["in_csv"] and x["has_2coding"]])
+    unique_children = len(np.unique([x["child_id"] for x in video_dataset.values() if x["in_csv"] and x["has_1coding"]]))
+    logging.info("csv videos: {},"
                  " found videos: {},"
-                 " found videos in tsv: {},"
+                 " found videos in csv: {},"
                  " doubly coded: {},"
-                 " unique children: {}".format(tsv_videos, valid_videos, valid_videos_in_tsv, doubly_coded, unique_children))
+                 " unique children: {}".format(csv_videos, valid_videos, valid_videos_in_csv, doubly_coded, unique_children))
 
     # filter out videos according to split type
     if args.split_type == "all":
-        videos = [x for x in video_dataset.values() if x["in_tsv"] and x["has_1coding"]]
+        videos = [x for x in video_dataset.values() if x["in_csv"] and x["has_1coding"]]
     elif args.split_type == "split0_train":
-        videos = [x for x in video_dataset.values() if x["in_tsv"] and x["has_1coding"] and (x["split"] == "1_train" or x["split"] == "1_validate")]
+        videos = [x for x in video_dataset.values() if x["in_csv"] and x["has_1coding"] and (x["split"] == "1_train" or x["split"] == "1_validate")]
     elif args.split_type == "split0_test":
-        videos = [x for x in video_dataset.values() if x["in_tsv"] and x["has_1coding"] and x["split"] == "2_test"]
+        videos = [x for x in video_dataset.values() if x["in_csv"] and x["has_1coding"] and x["split"] == "2_test"]
     else:
         raise NotImplementedError
     videos = np.array(videos)
@@ -437,9 +443,9 @@ def process_dataset_lowest_face(args, gaze_labels_only=False, force_create=False
                                        csv_file,
                                        first_coder=True)
         elif args.raw_dataset_type == "lookit":
-            tsv_file = Path(args.raw_dataset_path / "prephys_split0_videos.tsv")
+            csv_file = Path(args.raw_dataset_path / "prephys_split0_videos.tsv")
             parser = parsers.LookitParser(fps,
-                                          tsv_file,
+                                          csv_file,
                                           first_coder=True,
                                           return_time_stamps=vfr)
         else:
@@ -578,9 +584,9 @@ def generate_second_gaze_labels(args, force_create=False, visualize_confusion=Fa
                                            csv_file,
                                            first_coder=False)
             elif args.raw_dataset_type == "lookit":
-                tsv_file = Path(args.raw_dataset_path / "prephys_split0_videos.tsv")
+                csv_file = Path(args.raw_dataset_path / "prephys_split0_videos.tsv")
                 parser = parsers.LookitParser(fps,
-                                              tsv_file,
+                                              csv_file,
                                               first_coder=False,
                                               return_time_stamps=vfr)
             else:

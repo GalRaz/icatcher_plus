@@ -38,6 +38,8 @@ class BaseParser:
         if type(labels) == np.ndarray:
             return labels
         output = []
+        for _ in range(start):
+            output.append(-3)
         prev_entry = labels[0]
         for entry in labels[1:]:
             if prev_entry[1]:  # valid
@@ -53,8 +55,6 @@ class BaseParser:
             else:
                 output.append(-3)
         output = np.array(output)
-        output[:start] = -3
-        output[end:] = -3
         return output
 
 
@@ -91,11 +91,11 @@ class LookitParser(BaseParser):
     """
     a parser that parses Lookit format, a slightly different version of PrefLookTimestampParser.
     """
-    def __init__(self, fps, tsv_file, first_coder=True, return_time_stamps=False):
+    def __init__(self, fps, csv_file, first_coder=True, return_time_stamps=False):
         super().__init__()
         self.fps = fps
         self.return_time_stamps = return_time_stamps
-        self.video_dataset = preprocess.build_lookit_video_dataset(tsv_file.parent, tsv_file)
+        self.video_dataset = preprocess.build_lookit_video_dataset(csv_file.parent, csv_file)
         self.first_coder = first_coder
         self.classes = ["away", "left", "right"]
         self.exclude = ["outofframe", "preview", "instructions"]
@@ -348,7 +348,7 @@ class VCXParser(BaseParser):
         cur_timestamp = -1
         for response in sorted_responses:
             timestamp = response[1]
-            assert timestamp > cur_timestamp
+            assert timestamp > cur_timestamp, "Can't Have two responses for the same timestamp !"
             cur_timestamp = timestamp
             status = response[2]
             label = response[3]
@@ -357,8 +357,9 @@ class VCXParser(BaseParser):
             if self.start_times:
                 start_time = self.start_times[video_id]
                 timestamp -= start_time
-            assert 0 <= timestamp < 60 * 60 * self.fps
+            assert 0 <= timestamp < 60 * 60 * self.fps, "Starting time provided is after first response !"
             final_responses.append([timestamp, status, label])
+        assert len(final_responses) != 0, "No responses in file !"
         start = final_responses[0][0]
         intervals = self.get_trial_intervals(start, final_responses)
         end = intervals[-1][1]

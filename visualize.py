@@ -20,8 +20,8 @@ import parsers
 
 
 def label_to_color(label):
-    mapping = {"left": (0.5, 0.6, 0.9),
-               "right": (0.9, 0.6, 0.5),
+    mapping = {"left": (0.031, 0.411, 0.643),
+               "right": (0.823, 0.309, 0),
                "away": "lightgrey",
                "invalid": "white",
                "lblue": (0.5, 0.6, 0.9),
@@ -29,21 +29,33 @@ def label_to_color(label):
                "lgreen": (0.6, 0.8, 0.0),
                "lorange": (0.94, 0.78, 0.0),
                "lyellow": (0.9, 0.9, 0.0),
-               "mblue": (0.12, 0.41, 0.87)}
+               "mblue": (0.12, 0.41, 0.87),
+               "cblind_red": (0.823, 0.309, 0),
+               "cblind_blue": (0.031, 0.411, 0.643),
+               "vlblue": (0.086, 0.568, 0.874),
+               "vblue": (0.074, 0.349, 0.525),
+               "vlgreen": (0.345, 0.890, 0.270),
+               "vgreen": (0.149, 0.615, 0.082)}
     return mapping[label]
 
 
-def calculate_confusion_matrix(label, pred, save_path=None, mat=None, class_num=3, verbose=True):
+def calculate_confusion_matrix(label, pred, save_path=None, mat=None, class_num=3, flip_xy=False, verbose=True):
     """
     creates a plot of the confusion matrix given the gt labels abd the predictions.
     if mat is supplied, ignores other inputs and uses that.
-    :param label: the labels
-    :param pred: the predicitions
+    :param label: the labels (will be y axis)
+    :param pred: the predicitions (will be x axis)
     :param save_path: path to save plot
     :param mat: a numpy 3x3 array representing the confusion matrix
     :param class_num: number of classes
     :return:
     """
+    if class_num == 2:
+        class_labels = ['on', 'off']
+    elif class_num == 3:
+        class_labels = ['away', 'left', 'right']
+    else:
+        raise ValueError
     if mat is None:
         mat = np.zeros([class_num, class_num])
         pred = np.array(pred)
@@ -53,6 +65,8 @@ def calculate_confusion_matrix(label, pred, save_path=None, mat=None, class_num=
         for i in range(class_num):
             for j in range(class_num):
                 mat[i][j] = sum((label == i) & (pred == j))
+        if flip_xy:
+            mat = mat.T
     if np.all(np.sum(mat, -1, keepdims=True) != 0):
         total_acc = (mat.diagonal().sum() / mat.sum()) * 100
         norm_mat = mat / np.sum(mat, -1, keepdims=True)
@@ -62,8 +76,8 @@ def calculate_confusion_matrix(label, pred, save_path=None, mat=None, class_num=
     if save_path:
         fig, ax = plt.subplots(figsize=(3, 3))
         ax = sns.heatmap(norm_mat, ax=ax, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues')
-        ax.set_xticklabels(['away', 'left', 'right'])
-        ax.set_yticklabels(['away', 'left', 'right'])
+        ax.set_xticklabels(class_labels)
+        ax.set_yticklabels(class_labels)
         plt.axis('equal')
         plt.tight_layout(pad=0.1)
         plt.savefig(save_path)
@@ -147,9 +161,18 @@ def get_stats_in_interval(start, end, coding1, coding2):
     :param coding2: np array (1 dimensional)
     :return:
     """
+    # fix in case one coding ends sooner than end
+    assert start >= 0
+    diff1 = end - len(coding1)
+    diff2 = end - len(coding2)
+    if diff1 > 0:
+        coding1 = np.concatenate((coding1, -3*np.ones(diff1, dtype=int)))
+    if diff2 > 0:
+        coding2 = np.concatenate((coding2, -3*np.ones(diff2, dtype=int)))
     coding1_interval = coding1[start:end]
     coding2_interval = coding2[start:end]
     mutually_valid_frames = np.logical_and(coding1_interval >= 0, coding2_interval >= 0)
+
     coding1_interval_mut_valid = coding1_interval[mutually_valid_frames]
     coding2_interval_mut_valid = coding2_interval[mutually_valid_frames]
 
@@ -166,22 +189,22 @@ def get_stats_in_interval(start, end, coding1, coding2):
     n_transitions_1 = np.count_nonzero(np.diff(coding1_interval[mutually_valid_frames]))
     n_transitions_2 = np.count_nonzero(np.diff(coding2_interval[mutually_valid_frames]))
 
-    on_screen_1 = np.sum(coding1_interval_mut_valid == 1) + np.sum(coding1_interval_mut_valid == 2)
-    on_screen_2 = np.sum(coding2_interval_mut_valid == 1) + np.sum(coding2_interval_mut_valid == 2)
-    off_screen_1 = np.sum(coding1_interval_mut_valid == 0)
-    off_screen_2 = np.sum(coding2_interval_mut_valid == 0)
+    on_screen_1_sum = np.sum(coding1_interval_mut_valid == 1) + np.sum(coding1_interval_mut_valid == 2)
+    on_screen_2_sum = np.sum(coding2_interval_mut_valid == 1) + np.sum(coding2_interval_mut_valid == 2)
+    off_screen_1_sum = np.sum(coding1_interval_mut_valid == 0)
+    off_screen_2_sum = np.sum(coding2_interval_mut_valid == 0)
 
-    if on_screen_1 == 0:
+    if on_screen_1_sum == 0:
         percent_r_1 = 0
     else:
-        percent_r_1 = np.sum(coding1_interval_mut_valid == 2) / on_screen_1
-    if on_screen_2 == 0:
+        percent_r_1 = np.sum(coding1_interval_mut_valid == 2) / on_screen_1_sum
+    if on_screen_2_sum == 0:
         percent_r_2 = 0
     else:
-        percent_r_2 = np.sum(coding2_interval_mut_valid == 2) / on_screen_2
+        percent_r_2 = np.sum(coding2_interval_mut_valid == 2) / on_screen_2_sum
 
-    looking_time_1 = on_screen_1
-    looking_time_2 = on_screen_2
+    looking_time_1 = on_screen_1_sum
+    looking_time_2 = on_screen_2_sum
 
     equal = coding1_interval == coding2_interval
 
@@ -190,7 +213,15 @@ def get_stats_in_interval(start, end, coding1, coding2):
         agreement = 0
     else:
         agreement = np.sum(equal[mutually_valid_frames]) / equal_and_non_equal
-    _, mat, _ = calculate_confusion_matrix(coding1_interval_mut_valid, coding2_interval_mut_valid, verbose=False)
+    _, mat3, _ = calculate_confusion_matrix(coding1_interval_mut_valid, coding2_interval_mut_valid,
+                                            class_num=3, flip_xy=True, verbose=False)
+
+    on_screen_1 = coding1_interval_mut_valid.copy()
+    on_screen_1[on_screen_1 > 0] = 1
+    on_screen_2 = coding2_interval_mut_valid.copy()
+    on_screen_2[on_screen_2 > 0] = 1
+    _, mat2, _ = calculate_confusion_matrix(on_screen_1, on_screen_2,
+                                            class_num=2, flip_xy=True, verbose=False)
     times_coding1 = {"away": coding1_away,
                      "left": coding1_left,
                      "right": coding1_right,
@@ -199,8 +230,20 @@ def get_stats_in_interval(start, end, coding1, coding2):
                      "left": coding2_left,
                      "right": coding2_right,
                      "invalid": coding2_invalid}
+    raw_coding1 = coding1_interval
+    raw_coding2 = coding2_interval
+
+    try:
+        df = pd.DataFrame({"coder1": coding1_interval_mut_valid,
+                           "coder2": coding2_interval_mut_valid})
+        ca = pg.cronbach_alpha(data=df)[0]
+    except AssertionError:
+        ca = np.nan
+
     return {"n_frames_in_interval": end - start,
             "mutual_valid_frame_count": np.sum(mutually_valid_frames),
+            "raw_coding1": raw_coding1,
+            "raw_coding2": raw_coding2,
             "valid_frames_1": np.sum(coding1_interval >= 0),
             "valid_frames_2": np.sum(coding2_interval >= 0),
             "n_transitions_1": n_transitions_1,
@@ -210,7 +253,9 @@ def get_stats_in_interval(start, end, coding1, coding2):
             "looking_time_1": looking_time_1,
             "looking_time_2": looking_time_2,
             "agreement": agreement,
-            "confusion_matrix": mat,
+            "ca": ca,
+            "confusion_matrix": mat3,
+            "confusion_matrix2": mat2,
             "start": start,
             "end": end,
             "times_coding1": times_coding1,
@@ -247,29 +292,33 @@ def compare_coding_files(human_coding_file, human_coding_file2, machine_coding_f
     :param args:
     :return:
     """
-    if args.machine_coding_format == "vcx":
-        csv_file = Path(args.raw_dataset_folder / "Cal_BW_March_split0_participants.csv")
-        parser = parsers.VCXParser(30, csv_file)
-    elif args.machine_coding_format == "compressed":
+    if args.machine_coding_format == "compressed":
         parser = parsers.CompressedParser()
+    else:
+        raise NotImplementedError
     machine, mstart, mend = parser.parse(machine_coding_file.stem, machine_coding_file)
     trial_times = None
     if args.human_coding_format == "vcx":
         csv_file = Path(args.raw_dataset_folder / "Cal_BW_March_split0_participants.csv")
         parser = parsers.VCXParser(30, csv_file)
     elif args.human_coding_format == "lookit":
-        tsv_file = Path(args.raw_dataset_folder / "prephys_split0_videos.tsv")
-        parser = parsers.LookitParser(30, tsv_file)
+        csv_file = Path(args.raw_dataset_folder / "prephys_split0_videos.tsv")
+        parser = parsers.LookitParser(30, csv_file)
+    else:
+        raise NotImplementedError
     human, start1, end1 = parser.parse(human_coding_file.stem, human_coding_file)
     human2, start2, end2 = parser.parse(human_coding_file2.stem, human_coding_file2)
     if args.human_coding_format == "lookit":
         labels = parser.load_and_sort(human_coding_file)
         trial_times = parser.get_trial_intervals(start1, labels)
+    elif args.human_coding_format == "vcx":
+        trial_times = parser.get_trial_intervals(start1, human)
     if end1 != end2:
-        logging.warning("critical failure: humans don't agree on ending: {}".format(human_coding_file))
-        return None
+        logging.warning("humans don't agree on ending: {}".format(human_coding_file))
+        logging.warning("diff: {}".format(np.abs(end1 - end2)))
     metrics = {}
     machine_uncol = parser.uncollapse_labels(machine, mstart, mend)
+    # create a version of machine annotation where machine "invalid" is replaced with "away"
     special_machine = machine_uncol.copy()
     special_machine[special_machine < 0] = 0
     human1_uncol = parser.uncollapse_labels(human, start1, end1)
@@ -342,30 +391,109 @@ def save_metrics_csv(sorted_IDs, all_metrics, inference):
             csv_writer.writerow(row)
 
 
-def select_frames_from_video(ID, video_folder, start, end):
+def pick_interesting_frames(coding1, coding2, machine_code):
     """
-    selects 9 random frames from a video for display
+    given 3 coding files, selects interesting frames where annotators agree and disagree
+    :param coding1: human coding1
+    :param coding2: human coding2
+    :param machine_code: machine coding
+    :return: the relevant frame indices
+    """
+    start1 = np.where(coding1 > 0)[0][0]
+    start2 = np.where(coding2 > 0)[0][0]
+    start3 = np.where(machine_code > 0)[0][0]
+    start = max(max(start1, start2), start3)
+    end1 = np.where(coding1 > 0)[0][-1]
+    end2 = np.where(coding2 > 0)[0][-1]
+    end3 = np.where(machine_code > 0)[0][-1]
+    end = min(min(end1, end2), end3)
+    default_tuple = (np.array([np.NAN]),)
+    agree_away = np.where((machine_code[start:end] == 0) & (coding1[start:end] == 0) & (coding2[start:end] == 0))
+    agree_left = np.where((machine_code[start:end] == 1) & (coding1[start:end] == 1) & (coding2[start:end] == 1))
+    agree_right = np.where((machine_code[start:end] == 2) & (coding1[start:end] == 2) & (coding2[start:end] == 2))
+
+    disagree_mleft_haway = np.where((machine_code[start:end] == 1) & (coding1[start:end] == 0) & (coding2[start:end] == 0))
+    disagree_mright_haway = np.where((machine_code[start:end] == 2) & (coding1[start:end] == 0) & (coding2[start:end] == 0))
+    disagree_mx_haway = (np.concatenate((disagree_mleft_haway[0], disagree_mright_haway[0])),)
+    disagree_mleft_hright = np.where((machine_code[start:end] == 1) & (coding1[start:end] == 2) & (coding2[start:end] == 2))
+    disagree_mright_hleft = np.where((machine_code[start:end] == 2) & (coding1[start:end] == 1) & (coding2[start:end] == 1))
+
+    invalidm_away = np.where((machine_code[start:end] < 0) & (coding1[start:end] == 0) & (coding2[start:end] == 0))
+    invalidm_left = np.where((machine_code[start:end] < 0) & (coding1[start:end] == 1) & (coding2[start:end] == 1))
+    invalidm_right = np.where((machine_code[start:end] < 0) & (coding1[start:end] == 2) & (coding2[start:end] == 2))
+
+    if agree_away[0].size == 0:
+        agree_away = default_tuple
+    if agree_left[0].size == 0:
+        agree_left = default_tuple
+    if agree_right[0].size == 0:
+        agree_right = default_tuple
+
+    if disagree_mx_haway[0].size == 0:
+        disagree_mx_haway = default_tuple
+    if disagree_mleft_hright[0].size == 0:
+        disagree_mleft_hright = default_tuple
+    if disagree_mright_hleft[0].size == 0:
+        disagree_mright_hleft = default_tuple
+
+    if invalidm_away[0].size == 0:
+        invalidm_away = default_tuple
+    if invalidm_left[0].size == 0:
+        invalidm_left = default_tuple
+    if invalidm_right[0].size == 0:
+        invalidm_right = default_tuple
+
+    selected_frames = [np.random.permutation(agree_left[0])[0],
+                       np.random.permutation(agree_away[0])[0],
+                       np.random.permutation(agree_right[0])[0],
+                       np.random.permutation(invalidm_left[0])[0],
+                       np.random.permutation(invalidm_away[0])[0],
+                       np.random.permutation(invalidm_right[0])[0],
+                       np.random.permutation(disagree_mright_hleft[0])[0],
+                       np.random.permutation(disagree_mx_haway[0])[0],
+                       np.random.permutation(disagree_mleft_hright[0])[0]]
+    selected_frames = np.array(selected_frames)
+    selected_frames += start
+    return selected_frames
+
+
+def select_frames_from_video(ID, video_folder, frames):
+    """
+    selects 9 frames from a video for display
     :param ID: the video id (no extension)
     :param video_folder: the raw video folder
     :param start: where annotation begins
     :param end: where annotation ends
     :return: an image grid of 9 frames and the corresponding frame numbers
     """
-    imgs_np = np.ones((480*3, 640*3, 3))
+    imgs = [None]*9
+    filled_counter = 0
+    # if frames is None:
+    #     frame_selections = np.random.choice(np.arange(0, end // 2), size=9, replace=False)
+    # else:
+    frame_selections = frames
+    invalid_frames = [i for i, x in enumerate(frame_selections) if np.isnan(x)]
+    filled_counter += len(invalid_frames)
     for video_file in Path(video_folder).glob("*"):
         if ID in video_file.name:
-            imgs = []
             cap = cv2.VideoCapture(str(video_file))
-            frame_selections = np.random.choice(np.arange(start, end//2), size=9, replace=False)
-            for i in range(start, end//2):  # to avoid end of video
+            ret, frame = cap.read()
+            h, w = frame.shape[0:2]
+            frame_counter = 0
+            while ret:
+                if frame_counter in frame_selections:
+                    index = np.where(frame_selections == frame_counter)[0].item()
+                    imgs[index] = frame[..., ::-1]
+                    filled_counter += 1
+                    if filled_counter == 9:
+                        for inv_frame in invalid_frames:
+                            imgs[inv_frame] = 255*np.ones((h, w, 3), dtype=int)
+                        imgs_np = np.array(imgs)
+                        imgs_np = make_gridview(imgs_np)
+                        return imgs_np, frame_selections
                 ret, frame = cap.read()
-                if i in frame_selections:
-                    imgs.append(frame[..., ::-1])
-                    if len(imgs) >= 9:
-                        break
-            imgs_np = np.array(imgs)
-            imgs_np = make_gridview(imgs_np)
-    return imgs_np, frame_selections
+                frame_counter += 1
+    raise IndexError
 
 
 def sample_luminance(ID, args, start, end, num_samples=10):
@@ -389,74 +517,235 @@ def sample_luminance(ID, args, start, end, num_samples=10):
     return total_luminance / sampled
 
 
-def generate_frame_by_frame_comparisons(sorted_IDs, all_metrics, args):
-    GRAPH_CLASSES = ["left", "right", "away", "invalid"]
-    widths = [20, 1, 5]
-    heights = [1]
+def session_frame_by_frame_plot(target_ID, metric, session_path):
     skip = 10
-    gs_kw = dict(width_ratios=widths, height_ratios=heights)
-    frame_by_frame_path = Path(args.output_folder, "frame_by_frame")
-    frame_by_frame_path.mkdir(exist_ok=True, parents=True)
+    GRAPH_CLASSES = ["left", "right", "away", "invalid"]
+    fig, ax = plt.subplots(figsize=(16, 6))
+    timeline = ax
+    # timeline.set_aspect(0.5)
+    start1, end1 = metric["human1_vs_human2_session"]["start"], \
+                   metric["human1_vs_human2_session"]["end"]
+    start2, end2 = metric["human1_vs_machine_session"]["start"], \
+                   metric["human1_vs_machine_session"]["end"]
+    start = min(start1, start2)
+    end = max(end1, end2)
+    plt.suptitle('Video ID: {}, Frames: ({} - {})'.format(target_ID + ".mp4", str(start), str(end)))
+    times1 = metric["human1_vs_human2_session"]["times_coding2"]
+    times2 = metric["human1_vs_human2_session"]["times_coding1"]
+    times3 = metric["human1_vs_machine_session"]["times_coding2"]
+    times = [times1, times2, times3]
+    video_label = ["Human 2", "Human 1", "iCatcher"]
+    trial_times = [x["end"] for x in metric["human1_vs_human2_trials"]]
+    # coding1 = all_metrics[target_ID]["human1_vs_human2_session"]['raw_coding1']
+    # coding2 = all_metrics[target_ID]["human1_vs_human2_session"]['raw_coding2']
+    # machine_code = all_metrics[target_ID]["human1_vs_machine_session"]['raw_coding2']
+    # intersting_frames = pick_interesting_frames(coding1, coding2, machine_code)
+    # valid_interesting_frames = [x for x in intersting_frames if not np.isnan(x)]
+    vlines_handle = timeline.vlines(trial_times, -1, 3, ls='--', color='k', label="trial times")
+    # vlines_selected_frames_handle = timeline.vlines(valid_interesting_frames, -1, 3, ls="solid", color='red', label="selected frames")
+    # for i, x in enumerate(valid_interesting_frames):
+    #     timeline.text(x, 0, "frame %d" % i, rotation=90, verticalalignment='center')
+    # timeline.annotate([str(x) for x in range(len(intersting_frames))],
+    #                                        ([0 for _ in range(len(intersting_frames))], intersting_frames))
+    timeline.set_xlim([start, end])
+    timeline.set_xlabel("Frame #")
+    for j, vid_label in enumerate(video_label):
+        for label in GRAPH_CLASSES:
+            timeline.barh(vid_label, skip, left=times[j][label][::skip],
+                          height=1, label=label,
+                          color=label_to_color(label))
+    artists = [Patch(facecolor=label_to_color("away"), edgecolor='black', lw=1, label="Away"),
+               Patch(facecolor=label_to_color("left"), edgecolor='black', lw=1, label="Left"),
+               Patch(facecolor=label_to_color("right"), edgecolor='black', lw=1, label="Right"),
+               Patch(facecolor=label_to_color("invalid"), edgecolor='black', lw=1, label="Invalid"),
+               vlines_handle]  # vlines_selected_frames_handle
+    timeline.legend(handles=artists, loc='lower left', bbox_to_anchor=(0.0, 1.01), ncol=5,
+                    borderaxespad=0)
+    plt.savefig(Path(session_path, 'session_frame_by_frame.png'))
+
+    # plt.subplots_adjust(left=0.075, bottom=0.075, right=0.925, top=0.925, wspace=0.2, hspace=0.8)
+    plt.cla()
+    plt.clf()
+    plt.close(fig)
+
+
+def session_image_collage_plot(target_ID, metric, session_path):
+    fig, ax = plt.subplots()
+    coding1 = metric["human1_vs_human2_session"]['raw_coding1']
+    coding2 = metric["human1_vs_human2_session"]['raw_coding2']
+    machine_code = metric["human1_vs_machine_session"]['raw_coding2']
+    intersting_frames = pick_interesting_frames(coding1, coding2, machine_code)
+    imgs, times = select_frames_from_video(target_ID, args.raw_video_folder,
+                                           frames=intersting_frames)
+    ax.imshow(imgs)
+    # ax.set_xticks([0.33-(1/6), 0.66-(1/6), 1-(1/6)])
+    ax.set_xlabel("H1 & H2")
+    ax.set_xticks(np.arange(3) * (imgs.shape[1] / 3) + imgs.shape[1] / 6)
+    ax.set_xticklabels(["Left", "Away", "Right"])
+    ax.set_yticks(np.arange(3) * (imgs.shape[0] / 3) + imgs.shape[0] / 6)
+    ax.set_axisbelow(False)
+    # ax.set_yticks([0.33-(1/6), 0.66-(1/6), 1-(1/6)])
+    # ax.set_yticklabels(["iCatcher: Correct " + u"\u263A", "iCatcher: Invalid 😐", "iCatcher: Wrong " + u"\u2639"])
+    ax.set_yticklabels(["Correct", "Invalid", "Incorrect"])
+    ax.set_ylabel("iCatcher")
+    # ax.set_ylim(imgs.shape[0] - 0.5, -0.5)
+    # ax.set_xlim(imgs.shape[0] - 0.5, -0.5)
+    fig.tight_layout()
+    # ax.set_axis_off()
+    plt.savefig(Path(session_path, 'frame_gallery.png'))
+    # plt.subplots_adjust(left=0.075, bottom=0.075, right=0.925, top=0.925, wspace=0.2, hspace=0.8)
+    plt.cla()
+    plt.clf()
+    plt.close(fig)
+
+
+def session_agreement_plot(target_ID, metric, session_path):
+    fig, ax = plt.subplots(figsize=(6, 8))
+    inference = ["human1_vs_human2_session", "human1_vs_machine_session"]
+    agreements = [metric[entry]['agreement'] * 100 for entry in inference]
+    ax.bar(range(len(inference)), agreements, color="black", width=0.8)
+    ax.set_xticks(range(len(inference)))
+    ax.set_xticklabels(["H1-H2", "H1-M"])
+    ax.set_ylim([0, 100])
+    ax.set_ylabel("Percent Agreement")
+    plt.savefig(Path(session_path, 'agreement.png'))
+    # plt.subplots_adjust(left=0.075, bottom=0.075, right=0.925, top=0.925, wspace=0.2, hspace=0.8)
+    plt.cla()
+    plt.clf()
+    plt.close(fig)
+
+
+def session_scatter_plot(target_ID, metric, session_path):
+    #  looking time plot
+    fig = plt.figure(figsize=(12, 6))
+    lt_scatter = fig.add_subplot(1, 2, 1)
+    lt_scatter.set_box_aspect(1)
+    lt_scatter.plot([0, 1], [0, 1], transform=lt_scatter.transAxes, color="black", label="Ideal trend")
+    fps = 30
+    x_target = [x["looking_time_1"] / fps for x in metric["human1_vs_human2_trials"]]
+    y_target = [x["looking_time_2"] / fps for x in metric["human1_vs_human2_trials"]]
+    y2_target = [x["looking_time_2"] / fps for x in metric["human1_vs_machine_trials"]]
+    lt_scatter.scatter(x_target, y_target, color="black",
+                       label='H1-H2', marker="o")
+    lt_scatter.scatter(x_target, y2_target, color=label_to_color("lorange"),
+                       label='H1-M', marker="^")
+    lt_scatter.set_xlabel("Looking Time (H1)")
+    lt_scatter.set_ylabel("Looking Time")
+    lt_scatter.set_title("Looking time [s]")
+    lt_scatter.legend()  # loc='upper left'
+    lt_scatter.set_xlim([0, max(x_target)+1])
+    lt_scatter.set_ylim([0, max(y_target + y2_target)+1])
+
+    # %R plot
+    pr_scatter = fig.add_subplot(1, 2, 2)
+    pr_scatter.set_box_aspect(1)
+    pr_scatter.plot([0, 1], [0, 1], transform=pr_scatter.transAxes, color="black", label="Ideal trend")
+    x_target = [x["percent_r_1"] * 100 for x in metric["human1_vs_human2_trials"]]
+    y_target = [x["percent_r_2"] * 100 for x in metric["human1_vs_human2_trials"]]
+    y2_target = [x["percent_r_2"] * 100 for x in metric["human1_vs_machine_trials"]]
+    pr_scatter.scatter(x_target, y_target, color="black",
+                       label='H1-H2', marker="o")
+    pr_scatter.scatter(x_target, y2_target, color=label_to_color("lorange"),
+                       label='H1-M', marker="^")
+    pr_scatter.set_xlabel("Percent Right (H1)")
+    pr_scatter.set_ylabel("Percent Right")
+    pr_scatter.set_title("Percent Right")
+    pr_scatter.legend()  # loc='lower center'
+    pr_scatter.set_xlim([0, 100])
+    pr_scatter.set_ylim([0, 100])
+
+    plt.savefig(Path(session_path, 'scatter_plots.png'))
+    plt.cla()
+    plt.clf()
+    plt.close(fig)
+
+
+def generate_session_plots(sorted_IDs, all_metrics, args):
+    sessions_path = Path(args.output_folder, "per_session_plots")
     for i, target_ID in enumerate(tqdm(sorted_IDs)):
-        fig, axs = plt.subplots(1, 3, figsize=(24.0, 8.0), gridspec_kw=gs_kw)
-        timeline, accuracy, sample_frame = axs  # won't work with single video...
-        plt.suptitle('Frame by frame comparisons: {}'.format(target_ID + ".mp4"))
-        start1, end1 = all_metrics[target_ID]["human1_vs_human2_session"]["start"],\
-                       all_metrics[target_ID]["human1_vs_human2_session"]["end"]
-        start2, end2 = all_metrics[target_ID]["human1_vs_machine_session"]["start"], \
-                       all_metrics[target_ID]["human1_vs_machine_session"]["end"]
-        start = min(start1, start2)
-        end = max(end1, end2)
-        timeline.set_title("Frames: {} - {}".format(str(start), str(end)))
+        session_path = Path(sessions_path, "{:02d}_".format(i)+target_ID)
+        session_path.mkdir(exist_ok=True, parents=True)
+        session_frame_by_frame_plot(target_ID, all_metrics[target_ID], session_path)
+        session_image_collage_plot(target_ID, all_metrics[target_ID], session_path)
+        session_agreement_plot(target_ID, all_metrics[target_ID], session_path)
+        session_scatter_plot(target_ID, all_metrics[target_ID], session_path)
+    return
 
-        times1 = all_metrics[target_ID]["human1_vs_human2_session"]["times_coding2"]
-        times2 = all_metrics[target_ID]["human1_vs_human2_session"]["times_coding1"]
-        times3 = all_metrics[target_ID]["human1_vs_machine_session"]["times_coding2"]
-        times = [times1, times2, times3]
-        video_label = ["coder 2", "coder 1", "machine"]
-        trial_times = [x["end"] for x in all_metrics[target_ID]["human1_vs_human2_trials"]]
-        vlines_handle = timeline.vlines(trial_times, -1, 3, ls='--', color='k', label="trial times")
-        for j, vid_label in enumerate(video_label):
-            timeline.set_xlabel("Frame #")
-            for label in GRAPH_CLASSES:
-                timeline.barh(vid_label, skip, left=times[j][label][::skip],
-                              height=1, label=label,
-                              color=label_to_color(label))
-            if j == 0:
-                # timeline.legend(loc='upper right')
-                accuracy.set_title("Agreement")
-        artists = [Patch(facecolor=label_to_color("away"), label="Away"),
-                   Patch(facecolor=label_to_color("left"), label="Left"),
-                   Patch(facecolor=label_to_color("right"), label="Right"),
-                   Patch(facecolor=label_to_color("invalid"), label="Invalid"),
-                   vlines_handle]
-        timeline.legend(handles=artists, bbox_to_anchor=(0.95, 1.0), loc='upper left')
-
-        inference = ["human1_vs_human2_session", "human1_vs_machine_session"]
-        accuracies = [all_metrics[target_ID][entry]['agreement']*100 for entry in inference]
-        # colors = [color_gradient[int(acc * 100)].rgb for acc in accuracies]
-
-        accuracy.bar(range(len(inference)), accuracies, color="black")
-        accuracy.set_xticks(range(len(inference)))
-        accuracy.set_xticklabels(inference, rotation=45, ha="right")
-        accuracy.set_ylim([0, 100])
-        accuracy.set_ylabel("Agreement")
-        # sample_frame_index = min(
-        #     [all_metrics[target_ID][ICATCHER]['times_target'][label][0] for label in VALID_CLASSES])
-        imgs, times = select_frames_from_video(target_ID, args.raw_video_folder, start, end)
-        sample_frame.imshow(imgs)
-        sample_frame.set_axis_off()
-        # sample_frame_index = (end - start) / 2.0
-        # sample_frame.imshow(get_frame_from_video(target_ID, sample_frame_index, args.raw_video_folder))
-        longstring = 'Sample frames from video at frames: {}'.format(times)
-        formatted_longstring = "\n".join(textwrap.wrap(longstring, 40))
-        sample_frame.set_title(formatted_longstring)
-        plt.tight_layout()
-
-        plt.savefig(Path(frame_by_frame_path, 'frame_by_frame_{}.png'.format(target_ID + ".mp4")))
-        # plt.subplots_adjust(left=0.075, bottom=0.075, right=0.925, top=0.925, wspace=0.2, hspace=0.8)
-        plt.cla()
-        plt.clf()
+    # GRAPH_CLASSES = ["left", "right", "away", "invalid"]
+    # widths = [20, 1, 5]
+    # heights = [1]
+    # skip = 10
+    # gs_kw = dict(width_ratios=widths, height_ratios=heights)
+    # fig, axs = plt.subplots(1, 3, figsize=(24.0, 8.0), gridspec_kw=gs_kw)
+    # timeline, accuracy, sample_frame = axs  # won't work with single video...
+    # plt.suptitle('Frame by frame comparisons: {}'.format(target_ID + ".mp4"))
+    # start1, end1 = all_metrics[target_ID]["human1_vs_human2_session"]["start"],\
+    #                all_metrics[target_ID]["human1_vs_human2_session"]["end"]
+    # start2, end2 = all_metrics[target_ID]["human1_vs_machine_session"]["start"], \
+    #                all_metrics[target_ID]["human1_vs_machine_session"]["end"]
+    # start = min(start1, start2)
+    # end = max(end1, end2)
+    # timeline.set_title("Frames: {} - {}".format(str(start), str(end)))
+    #
+    # times1 = all_metrics[target_ID]["human1_vs_human2_session"]["times_coding2"]
+    # times2 = all_metrics[target_ID]["human1_vs_human2_session"]["times_coding1"]
+    # times3 = all_metrics[target_ID]["human1_vs_machine_session"]["times_coding2"]
+    # times = [times1, times2, times3]
+    # video_label = ["coder 2", "coder 1", "machine"]
+    # trial_times = [x["end"] for x in all_metrics[target_ID]["human1_vs_human2_trials"]]
+    # coding1 = all_metrics[target_ID]["human1_vs_human2_session"]['raw_coding1']
+    # coding2 = all_metrics[target_ID]["human1_vs_human2_session"]['raw_coding2']
+    # machine_code = all_metrics[target_ID]["human1_vs_machine_session"]['raw_coding2']
+    # intersting_frames = pick_interesting_frames(coding1, coding2, machine_code)
+    # # valid_interesting_frames = [x for x in intersting_frames if not np.isnan(x)]
+    # vlines_handle = timeline.vlines(trial_times, -1, 3, ls='--', color='k', label="trial times")
+    # # vlines_selected_frames_handle = timeline.vlines(valid_interesting_frames, -1, 3, ls="solid", color='red', label="selected frames")
+    # # for i, x in enumerate(valid_interesting_frames):
+    # #     timeline.text(x, 0, "frame %d" % i, rotation=90, verticalalignment='center')
+    # # timeline.annotate([str(x) for x in range(len(intersting_frames))],
+    # #                                        ([0 for _ in range(len(intersting_frames))], intersting_frames))
+    # for j, vid_label in enumerate(video_label):
+    #     timeline.set_xlabel("Frame #")
+    #     for label in GRAPH_CLASSES:
+    #         timeline.barh(vid_label, skip, left=times[j][label][::skip],
+    #                       height=1, label=label,
+    #                       color=label_to_color(label))
+    #     if j == 0:
+    #         # timeline.legend(loc='upper right')
+    #         accuracy.set_title("Agreement")
+    # artists = [Patch(facecolor=label_to_color("away"), ls="-", label="Away"),
+    #            Patch(facecolor=label_to_color("left"), ls="-", label="Left"),
+    #            Patch(facecolor=label_to_color("right"), ls="-", label="Right"),
+    #            Patch(facecolor=label_to_color("invalid"), ls="-", label="Invalid"),
+    #            vlines_handle]  # vlines_selected_frames_handle
+    # timeline.legend(handles=artists, bbox_to_anchor=(0.95, 1.0), loc='upper left')
+    #
+    # inference = ["human1_vs_human2_session", "human1_vs_machine_session"]
+    # accuracies = [all_metrics[target_ID][entry]['agreement']*100 for entry in inference]
+    # # colors = [color_gradient[int(acc * 100)].rgb for acc in accuracies]
+    #
+    # accuracy.bar(range(len(inference)), accuracies, color="black")
+    # accuracy.set_xticks(range(len(inference)))
+    # accuracy.set_xticklabels(inference, rotation=45, ha="right")
+    # accuracy.set_ylim([0, 100])
+    # accuracy.set_ylabel("Agreement")
+    # # sample_frame_index = min(
+    # #     [all_metrics[target_ID][ICATCHER]['times_target'][label][0] for label in VALID_CLASSES])
+    # imgs, times = select_frames_from_video(target_ID, args.raw_video_folder, frames=intersting_frames)
+    # sample_frame.imshow(imgs)
+    # sample_frame.set_axis_off()
+    # # sample_frame_index = (end - start) / 2.0
+    # # sample_frame.imshow(get_frame_from_video(target_ID, sample_frame_index, args.raw_video_folder))
+    # longstring = 'Sample frames from video at frames: {}'.format(times)
+    # formatted_longstring = "\n".join(textwrap.wrap(longstring, 40))
+    # sample_frame.set_title(formatted_longstring)
+    # plt.tight_layout()
+    #
+    # plt.savefig(Path(sessions_path, 'session_{}.png'.format(target_ID + ".mp4")))
+    # # plt.subplots_adjust(left=0.075, bottom=0.075, right=0.925, top=0.925, wspace=0.2, hspace=0.8)
+    # plt.cla()
+    # plt.clf()
+    # plt.close(fig)
 
 
 def generate_collage_plot2(sorted_IDs, all_metrics, save_path):
@@ -479,8 +768,8 @@ def generate_collage_plot2(sorted_IDs, all_metrics, save_path):
     sns.heatmap(total_confusion_h2h, ax=conf_mat_h2h, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues')
     conf_mat_h2h.set_xticklabels(['away', 'left', 'right'])
     conf_mat_h2h.set_yticklabels(['away', 'left', 'right'])
-    conf_mat_h2h.set_ylabel('Coder 1')
-    conf_mat_h2h.set_xlabel('Coder 2')
+    conf_mat_h2h.set_xlabel('Coder 1')
+    conf_mat_h2h.set_ylabel('Coder 2')
     conf_mat_h2h.set_title('Coder 1 vs Coder 2')
 
     # confusion matrix 2
@@ -491,8 +780,8 @@ def generate_collage_plot2(sorted_IDs, all_metrics, save_path):
     sns.heatmap(total_confusion_h2h, ax=conf_mat_h2h, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues')
     conf_mat_h2h.set_xticklabels(['away', 'left', 'right'])
     conf_mat_h2h.set_yticklabels(['away', 'left', 'right'])
-    conf_mat_h2h.set_ylabel('Coder 1')
-    conf_mat_h2h.set_xlabel('Machine')
+    conf_mat_h2h.set_xlabel('Coder 1')
+    conf_mat_h2h.set_ylabel('Machine')
     conf_mat_h2h.set_title('Coder 1 vs Machine')
 
     # confusion matrix 3
@@ -503,8 +792,8 @@ def generate_collage_plot2(sorted_IDs, all_metrics, save_path):
     sns.heatmap(total_confusion_h2h, ax=conf_mat_h2h, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues')
     conf_mat_h2h.set_xticklabels(['away', 'left', 'right'])
     conf_mat_h2h.set_yticklabels(['away', 'left', 'right'])
-    conf_mat_h2h.set_ylabel('Coder 1')
-    conf_mat_h2h.set_xlabel('Machine')
+    conf_mat_h2h.set_xlabel('Coder 1')
+    conf_mat_h2h.set_ylabel('Machine')
     conf_mat_h2h.set_title(r'Coder 1 vs Machine w "invlid$\leftarrow$away"')
 
     # LR ICC plot
@@ -590,6 +879,189 @@ def generate_collage_plot2(sorted_IDs, all_metrics, save_path):
     plt.savefig(Path(save_path, "collage2.png"))
     plt.cla()
     plt.clf()
+    plt.close(fig)
+
+
+def generate_barplot(sorted_IDs, all_metrics, save_path):
+    fig, ax = plt.subplots()
+    agreement_hvh = [all_metrics[ID]["human1_vs_human2_session"]['agreement'] for ID in sorted_IDs]
+    mean_agreement_hvh = np.mean(agreement_hvh)
+    std_agreement_hvh = np.std(agreement_hvh)
+    agreement_hvm = [all_metrics[ID]["human1_vs_machine_session"]['agreement'] for ID in sorted_IDs]
+    mean_agreement_hvm = np.mean(agreement_hvm)
+    std_agreement_hvm = np.std(agreement_hvm)
+
+    ca_hvh = [all_metrics[ID]["human1_vs_human2_session"]['ca'] for ID in sorted_IDs]
+    mean_ca_hvh = np.mean(ca_hvh)
+    std_ca_hvh = np.std(ca_hvh)
+    ca_hvm = [all_metrics[ID]["human1_vs_machine_session"]['ca'] for ID in sorted_IDs]
+    mean_ca_hvm = np.mean(ca_hvm)
+    std_ca_hvm = np.std(ca_hvm)
+
+    icc_lt_hvh = [all_metrics[ID]["stats"]["ICC_LT_hvh"] for ID in sorted_IDs]
+    mean_icc_lt_hvh = np.mean(icc_lt_hvh)
+    std_icc_lt_hvh = np.std(icc_lt_hvh)
+    icc_lt_hvm = [all_metrics[ID]["stats"]["ICC_LT_hvm"] for ID in sorted_IDs]
+    mean_icc_lt_hvm = np.mean(icc_lt_hvm)
+    std_icc_lt_hvm = np.std(icc_lt_hvm)
+
+    icc_pr_hvh = [all_metrics[ID]["stats"]["ICC_PR_hvh"] for ID in sorted_IDs]
+    mean_icc_pr_hvh = np.mean(icc_pr_hvh)
+    std_icc_pr_hvh = np.std(icc_pr_hvh)
+    icc_pr_hvm = [all_metrics[ID]["stats"]["ICC_PR_hvm"] for ID in sorted_IDs]
+    mean_icc_pr_hvm = np.mean(icc_pr_hvm)
+    std_icc_pr_hvm = np.std(icc_pr_hvm)
+
+    x = np.arange(4)
+    width = 0.35  # the width of the bars
+    rects1 = ax.bar(x - (width / 2), [mean_agreement_hvh, mean_ca_hvh, mean_icc_lt_hvh, mean_icc_pr_hvh],
+                    yerr=[std_agreement_hvh, std_ca_hvh, std_icc_lt_hvh, std_icc_pr_hvh], width=width,
+                    label='Human-Human', align='center', ecolor='black', capsize=10)
+    rects2 = ax.bar(x + (width / 2), [mean_agreement_hvm, mean_ca_hvm, mean_icc_lt_hvm, mean_icc_pr_hvm],
+                    yerr=[std_agreement_hvm, std_ca_hvm, std_icc_lt_hvm, std_icc_pr_hvm], width=width,
+                    label='Human-Machine', align='center', ecolor='black', capsize=10)
+    labels = ['% Agree', 'Chronbach\'s Alpha', 'ICC Looking Time', 'ICC Percent Right']
+    ax.set_xticks(x)
+    ax.set_yticks([0, 1])
+    ax.set_xticklabels(labels)
+    # ax.set_title("Marchman Dataset")
+    ax.bar_label(rects1, fmt='%.2f', padding=3)
+    ax.bar_label(rects2, fmt='%.2f', padding=3)
+    ax.legend(loc='lower right')
+    fig.tight_layout()
+    plt.savefig(str(Path(save_path, 'dataset_bar_plots_with_error.png')))
+    plt.cla()
+    plt.clf()
+    plt.close(fig)
+
+
+def generate_confusion_matrices(sorted_IDs, all_metrics, args):
+    save_path = args.output_folder
+    # widths = [1, 1, 1, 1]
+    # heights = [1]
+    # gs_kw = dict(width_ratios=widths, height_ratios=heights)
+    # fig, axs = plt.subplots()  # 1, 4, gridspec_kw=gs_kw, figsize=(24.0, 8.0),
+    fig = plt.figure(figsize=(10, 10))
+    # conf_mat_h2h, conf_mat2_h2h, conf_mat_h2m, conf_mat2_h2m = axs  # won't work with single video...
+    conf_mat_h2h = fig.add_subplot(2, 2, 1)
+    total_confusion_h2h = np.sum([all_metrics[ID]["human1_vs_human2_session"]["confusion_matrix"] for ID in sorted_IDs],
+                                 axis=0)
+    total_confusion_h2h /= np.sum(total_confusion_h2h, -1, keepdims=True)
+    sns.heatmap(total_confusion_h2h, ax=conf_mat_h2h, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues',
+                annot_kws={"size": 16})
+    conf_mat_h2h.set_xticklabels(['away', 'left', 'right'])
+    conf_mat_h2h.set_yticklabels(['away', 'left', 'right'])
+    conf_mat_h2h.set_xlabel('Coder 1')
+    conf_mat_h2h.set_ylabel('Coder 2')
+    conf_mat_h2h.set_box_aspect(1)
+
+    conf_mat2_h2h = fig.add_subplot(2, 2, 2)
+    total_confusion2_h2h = np.sum([all_metrics[ID]["human1_vs_human2_session"]["confusion_matrix2"] for ID in sorted_IDs],
+                                  axis=0)
+    total_confusion2_h2h /= np.sum(total_confusion2_h2h, -1, keepdims=True)
+    sns.heatmap(total_confusion2_h2h, ax=conf_mat2_h2h, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues',
+                annot_kws={"size": 16})
+    if args.raw_dataset_type == "vcx":
+        conf_mat2_h2h.set_xticklabels(['off*', 'on'])
+        conf_mat2_h2h.set_yticklabels(['off*', 'on'])
+    else:
+        conf_mat2_h2h.set_xticklabels(['off', 'on'])
+        conf_mat2_h2h.set_yticklabels(['off', 'on'])
+    conf_mat2_h2h.set_xlabel('Coder 1')
+    conf_mat2_h2h.set_ylabel('Coder 2')
+    conf_mat2_h2h.set_box_aspect(1)
+
+    conf_mat_h2m = fig.add_subplot(2, 2, 3)
+    total_confusion_h2m = np.sum([all_metrics[ID]["human1_vs_machine_session"]["confusion_matrix"] for ID in sorted_IDs],
+                                 axis=0)
+    total_confusion_h2m /= np.sum(total_confusion_h2m, -1, keepdims=True)
+    sns.heatmap(total_confusion_h2m, ax=conf_mat_h2m, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues',
+                annot_kws={"size": 16})
+    conf_mat_h2m.set_xticklabels(['away', 'left', 'right'])
+    conf_mat_h2m.set_yticklabels(['away', 'left', 'right'])
+    conf_mat_h2m.set_xlabel('Coder 1')
+    conf_mat_h2m.set_ylabel('iCatcher')
+    conf_mat_h2m.set_box_aspect(1)
+
+    conf_mat2_h2m = fig.add_subplot(2, 2, 4)
+    total_confusion2_h2m = np.sum([all_metrics[ID]["human1_vs_machine_session"]["confusion_matrix2"] for ID in sorted_IDs],
+                                 axis=0)
+    total_confusion2_h2m /= np.sum(total_confusion2_h2m, -1, keepdims=True)
+    sns.heatmap(total_confusion2_h2m, ax=conf_mat2_h2m, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues',
+                annot_kws={"size": 16})
+    if args.raw_dataset_type == "vcx":
+        conf_mat2_h2m.set_xticklabels(['off*', 'on'])
+        conf_mat2_h2m.set_yticklabels(['off*', 'on'])
+    else:
+        conf_mat2_h2m.set_xticklabels(['off', 'on'])
+        conf_mat2_h2m.set_yticklabels(['off', 'on'])
+    conf_mat2_h2m.set_xlabel('Coder 1')
+    conf_mat2_h2m.set_ylabel('iCatcher')
+    conf_mat2_h2m.set_box_aspect(1)
+
+    fig.tight_layout()
+    # ax.set_axis_off()
+    plt.savefig(str(Path(save_path, 'dataset_confusion_matrices.png')))
+    plt.cla()
+    plt.clf()
+    plt.close(fig)
+
+
+def generate_agreement_scatter(sorted_IDs, all_metrics, args, multi_dataset=False):
+    save_path = args.output_folder
+    fig, ax = plt.subplots()
+    ax.plot([0, 1], [0, 1], transform=ax.transAxes, color="black")
+    if args.raw_dataset_type == "vcx":
+        primary_label = "Marchman Videos"
+        secondary_label = "Lookit Videos"
+    else:
+        primary_label = "Lookit Videos"
+        secondary_label = "Marchman Videos"
+    x_target = [all_metrics[ID]["human1_vs_human2_session"]["agreement"] for ID in sorted_IDs]
+    y_target = [all_metrics[ID]["human1_vs_machine_session"]["agreement"] for ID in sorted_IDs]
+    # np.savez("temp", x_target, y_target)
+    ax.scatter(x_target, y_target,
+               color=label_to_color("vlblue"), label=primary_label, alpha=0.5)
+    ax.errorbar(np.mean(x_target), np.mean(y_target), xerr=np.std(x_target), yerr=np.std(y_target),
+                color=label_to_color("vblue"), marker='D', capsize=3)  # ms=40
+    minx = min(x_target)
+    miny = min(y_target)
+    plot_name = 'dataset_agreement_scatter.png'
+    if multi_dataset:
+        data = np.load("temp.npz")
+        x_target_2, y_target_2 = data["arr_0"], data["arr_1"]
+        minx = min(np.min(x_target), np.min(x_target_2))
+        miny = min(np.min(y_target), np.min(y_target_2))
+        ax.scatter(x_target_2, y_target_2,
+                   color=label_to_color("vlgreen"), label=secondary_label, alpha=0.5)
+        ax.errorbar(np.mean(x_target_2), np.mean(y_target_2), xerr=np.std(x_target_2), yerr=np.std(y_target_2),
+                    color=label_to_color("vgreen"), marker='D', capsize=3)  # ms=40
+        plot_name = "multi_dataset_agreement_scatter.png"
+    ax.set_xlim([minx, 1])
+    ax.set_ylim([miny, 1])
+    ax.set_xlabel("H-H Percent Agreement")
+    ax.set_ylabel("H-M Percent Agreement")
+    # ax.set_title("Percent Agreement")
+    ax.legend(loc='upper left')
+    plt.savefig(str(Path(save_path, plot_name)))
+    plt.cla()
+    plt.clf()
+    plt.close(fig)
+
+
+def generate_dataset_plots(sorted_IDs, all_metrics, args):
+    """
+    creates all the plots that relate to the entire dataset
+    :param sorted_IDs:
+    :param all_metrics:
+    :param save_path:
+    :return:
+    """
+    save_path = args.output_folder
+    generate_barplot(sorted_IDs, all_metrics, save_path)
+    generate_confusion_matrices(sorted_IDs, all_metrics, args)
+    generate_agreement_scatter(sorted_IDs, all_metrics, args, False)
+    # generate_agreement_scatter(sorted_IDs, all_metrics, args, True)
 
 
 def generate_collage_plot(sorted_IDs, all_metrics, save_path):
@@ -731,20 +1203,7 @@ def generate_collage_plot(sorted_IDs, all_metrics, save_path):
     plt.savefig(Path(save_path, "collage.png"))
     plt.cla()
     plt.clf()
-
-
-def plot_inference_accuracy_vs_human_agreement(sorted_IDs, all_metrics, args):
-    plt.figure(figsize=(8.0, 6.0))
-    plt.scatter([all_metrics[id]["human1_vs_human2_session"]["agreement"] for id in sorted_IDs],
-                [all_metrics[id]["human1_vs_machine_session"]["agreement"] for id in sorted_IDs])
-    plt.xlim([0, 100])
-    plt.ylim([0, 100])
-    plt.xlabel("Human accuracy")
-    plt.ylabel("iCatcher accuracy")
-    plt.title("iCatcher accuracy vs human accuracy for all doubly coded videos")
-    plt.savefig(Path(args.output_folder, 'iCatcher_acc_vs_human_acc.png'))
-    plt.cla()
-    plt.clf()
+    plt.close(fig)
 
 
 def plot_luminance_vs_accuracy(sorted_IDs, all_metrics, args):
@@ -871,12 +1330,16 @@ def create_cache_metrics(args, force_create=False):
             human_coding_file2 = Path(args.human2_codings_folder, code_file + human2_ext)
             machine_coding_file = Path(args.machine_codings_folder, code_file + machine_ext)
             key = human_coding_file.stem
-            res = compare_coding_files(human_coding_file, human_coding_file2, machine_coding_file, args)
-            if res:
-                all_metrics[key] = res
-                # other stats
-                all_metrics[key]["stats"]["avg_face_pixel_density"] = get_face_pixel_density(key, args.faces_folder)
-                all_metrics[key]["stats"]["avg_face_loc_std"] = get_face_location_std(key, args.faces_folder)
+            try:
+                res = compare_coding_files(human_coding_file, human_coding_file2, machine_coding_file, args)
+            except (IndexError, AssertionError) as e:
+                logging.warning("skipped: {}, because of failure:".format(key))
+                logging.warning(e)
+                continue
+            all_metrics[key] = res
+            # other stats
+            all_metrics[key]["stats"]["avg_face_pixel_density"] = get_face_pixel_density(key, args.faces_folder)
+            all_metrics[key]["stats"]["avg_face_loc_std"] = get_face_location_std(key, args.faces_folder)
         # Store in disk for faster access next time:
         pickle.dump(all_metrics, open(metric_save_path, "wb"))
     return all_metrics
@@ -963,18 +1426,17 @@ if __name__ == "__main__":
         logging.basicConfig(filename=args.log, filemode='w', level=args.verbosity.upper())
     else:
         logging.basicConfig(level=args.verbosity.upper())
-    # preprocess.create_annotation_split(Path(args.output_folder), Path(args.raw_dataset_folder))
     all_metrics = create_cache_metrics(args, force_create=False)
-    # sort by accuracy
+    # sort by percent agreement
     sorted_ids = sorted(list(all_metrics.keys()),
                         key=lambda x: all_metrics[x]["human1_vs_machine_session"]["agreement"])
+    generate_dataset_plots(sorted_ids, all_metrics, args)
     generate_collage_plot(sorted_ids, all_metrics, args.output_folder)
     generate_collage_plot2(sorted_ids, all_metrics, args.output_folder)
-    generate_frame_by_frame_comparisons(sorted_ids, all_metrics, args)
-    plot_face_pixel_density_vs_accuracy(sorted_ids, all_metrics, args)
-    plot_face_location_vs_accuracy(sorted_ids, all_metrics, args)
-    plot_inference_accuracy_vs_human_agreement(sorted_ids, all_metrics, args)
-    plot_luminance_vs_accuracy(sorted_ids, all_metrics, args)
+    generate_session_plots(sorted_ids, all_metrics, args)
+    # plot_face_pixel_density_vs_accuracy(sorted_ids, all_metrics, args)
+    # plot_face_location_vs_accuracy(sorted_ids, all_metrics, args)
+    # plot_luminance_vs_accuracy(sorted_ids, all_metrics, args)
 
 
 # def get_open_gaze_label(time_ms, ID):
