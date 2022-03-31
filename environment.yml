@@ -14,5 +14,6 @@ dependencies:
   - tqdm
   - pytest
   - ffmpeg-python
+  - pingouin
   - pip:
     - opencv-python
