@@ -31,16 +31,20 @@ def label_to_color(label):
                "lyellow": (0.9, 0.9, 0.0),
                "mblue": (0.12, 0.41, 0.87),
                "cblind_red": (0.823, 0.309, 0),
-               "cblind_blue": (0.031, 0.411, 0.643)}
+               "cblind_blue": (0.031, 0.411, 0.643),
+               "vlblue": (0.086, 0.568, 0.874),
+               "vblue": (0.074, 0.349, 0.525),
+               "vlgreen": (0.345, 0.890, 0.270),
+               "vgreen": (0.149, 0.615, 0.082)}
     return mapping[label]
 
 
-def calculate_confusion_matrix(label, pred, save_path=None, mat=None, class_num=3, verbose=True):
+def calculate_confusion_matrix(label, pred, save_path=None, mat=None, class_num=3, flip_xy=False, verbose=True):
     """
     creates a plot of the confusion matrix given the gt labels abd the predictions.
     if mat is supplied, ignores other inputs and uses that.
-    :param label: the labels
-    :param pred: the predicitions
+    :param label: the labels (will be y axis)
+    :param pred: the predicitions (will be x axis)
     :param save_path: path to save plot
     :param mat: a numpy 3x3 array representing the confusion matrix
     :param class_num: number of classes
@@ -61,6 +65,8 @@ def calculate_confusion_matrix(label, pred, save_path=None, mat=None, class_num=
         for i in range(class_num):
             for j in range(class_num):
                 mat[i][j] = sum((label == i) & (pred == j))
+        if flip_xy:
+            mat = mat.T
     if np.all(np.sum(mat, -1, keepdims=True) != 0):
         total_acc = (mat.diagonal().sum() / mat.sum()) * 100
         norm_mat = mat / np.sum(mat, -1, keepdims=True)
@@ -208,14 +214,14 @@ def get_stats_in_interval(start, end, coding1, coding2):
     else:
         agreement = np.sum(equal[mutually_valid_frames]) / equal_and_non_equal
     _, mat3, _ = calculate_confusion_matrix(coding1_interval_mut_valid, coding2_interval_mut_valid,
-                                            class_num=3, verbose=False)
+                                            class_num=3, flip_xy=True, verbose=False)
 
     on_screen_1 = coding1_interval_mut_valid.copy()
     on_screen_1[on_screen_1 > 0] = 1
     on_screen_2 = coding2_interval_mut_valid.copy()
     on_screen_2[on_screen_2 > 0] = 1
     _, mat2, _ = calculate_confusion_matrix(on_screen_1, on_screen_2,
-                                            class_num=2, verbose=False)
+                                            class_num=2, flip_xy=True, verbose=False)
     times_coding1 = {"away": coding1_away,
                      "left": coding1_left,
                      "right": coding1_right,
@@ -573,12 +579,15 @@ def session_image_collage_plot(target_ID, metric, session_path):
                                            frames=intersting_frames)
     ax.imshow(imgs)
     # ax.set_xticks([0.33-(1/6), 0.66-(1/6), 1-(1/6)])
+    ax.set_xlabel("H1 & H2")
     ax.set_xticks(np.arange(3) * (imgs.shape[1] / 3) + imgs.shape[1] / 6)
-    ax.set_xticklabels(["Humans: Left", "Humans: Away", "Humans: Right"])
+    ax.set_xticklabels(["Left", "Away", "Right"])
     ax.set_yticks(np.arange(3) * (imgs.shape[0] / 3) + imgs.shape[0] / 6)
     ax.set_axisbelow(False)
     # ax.set_yticks([0.33-(1/6), 0.66-(1/6), 1-(1/6)])
-    ax.set_yticklabels(["iCatcher: Correct " + u"\u263A", "iCatcher: Invalid 😐", "iCatcher: Wrong " + u"\u2639"])
+    # ax.set_yticklabels(["iCatcher: Correct " + u"\u263A", "iCatcher: Invalid 😐", "iCatcher: Wrong " + u"\u2639"])
+    ax.set_yticklabels(["Correct", "Invalid", "Incorrect"])
+    ax.set_ylabel("iCatcher")
     # ax.set_ylim(imgs.shape[0] - 0.5, -0.5)
     # ax.set_xlim(imgs.shape[0] - 0.5, -0.5)
     fig.tight_layout()
@@ -759,8 +768,8 @@ def generate_collage_plot2(sorted_IDs, all_metrics, save_path):
     sns.heatmap(total_confusion_h2h, ax=conf_mat_h2h, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues')
     conf_mat_h2h.set_xticklabels(['away', 'left', 'right'])
     conf_mat_h2h.set_yticklabels(['away', 'left', 'right'])
-    conf_mat_h2h.set_ylabel('Coder 1')
-    conf_mat_h2h.set_xlabel('Coder 2')
+    conf_mat_h2h.set_xlabel('Coder 1')
+    conf_mat_h2h.set_ylabel('Coder 2')
     conf_mat_h2h.set_title('Coder 1 vs Coder 2')
 
     # confusion matrix 2
@@ -771,8 +780,8 @@ def generate_collage_plot2(sorted_IDs, all_metrics, save_path):
     sns.heatmap(total_confusion_h2h, ax=conf_mat_h2h, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues')
     conf_mat_h2h.set_xticklabels(['away', 'left', 'right'])
     conf_mat_h2h.set_yticklabels(['away', 'left', 'right'])
-    conf_mat_h2h.set_ylabel('Coder 1')
-    conf_mat_h2h.set_xlabel('Machine')
+    conf_mat_h2h.set_xlabel('Coder 1')
+    conf_mat_h2h.set_ylabel('Machine')
     conf_mat_h2h.set_title('Coder 1 vs Machine')
 
     # confusion matrix 3
@@ -783,8 +792,8 @@ def generate_collage_plot2(sorted_IDs, all_metrics, save_path):
     sns.heatmap(total_confusion_h2h, ax=conf_mat_h2h, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues')
     conf_mat_h2h.set_xticklabels(['away', 'left', 'right'])
     conf_mat_h2h.set_yticklabels(['away', 'left', 'right'])
-    conf_mat_h2h.set_ylabel('Coder 1')
-    conf_mat_h2h.set_xlabel('Machine')
+    conf_mat_h2h.set_xlabel('Coder 1')
+    conf_mat_h2h.set_ylabel('Machine')
     conf_mat_h2h.set_title(r'Coder 1 vs Machine w "invlid$\leftarrow$away"')
 
     # LR ICC plot
@@ -926,7 +935,8 @@ def generate_barplot(sorted_IDs, all_metrics, save_path):
     plt.close(fig)
 
 
-def generate_confusion_matrices(sorted_IDs, all_metrics, save_path):
+def generate_confusion_matrices(sorted_IDs, all_metrics, args):
+    save_path = args.output_folder
     # widths = [1, 1, 1, 1]
     # heights = [1]
     # gs_kw = dict(width_ratios=widths, height_ratios=heights)
@@ -937,44 +947,56 @@ def generate_confusion_matrices(sorted_IDs, all_metrics, save_path):
     total_confusion_h2h = np.sum([all_metrics[ID]["human1_vs_human2_session"]["confusion_matrix"] for ID in sorted_IDs],
                                  axis=0)
     total_confusion_h2h /= np.sum(total_confusion_h2h, -1, keepdims=True)
-    sns.heatmap(total_confusion_h2h, ax=conf_mat_h2h, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues')
+    sns.heatmap(total_confusion_h2h, ax=conf_mat_h2h, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues',
+                annot_kws={"size": 16})
     conf_mat_h2h.set_xticklabels(['away', 'left', 'right'])
     conf_mat_h2h.set_yticklabels(['away', 'left', 'right'])
-    conf_mat_h2h.set_ylabel('Coder 1')
-    conf_mat_h2h.set_xlabel('Coder 2')
+    conf_mat_h2h.set_xlabel('Coder 1')
+    conf_mat_h2h.set_ylabel('Coder 2')
     conf_mat_h2h.set_box_aspect(1)
 
     conf_mat2_h2h = fig.add_subplot(2, 2, 2)
     total_confusion2_h2h = np.sum([all_metrics[ID]["human1_vs_human2_session"]["confusion_matrix2"] for ID in sorted_IDs],
-                                 axis=0)
+                                  axis=0)
     total_confusion2_h2h /= np.sum(total_confusion2_h2h, -1, keepdims=True)
-    sns.heatmap(total_confusion2_h2h, ax=conf_mat2_h2h, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues')
-    conf_mat2_h2h.set_xticklabels(['off', 'on'])
-    conf_mat2_h2h.set_yticklabels(['off', 'on'])
-    conf_mat2_h2h.set_ylabel('Coder 1')
-    conf_mat2_h2h.set_xlabel('Coder 2')
+    sns.heatmap(total_confusion2_h2h, ax=conf_mat2_h2h, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues',
+                annot_kws={"size": 16})
+    if args.raw_dataset_type == "vcx":
+        conf_mat2_h2h.set_xticklabels(['off*', 'on'])
+        conf_mat2_h2h.set_yticklabels(['off*', 'on'])
+    else:
+        conf_mat2_h2h.set_xticklabels(['off', 'on'])
+        conf_mat2_h2h.set_yticklabels(['off', 'on'])
+    conf_mat2_h2h.set_xlabel('Coder 1')
+    conf_mat2_h2h.set_ylabel('Coder 2')
     conf_mat2_h2h.set_box_aspect(1)
 
     conf_mat_h2m = fig.add_subplot(2, 2, 3)
     total_confusion_h2m = np.sum([all_metrics[ID]["human1_vs_machine_session"]["confusion_matrix"] for ID in sorted_IDs],
                                  axis=0)
     total_confusion_h2m /= np.sum(total_confusion_h2m, -1, keepdims=True)
-    sns.heatmap(total_confusion_h2m, ax=conf_mat_h2m, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues')
+    sns.heatmap(total_confusion_h2m, ax=conf_mat_h2m, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues',
+                annot_kws={"size": 16})
     conf_mat_h2m.set_xticklabels(['away', 'left', 'right'])
     conf_mat_h2m.set_yticklabels(['away', 'left', 'right'])
-    conf_mat_h2m.set_ylabel('Coder 1')
-    conf_mat_h2m.set_xlabel('iCatcher')
+    conf_mat_h2m.set_xlabel('Coder 1')
+    conf_mat_h2m.set_ylabel('iCatcher')
     conf_mat_h2m.set_box_aspect(1)
 
     conf_mat2_h2m = fig.add_subplot(2, 2, 4)
     total_confusion2_h2m = np.sum([all_metrics[ID]["human1_vs_machine_session"]["confusion_matrix2"] for ID in sorted_IDs],
                                  axis=0)
     total_confusion2_h2m /= np.sum(total_confusion2_h2m, -1, keepdims=True)
-    sns.heatmap(total_confusion2_h2m, ax=conf_mat2_h2m, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues')
-    conf_mat2_h2m.set_xticklabels(['off', 'on'])
-    conf_mat2_h2m.set_yticklabels(['off', 'on'])
-    conf_mat2_h2m.set_ylabel('Coder 1')
-    conf_mat2_h2m.set_xlabel('iCatcher')
+    sns.heatmap(total_confusion2_h2m, ax=conf_mat2_h2m, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues',
+                annot_kws={"size": 16})
+    if args.raw_dataset_type == "vcx":
+        conf_mat2_h2m.set_xticklabels(['off*', 'on'])
+        conf_mat2_h2m.set_yticklabels(['off*', 'on'])
+    else:
+        conf_mat2_h2m.set_xticklabels(['off', 'on'])
+        conf_mat2_h2m.set_yticklabels(['off', 'on'])
+    conf_mat2_h2m.set_xlabel('Coder 1')
+    conf_mat2_h2m.set_ylabel('iCatcher')
     conf_mat2_h2m.set_box_aspect(1)
 
     fig.tight_layout()
@@ -985,29 +1007,49 @@ def generate_confusion_matrices(sorted_IDs, all_metrics, save_path):
     plt.close(fig)
 
 
-def generate_agreement_scatter(sorted_IDs, all_metrics, save_path):
+def generate_agreement_scatter(sorted_IDs, all_metrics, args, multi_dataset=False):
+    save_path = args.output_folder
     fig, ax = plt.subplots()
     ax.plot([0, 1], [0, 1], transform=ax.transAxes, color="black")
-
+    if args.raw_dataset_type == "vcx":
+        primary_label = "Marchman Videos"
+        secondary_label = "Lookit Videos"
+    else:
+        primary_label = "Lookit Videos"
+        secondary_label = "Marchman Videos"
     x_target = [all_metrics[ID]["human1_vs_human2_session"]["agreement"] for ID in sorted_IDs]
     y_target = [all_metrics[ID]["human1_vs_machine_session"]["agreement"] for ID in sorted_IDs]
-    ax.set_xlim([min(x_target), 1])
-    ax.set_ylim([min(y_target), 1])
+    # np.savez("temp", x_target, y_target)
     ax.scatter(x_target, y_target,
-               color="black", label='Video')
-    ax.errorbar(np.mean(x_target), np.mean(y_target), yerr=np.std(y_target), xerr=np.std(x_target),
-                color=label_to_color("lorange"), label='Mean', marker='o', alpha=0.5, capsize=3)  # ms=40
+               color=label_to_color("vlblue"), label=primary_label, alpha=0.5)
+    ax.errorbar(np.mean(x_target), np.mean(y_target), xerr=np.std(x_target), yerr=np.std(y_target),
+                color=label_to_color("vblue"), marker='D', capsize=3)  # ms=40
+    minx = min(x_target)
+    miny = min(y_target)
+    plot_name = 'dataset_agreement_scatter.png'
+    if multi_dataset:
+        data = np.load("temp.npz")
+        x_target_2, y_target_2 = data["arr_0"], data["arr_1"]
+        minx = min(np.min(x_target), np.min(x_target_2))
+        miny = min(np.min(y_target), np.min(y_target_2))
+        ax.scatter(x_target_2, y_target_2,
+                   color=label_to_color("vlgreen"), label=secondary_label, alpha=0.5)
+        ax.errorbar(np.mean(x_target_2), np.mean(y_target_2), xerr=np.std(x_target_2), yerr=np.std(y_target_2),
+                    color=label_to_color("vgreen"), marker='D', capsize=3)  # ms=40
+        plot_name = "multi_dataset_agreement_scatter.png"
+    ax.set_xlim([minx, 1])
+    ax.set_ylim([miny, 1])
     ax.set_xlabel("H-H Percent Agreement")
     ax.set_ylabel("H-M Percent Agreement")
     # ax.set_title("Percent Agreement")
     ax.legend(loc='upper left')
-    plt.savefig(str(Path(save_path, 'dataset_agreement_scatter.png')))
+    plt.savefig(str(Path(save_path, plot_name)))
     plt.cla()
     plt.clf()
     plt.close(fig)
 
 
-def generate_dataset_plots(sorted_IDs, all_metrics, save_path):
+def generate_dataset_plots(sorted_IDs, all_metrics, args):
     """
     creates all the plots that relate to the entire dataset
     :param sorted_IDs:
@@ -1015,9 +1057,11 @@ def generate_dataset_plots(sorted_IDs, all_metrics, save_path):
     :param save_path:
     :return:
     """
+    save_path = args.output_folder
     generate_barplot(sorted_IDs, all_metrics, save_path)
-    generate_confusion_matrices(sorted_IDs, all_metrics, save_path)
-    generate_agreement_scatter(sorted_IDs, all_metrics, save_path)
+    generate_confusion_matrices(sorted_IDs, all_metrics, args)
+    generate_agreement_scatter(sorted_IDs, all_metrics, args, False)
+    # generate_agreement_scatter(sorted_IDs, all_metrics, args, True)
 
 
 def generate_collage_plot(sorted_IDs, all_metrics, save_path):
@@ -1386,10 +1430,10 @@ if __name__ == "__main__":
     # sort by percent agreement
     sorted_ids = sorted(list(all_metrics.keys()),
                         key=lambda x: all_metrics[x]["human1_vs_machine_session"]["agreement"])
-    generate_dataset_plots(sorted_ids, all_metrics, args.output_folder)
-    generate_session_plots(sorted_ids, all_metrics, args)
+    generate_dataset_plots(sorted_ids, all_metrics, args)
     generate_collage_plot(sorted_ids, all_metrics, args.output_folder)
     generate_collage_plot2(sorted_ids, all_metrics, args.output_folder)
+    generate_session_plots(sorted_ids, all_metrics, args)
     # plot_face_pixel_density_vs_accuracy(sorted_ids, all_metrics, args)
     # plot_face_location_vs_accuracy(sorted_ids, all_metrics, args)
     # plot_luminance_vs_accuracy(sorted_ids, all_metrics, args)
