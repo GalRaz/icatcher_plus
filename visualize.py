@@ -663,7 +663,7 @@ def session_scatter_plot(target_ID, metric, session_path):
 def generate_session_plots(sorted_IDs, all_metrics, args):
     sessions_path = Path(args.output_folder, "per_session_plots")
     for i, target_ID in enumerate(tqdm(sorted_IDs)):
-        session_path = Path(sessions_path, target_ID)
+        session_path = Path(sessions_path, "{:02d}_".format(i)+target_ID)
         session_path.mkdir(exist_ok=True, parents=True)
         session_frame_by_frame_plot(target_ID, all_metrics[target_ID], session_path)
         session_image_collage_plot(target_ID, all_metrics[target_ID], session_path)
