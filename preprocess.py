@@ -159,13 +159,12 @@ def build_lookit_video_dataset(raw_dataset_path, csv_location):
     return video_dataset
 
 
-def preprocess_raw_lookit_dataset(args, force_create=False):
+def preprocess_raw_lookit_dataset(args):
     """
     Organizes the raw videos downloaded from the Lookit platform.
     It puts the videos with annotations into raw_videos folder and
     the annotation from the first and second human annotators into coding_first and coding_second folders respectively.
     :param args: cmd line arguments
-    :param force_create: forces creation of files even if they exist
     :return:
     """
     np.random.seed(seed=args.seed)  # seed the random generator
@@ -194,62 +193,68 @@ def preprocess_raw_lookit_dataset(args, force_create=False):
     else:
         raise NotImplementedError
     videos = np.array(videos)
-
-    # filter out videos according to one_video_per_child_policy and train_val_disjoint
-    if args.one_video_per_child_policy == "include_all":
-        double_coded = [x for x in videos if x["has_2coding"]]
-        threshold = int(len(videos) * args.val_percent)
-        val_set = np.random.choice(double_coded, size=threshold, replace=False)
-        if args.train_val_disjoint:
-            val_children_id = [x["child_id"] for x in val_set]
-            train_set = [x for x in videos if x["child_id"] not in val_children_id and x not in val_set]
-            train_set = np.array(train_set)
-        else:
-            train_set = [x for x in videos if x not in val_set]
-    elif args.one_video_per_child_policy == "unique_only":
-        video_children_id = [x["child_id"] for x in videos]
-        _, indices = np.unique(video_children_id, return_index=True)
-        unique_videos = videos[indices]
-        double_coded = [x for x in unique_videos if x["has_2coding"]]
-        threshold = min(int(len(unique_videos) * args.val_percent), len(double_coded))
-        val_set = np.random.choice(double_coded, size=threshold, replace=False)
-        train_set = np.array([x for x in unique_videos if x not in val_set])
-    elif args.one_video_per_child_policy == "unique_only_in_val":
-        video_children_id = [x["child_id"] for x in videos]
-        _, unique_indices = np.unique(video_children_id, return_index=True)
-        double_coded_and_unique_videos = [x for x in videos[unique_indices] if x["has_2coding"]]
-        threshold = min(int(len(videos) * args.val_percent), len(double_coded_and_unique_videos))
-        val_set = np.random.choice(double_coded_and_unique_videos, size=threshold, replace=False)
-        if args.train_val_disjoint:
-            val_children_id = [x["child_id"] for x in val_set]
-            train_set = [x for x in videos if x["child_id"] not in val_children_id and x not in val_set]
-            train_set = np.array(train_set)
-        else:
-            train_set = np.array([x for x in videos if x not in val_set])
-    elif args.one_video_per_child_policy == "unique_only_in_train":
-        val_set = [x for x in videos if x["has_2coding"]]
-        val_children_id = [x["child_id"] for x in val_set]
-        if args.train_val_disjoint:
-            temp_train_set = [x for x in videos if x["child_id"] not in val_children_id and x not in val_set]
-        else:
-            temp_train_set = [x for x in videos if x not in val_set]
-        temp_train_video_children_id = [x["child_id"] for x in temp_train_set]
-        _, unique_indices = np.unique(temp_train_video_children_id, return_index=True)
-        train_set = np.array(temp_train_video_children_id[unique_indices])
+    if args.pre_split is not None:
+        pre_split = np.load(args.pre_split, allow_pickle=True)
+        pre_split_train = pre_split["arr_0"][0]
+        pre_split_val = pre_split["arr_0"][1]
+        train_set = [x for x in videos if x["video_id"] in pre_split_train]
+        val_set = [x for x in videos if x["video_id"] in pre_split_val]
     else:
-        raise NotImplementedError
-
+        # filter out videos according to one_video_per_child_policy and train_val_disjoint
+        if args.one_video_per_child_policy == "include_all":
+            double_coded = [x for x in videos if x["has_2coding"]]
+            threshold = int(len(videos) * args.val_percent)
+            val_set = np.random.choice(double_coded, size=threshold, replace=False)
+            if args.train_val_disjoint:
+                val_children_id = [x["child_id"] for x in val_set]
+                train_set = [x for x in videos if x["child_id"] not in val_children_id and x not in val_set]
+                train_set = np.array(train_set)
+            else:
+                train_set = [x for x in videos if x not in val_set]
+        elif args.one_video_per_child_policy == "unique_only":
+            video_children_id = [x["child_id"] for x in videos]
+            _, indices = np.unique(video_children_id, return_index=True)
+            unique_videos = videos[indices]
+            double_coded = [x for x in unique_videos if x["has_2coding"]]
+            threshold = min(int(len(unique_videos) * args.val_percent), len(double_coded))
+            val_set = np.random.choice(double_coded, size=threshold, replace=False)
+            train_set = np.array([x for x in unique_videos if x not in val_set])
+        elif args.one_video_per_child_policy == "unique_only_in_val":
+            video_children_id = [x["child_id"] for x in videos]
+            _, unique_indices = np.unique(video_children_id, return_index=True)
+            double_coded_and_unique_videos = [x for x in videos[unique_indices] if x["has_2coding"]]
+            threshold = min(int(len(videos) * args.val_percent), len(double_coded_and_unique_videos))
+            val_set = np.random.choice(double_coded_and_unique_videos, size=threshold, replace=False)
+            if args.train_val_disjoint:
+                val_children_id = [x["child_id"] for x in val_set]
+                train_set = [x for x in videos if x["child_id"] not in val_children_id and x not in val_set]
+                train_set = np.array(train_set)
+            else:
+                train_set = np.array([x for x in videos if x not in val_set])
+        elif args.one_video_per_child_policy == "unique_only_in_train":
+            val_set = [x for x in videos if x["has_2coding"]]
+            val_children_id = [x["child_id"] for x in val_set]
+            if args.train_val_disjoint:
+                temp_train_set = [x for x in videos if x["child_id"] not in val_children_id and x not in val_set]
+            else:
+                temp_train_set = [x for x in videos if x not in val_set]
+            temp_train_video_children_id = [x["child_id"] for x in temp_train_set]
+            _, unique_indices = np.unique(temp_train_video_children_id, return_index=True)
+            train_set = np.array(temp_train_video_children_id[unique_indices])
+        else:
+            raise NotImplementedError
+    split_path = Path(args.output_folder, "saved_split")
+    np.savez(split_path, [[x["video_id"] for x in train_set], [x["video_id"] for x in val_set]])
     logging.info('[preprocess_raw] training set: {} validation set: {}'.format(len(train_set), len(val_set)))
     create_symbolic_links(train_set, val_set, args)
 
 
-def preprocess_raw_marchman_dataset(args, force_create=False):
+def preprocess_raw_marchman_dataset(args):
     """
     Organizes raw videos from the full marchman dataset
     It puts the videos with annotations into raw_videos folder and
     the annotation from the first and second human annotators into coding_first and coding_second folders respectively.
     :param args: cmd line arguments
-    :param force_create: forces creation of files even if they exist
     :return:
     """
     csv_file = Path(args.raw_dataset_path / "Cal_BW_March_split0_participants.csv")
@@ -847,9 +852,9 @@ if __name__ == "__main__":
         logging.basicConfig(level=args.verbosity.upper())
 
     if args.raw_dataset_type == "lookit":
-        preprocess_raw_lookit_dataset(args, force_create=False)
+        preprocess_raw_lookit_dataset(args)
     elif args.raw_dataset_type == "vcx":
-        preprocess_raw_marchman_dataset(args, force_create=False)
+        preprocess_raw_marchman_dataset(args)
     elif args.raw_dataset_type == "generic":
         preprocess_raw_generic_dataset(args, force_create=False)
     else:
