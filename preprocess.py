@@ -109,17 +109,18 @@ def build_lookit_video_dataset(raw_dataset_path, csv_location):
     # search for videos
     for file in Path(raw_dataset_path / "videos").glob("*"):
         if file.is_file():
-            video_dataset[file] = {"video_id": "-".join(file.stem.split("_")[2].split("-")[1:]),
-                                   "video_path": file,
-                                   "video_suffix": file.suffix,
-                                   "in_csv": False,
-                                   "has_1coding": False,
-                                   "has_2coding": False,
-                                   "first_coding_file": None,
-                                   "second_coding_file": None,
-                                   "child_id": None,
-                                   "split": None,
-                                   "public": False}
+            id = "-".join(file.stem.split("_")[2].split("-")[1:])
+            video_dataset[id] = {"video_id": id,
+                                 "video_path": file,
+                                 "video_suffix": file.suffix,
+                                 "in_csv": False,
+                                 "has_1coding": False,
+                                 "has_2coding": False,
+                                 "first_coding_file": None,
+                                 "second_coding_file": None,
+                                 "child_id": None,
+                                 "split": None,
+                                 "public": False}
     # parse csv file
     rows = []
     with open(csv_location) as file:
@@ -175,7 +176,7 @@ def preprocess_raw_lookit_dataset(args):
         csv_videos = len(csv_fp.readlines())
     valid_videos = len(video_dataset.keys())
     valid_videos_in_csv = len([x for x in video_dataset.values() if x["in_csv"] and x["has_1coding"]])
-    doubly_coded = len([x for x in video_dataset.values() if x["in_csv"] and x["has_2coding"]])
+    doubly_coded = len([x for x in video_dataset.values() if x["in_csv"] and x["has_1coding"] and x["has_2coding"]])
     unique_children = len(np.unique([x["child_id"] for x in video_dataset.values() if x["in_csv"] and x["has_1coding"]]))
     logging.info("csv videos: {},"
                  " found videos: {},"
