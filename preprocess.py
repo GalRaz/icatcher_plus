@@ -436,11 +436,11 @@ def process_dataset_lowest_face(args, gaze_labels_only=False, force_create=False
         vfr, meta_data = video.is_video_vfr(video_file, get_meta_data=True)
         fps = video.get_fps(video_file)
         if vfr:
-            logging.warning("video file: {} has variable frame rate".format(str(video_file)))
+            logging.warning("[process_lkt_legacy] video file: {} has variable frame rate".format(str(video_file)))
             logging.info(str(meta_data))
             frame_info, vfr_frame_counter, _ = video.get_frame_information(video_file)
         else:
-            print("video fps: {}".format(fps))
+            logging.info("[process_lkt_legacy] video fps: {}".format(fps))
 
         if args.raw_dataset_type == "vcx":
             csv_file = Path(args.raw_dataset_path / "Cal_BW_March_split0_participants.csv")
@@ -599,7 +599,7 @@ def generate_second_gaze_labels(args, force_create=False, visualize_confusion=Fa
                 raise NotImplementedError
             try:
                 responses, start, end = parser.parse(video_file.stem)
-            except IndexError:
+            except (IndexError, TypeError) as e:
                 logging.info('[gen_2nd_labels] Failed to parse!')
                 continue
             gaze_labels = np.load(str(Path.joinpath(args.faces_folder, video_file.stem, 'gaze_labels.npy')))

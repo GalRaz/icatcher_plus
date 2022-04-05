@@ -108,11 +108,14 @@ class LookitParser(BaseParser):
         :param label_path: if provided, will parse this file instead
         :return: see base class
         """
-        if not label_path:
+        if label_path is None:
             if self.first_coder:
                 label_path = self.video_dataset[video_id]["first_coding_file"]
             else:
                 label_path = self.video_dataset[video_id]["second_coding_file"]
+            if label_path is None:
+                logging.warning("Video ID: " + str(video_id) + " no matching vcx was found.")
+                return None
             if not label_path.is_file():
                 logging.warning("For the file: " + str(label_path) + " no matching vcx was found.")
                 return None
@@ -161,6 +164,8 @@ class LookitParser(BaseParser):
         if not self.return_time_stamps:  # convert to frame numbers
             for entry in output:
                 entry[0] = int(int(entry[0]) * self.fps / 1000)
+        if not output:  # if nothing was found, all video is invalid
+            output.append([0, False, "away"])
         start = int(output[0][0])
         trial_times = self.get_trial_intervals(start, labels)
         last_trial_end = trial_times[-1][1]
