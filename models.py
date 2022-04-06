@@ -74,7 +74,7 @@ class MyModel:
         elif self.opt.lr_policy == 'plateau':
             scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, 'min', verbose=True, patience=3)
         elif self.opt.lr_policy == 'multi_step':
-            scheduler = torch.optim.lr_scheduler.MultiStepLR(self.optimizer, milestones=[10, 15], gamma=0.1)
+            scheduler = torch.optim.lr_scheduler.MultiStepLR(self.optimizer, milestones=[3, 5], gamma=0.1)
         elif self.opt.lr_policy == "cyclic":
             scheduler = torch.optim.lr_scheduler.CyclicLR(optimizer=self.optimizer,
                                                           base_lr=self.opt.lr,
