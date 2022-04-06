@@ -520,6 +520,7 @@ def sample_luminance(ID, args, start, end, num_samples=10):
 def session_frame_by_frame_plot(target_ID, metric, session_path):
     skip = 10
     GRAPH_CLASSES = ["left", "right", "away", "invalid"]
+    plt.rc('font', size=16)
     fig, ax = plt.subplots(figsize=(16, 6))
     timeline = ax
     # timeline.set_aspect(0.5)
@@ -529,7 +530,7 @@ def session_frame_by_frame_plot(target_ID, metric, session_path):
                    metric["human1_vs_machine_session"]["end"]
     start = min(start1, start2)
     end = max(end1, end2)
-    plt.suptitle('Video ID: {}, Frames: ({} - {})'.format(target_ID + ".mp4", str(start), str(end)))
+    # plt.suptitle('Video ID: {}, Frames: ({} - {})'.format(target_ID + ".mp4", str(start), str(end)))
     times1 = metric["human1_vs_human2_session"]["times_coding2"]
     times2 = metric["human1_vs_human2_session"]["times_coding1"]
     times3 = metric["human1_vs_machine_session"]["times_coding2"]
@@ -561,7 +562,7 @@ def session_frame_by_frame_plot(target_ID, metric, session_path):
                vlines_handle]  # vlines_selected_frames_handle
     timeline.legend(handles=artists, loc='lower left', bbox_to_anchor=(0.0, 1.01), ncol=5,
                     borderaxespad=0)
-    plt.savefig(Path(session_path, 'session_frame_by_frame.png'))
+    plt.savefig(Path(session_path, 'session_frame_by_frame.pdf'))
 
     # plt.subplots_adjust(left=0.075, bottom=0.075, right=0.925, top=0.925, wspace=0.2, hspace=0.8)
     plt.cla()
@@ -592,7 +593,7 @@ def session_image_collage_plot(target_ID, metric, session_path):
     # ax.set_xlim(imgs.shape[0] - 0.5, -0.5)
     fig.tight_layout()
     # ax.set_axis_off()
-    plt.savefig(Path(session_path, 'frame_gallery.png'))
+    plt.savefig(Path(session_path, 'frame_gallery.pdf'))
     # plt.subplots_adjust(left=0.075, bottom=0.075, right=0.925, top=0.925, wspace=0.2, hspace=0.8)
     plt.cla()
     plt.clf()
@@ -600,6 +601,7 @@ def session_image_collage_plot(target_ID, metric, session_path):
 
 
 def session_agreement_plot(target_ID, metric, session_path):
+    plt.rc('font', size=16)
     fig, ax = plt.subplots(figsize=(6, 8))
     inference = ["human1_vs_human2_session", "human1_vs_machine_session"]
     agreements = [metric[entry]['agreement'] * 100 for entry in inference]
@@ -608,7 +610,7 @@ def session_agreement_plot(target_ID, metric, session_path):
     ax.set_xticklabels(["H1-H2", "H1-M"])
     ax.set_ylim([0, 100])
     ax.set_ylabel("Percent Agreement")
-    plt.savefig(Path(session_path, 'agreement.png'))
+    plt.savefig(Path(session_path, 'agreement.pdf'), bbox_inches='tight')
     # plt.subplots_adjust(left=0.075, bottom=0.075, right=0.925, top=0.925, wspace=0.2, hspace=0.8)
     plt.cla()
     plt.clf()
@@ -617,6 +619,7 @@ def session_agreement_plot(target_ID, metric, session_path):
 
 def session_scatter_plot(target_ID, metric, session_path):
     #  looking time plot
+    plt.rc('font', size=16)
     fig = plt.figure(figsize=(12, 6))
     lt_scatter = fig.add_subplot(1, 2, 1)
     lt_scatter.set_box_aspect(1)
@@ -625,10 +628,10 @@ def session_scatter_plot(target_ID, metric, session_path):
     x_target = [x["looking_time_1"] / fps for x in metric["human1_vs_human2_trials"]]
     y_target = [x["looking_time_2"] / fps for x in metric["human1_vs_human2_trials"]]
     y2_target = [x["looking_time_2"] / fps for x in metric["human1_vs_machine_trials"]]
-    lt_scatter.scatter(x_target, y_target, color="black",
-                       label='H1-H2', marker="o")
+    lt_scatter.scatter(x_target, y_target, color=label_to_color("lblue"),
+                       label='H1-H2', marker="o", s=40)
     lt_scatter.scatter(x_target, y2_target, color=label_to_color("lorange"),
-                       label='H1-M', marker="^")
+                       label='H1-M', marker="^", s=40)
     lt_scatter.set_xlabel("Looking Time (H1)")
     lt_scatter.set_ylabel("Looking Time")
     lt_scatter.set_title("Looking time [s]")
@@ -643,10 +646,10 @@ def session_scatter_plot(target_ID, metric, session_path):
     x_target = [x["percent_r_1"] * 100 for x in metric["human1_vs_human2_trials"]]
     y_target = [x["percent_r_2"] * 100 for x in metric["human1_vs_human2_trials"]]
     y2_target = [x["percent_r_2"] * 100 for x in metric["human1_vs_machine_trials"]]
-    pr_scatter.scatter(x_target, y_target, color="black",
-                       label='H1-H2', marker="o")
+    pr_scatter.scatter(x_target, y_target, color=label_to_color("lblue"),
+                       label='H1-H2', marker="o", s=40)
     pr_scatter.scatter(x_target, y2_target, color=label_to_color("lorange"),
-                       label='H1-M', marker="^")
+                       label='H1-M', marker="^", s=40)
     pr_scatter.set_xlabel("Percent Right (H1)")
     pr_scatter.set_ylabel("Percent Right")
     pr_scatter.set_title("Percent Right")
@@ -654,7 +657,7 @@ def session_scatter_plot(target_ID, metric, session_path):
     pr_scatter.set_xlim([0, 100])
     pr_scatter.set_ylim([0, 100])
 
-    plt.savefig(Path(session_path, 'scatter_plots.png'))
+    plt.savefig(Path(session_path, 'scatter_plots.pdf'))
     plt.cla()
     plt.clf()
     plt.close(fig)
@@ -883,6 +886,7 @@ def generate_collage_plot2(sorted_IDs, all_metrics, save_path):
 
 
 def generate_barplot(sorted_IDs, all_metrics, save_path):
+    plt.rc('font', size=13)
     fig, ax = plt.subplots()
     agreement_hvh = [all_metrics[ID]["human1_vs_human2_session"]['agreement'] for ID in sorted_IDs]
     mean_agreement_hvh = np.mean(agreement_hvh)
@@ -920,16 +924,15 @@ def generate_barplot(sorted_IDs, all_metrics, save_path):
     rects2 = ax.bar(x + (width / 2), [mean_agreement_hvm, mean_ca_hvm, mean_icc_lt_hvm, mean_icc_pr_hvm],
                     yerr=[std_agreement_hvm, std_ca_hvm, std_icc_lt_hvm, std_icc_pr_hvm], width=width,
                     label='Human-Machine', align='center', ecolor='black', capsize=10)
-    labels = ['% Agree', 'Chronbach\'s Alpha', 'ICC Looking Time', 'ICC Percent Right']
+    labels = ['% Agree', 'Chronbach\'s Alpha', 'ICC (LT)', 'ICC (PR)']
     ax.set_xticks(x)
-    ax.set_yticks([0, 1])
-    ax.set_xticklabels(labels)
-    # ax.set_title("Marchman Dataset")
-    ax.bar_label(rects1, fmt='%.2f', padding=3)
-    ax.bar_label(rects2, fmt='%.2f', padding=3)
+    ax.set_yticks(np.arange(0, 1.2, step=0.2))
+    ax.set_xticklabels(labels)  # , rotation=-45
+    ax.bar_label(rects1, fmt='%.2f', padding=3, label_type="center")
+    ax.bar_label(rects2, fmt='%.2f', padding=3, label_type="center")
     ax.legend(loc='lower right')
     fig.tight_layout()
-    plt.savefig(str(Path(save_path, 'dataset_bar_plots_with_error.png')))
+    plt.savefig(str(Path(save_path, 'dataset_bar_plots_with_error.pdf')))
     plt.cla()
     plt.clf()
     plt.close(fig)
@@ -941,6 +944,7 @@ def generate_confusion_matrices(sorted_IDs, all_metrics, args):
     # heights = [1]
     # gs_kw = dict(width_ratios=widths, height_ratios=heights)
     # fig, axs = plt.subplots()  # 1, 4, gridspec_kw=gs_kw, figsize=(24.0, 8.0),
+    plt.rc('font', size=16)
     fig = plt.figure(figsize=(10, 10))
     # conf_mat_h2h, conf_mat2_h2h, conf_mat_h2m, conf_mat2_h2m = axs  # won't work with single video...
     conf_mat_h2h = fig.add_subplot(2, 2, 1)
@@ -1001,7 +1005,7 @@ def generate_confusion_matrices(sorted_IDs, all_metrics, args):
 
     fig.tight_layout()
     # ax.set_axis_off()
-    plt.savefig(str(Path(save_path, 'dataset_confusion_matrices.png')))
+    plt.savefig(str(Path(save_path, 'dataset_confusion_matrices.pdf')))
     plt.cla()
     plt.clf()
     plt.close(fig)
@@ -1009,6 +1013,7 @@ def generate_confusion_matrices(sorted_IDs, all_metrics, args):
 
 def generate_agreement_scatter(sorted_IDs, all_metrics, args, multi_dataset=False):
     save_path = args.output_folder
+    plt.rc('font', size=16)
     fig, ax = plt.subplots()
     ax.plot([0, 1], [0, 1], transform=ax.transAxes, color="black")
     if args.raw_dataset_type == "vcx":
@@ -1021,29 +1026,31 @@ def generate_agreement_scatter(sorted_IDs, all_metrics, args, multi_dataset=Fals
     y_target = [all_metrics[ID]["human1_vs_machine_session"]["agreement"] for ID in sorted_IDs]
     # np.savez("temp", x_target, y_target)
     ax.scatter(x_target, y_target,
-               color=label_to_color("vlblue"), label=primary_label, alpha=0.5)
+               color=label_to_color("vlblue"), label=primary_label, alpha=0.5, s=40, marker="o")
     ax.errorbar(np.mean(x_target), np.mean(y_target), xerr=np.std(x_target), yerr=np.std(y_target),
-                color=label_to_color("vblue"), marker='D', capsize=3)  # ms=40
+                color=label_to_color("vblue"), marker='o', capsize=3, ms=10)  # ms=40
     minx = min(x_target)
     miny = min(y_target)
-    plot_name = 'dataset_agreement_scatter.png'
+    plot_name = 'dataset_agreement_scatter.pdf'
     if multi_dataset:
         data = np.load("temp.npz")
         x_target_2, y_target_2 = data["arr_0"], data["arr_1"]
         minx = min(np.min(x_target), np.min(x_target_2))
         miny = min(np.min(y_target), np.min(y_target_2))
         ax.scatter(x_target_2, y_target_2,
-                   color=label_to_color("vlgreen"), label=secondary_label, alpha=0.5)
+                   color=label_to_color("vlgreen"), label=secondary_label, alpha=0.5, s=40, marker="^")
         ax.errorbar(np.mean(x_target_2), np.mean(y_target_2), xerr=np.std(x_target_2), yerr=np.std(y_target_2),
-                    color=label_to_color("vgreen"), marker='D', capsize=3)  # ms=40
-        plot_name = "multi_dataset_agreement_scatter.png"
-    ax.set_xlim([minx, 1])
-    ax.set_ylim([miny, 1])
+                    color=label_to_color("vgreen"), marker='^', capsize=3, ms=10)  # ms=40
+        plot_name = "multi_dataset_agreement_scatter.pdf"
+    final_min = min(minx, miny)
+    ax.set_xlim([final_min, 1])
+    ax.set_ylim([final_min, 1])
     ax.set_xlabel("H-H Percent Agreement")
     ax.set_ylabel("H-M Percent Agreement")
     # ax.set_title("Percent Agreement")
     ax.legend(loc='upper left')
-    plt.savefig(str(Path(save_path, plot_name)))
+
+    plt.savefig(str(Path(save_path, plot_name)), bbox_inches='tight')
     plt.cla()
     plt.clf()
     plt.close(fig)
@@ -1061,7 +1068,7 @@ def generate_dataset_plots(sorted_IDs, all_metrics, args):
     generate_barplot(sorted_IDs, all_metrics, save_path)
     generate_confusion_matrices(sorted_IDs, all_metrics, args)
     generate_agreement_scatter(sorted_IDs, all_metrics, args, False)
-    # generate_agreement_scatter(sorted_IDs, all_metrics, args, True)
+    generate_agreement_scatter(sorted_IDs, all_metrics, args, True)
 
 
 def generate_collage_plot(sorted_IDs, all_metrics, save_path):
@@ -1419,6 +1426,33 @@ def sandbox(metrics):
             print("{}, machine accuracy: {}".format(key.stem + ".mp4", acc_machine))
 
 
+def print_stats(sorted_ids, all_metrics, args):
+    agreement = [all_metrics[ID]["human1_vs_machine_session"]["agreement"] for ID in sorted_ids]
+    ca = [all_metrics[ID]["human1_vs_machine_session"]["ca"] for ID in sorted_ids]
+    invalid = [1 - (all_metrics[ID]["human1_vs_machine_session"]["valid_frames_2"] /
+                    all_metrics[ID]["human1_vs_machine_session"]["n_frames_in_interval"]) for ID in sorted_ids]
+    ICC_LT = [all_metrics[ID]["stats"]["ICC_LT_hvm"] for ID in sorted_ids]
+    ICC_PR = [all_metrics[ID]["stats"]["ICC_PR_hvm"] for ID in sorted_ids]
+    invalid_mean = np.mean(invalid) * 100
+    invalid_std = np.std(invalid) * 100
+    agreement_mean = np.mean(agreement) * 100
+    agreement_std = np.std(agreement) * 100
+    ca_mean = np.mean(ca)
+    ca_std = np.std(ca)
+    ICC_LT_mean = np.mean(ICC_LT)
+    ICC_LT_std = np.std(ICC_LT)
+    ICC_PR_mean = np.mean(ICC_PR)
+    ICC_PR_std = np.std(ICC_PR)
+    CIA_mean = 0
+    CIA_std = 0
+    print("percent agreement: trial: {:.2f} +- {:.2f}".format(agreement_mean, agreement_std))
+    print("% of invalid frames: {:.2f} +- {:.2f}".format(invalid_mean, invalid_std))
+    print("ICC LT: {:.2f} +- {:.2f}".format(ICC_LT_mean, ICC_LT_std))
+    print("ICC PR: {:.2f} +- {:.2f}".format(ICC_PR_mean, ICC_PR_std))
+    print("cronbachs alpha: {:.2f} +- {:.2f}".format(ca_mean, ca_std))
+    print("CIA: {:.2f} +- {:.2f}".format(CIA_mean, CIA_std))
+
+
 if __name__ == "__main__":
     args = parse_arguments_for_visualizations()
     if args.log:
@@ -1430,6 +1464,7 @@ if __name__ == "__main__":
     # sort by percent agreement
     sorted_ids = sorted(list(all_metrics.keys()),
                         key=lambda x: all_metrics[x]["human1_vs_machine_session"]["agreement"])
+    print_stats(sorted_ids, all_metrics, args)
     generate_dataset_plots(sorted_ids, all_metrics, args)
     generate_collage_plot(sorted_ids, all_metrics, args.output_folder)
     generate_collage_plot2(sorted_ids, all_metrics, args.output_folder)
