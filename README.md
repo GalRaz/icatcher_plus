@@ -1,24 +1,18 @@
 ### Latest Results (test set, split0)
 <table>
         <tr>
-                <td align="center"> <img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/collage.png"  alt="collage" width = 300px height = 400px ></td>
-                <td align="center"> <img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/collage2.png"  alt="collage2" width = 300px height = 400px ></td>
+                <td align="center"> <img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/agreement.pdf"  alt="0" width = 300px height = 300px ></td>
+                <td align="center"> <img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/lookit_collage.png"  alt="1" width = 300px height = 300px ></td>
         </tr>
         <tr>
-                <td><img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/frame_by_frame_00.png" alt="0" width = 1000px height = 100px></td>
-                <td><img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/frame_by_frame_01.png" alt="1" width = 1000px height = 100px></td>
+				Marchman
+                <td><img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/marchman_bar.pdf" alt="0" width = 300px height = 300px></td>
+                <td><img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/marchman_conf.pdf" alt="1" width = 300px height = 300px></td>
         </tr>
         <tr>
-                <td><img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/frame_by_frame_02.png" alt="0" width = 1000px height = 100px></td>
-                <td><img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/frame_by_frame_03.png" alt="1" width = 1000px height = 100px></td>
-        </tr>
-        <tr>
-                <td><img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/frame_by_frame_04.png" alt="0" width = 1000px height = 100px></td>
-                <td><img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/frame_by_frame_05.png" alt="1" width = 1000px height = 100px></td>
-        </tr>
-        <tr>
-                <td><img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/frame_by_frame_06.png" alt="0" width = 1000px height = 100px></td>
-                <td><img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/frame_by_frame_07.png" alt="1" width = 1000px height = 100px></td>
+				Lookit
+                <td><img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/lookit_bar.pdf" alt="0" width = 300px height = 300px></td>
+                <td><img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/lookit_conf.pdf" alt="1" width = 300px height = 300px></td>
         </tr>
 </table>
 
