@@ -1,3 +1,5 @@
+from typing import List, Tuple, Union
+
 import torch
 import torch.utils.data as data
 from torch.utils.data.distributed import DistributedSampler
@@ -11,7 +13,7 @@ import logging
 import csv
 import visualize
 from augmentations import RandAugment
-
+import pandas as pd
 
 class DataTransforms:
     def __init__(self, img_size, mean, std):
@@ -34,6 +36,20 @@ class DataTransforms:
                 transforms.Normalize(mean, std)
             ])
 }
+
+def create_personalized_dataset(tsv_path):
+    video_to_id_dict = {}
+    df = pd.read_csv(tsv_path, sep="\t")
+    id_list = df['childID']
+    for id in id_list:
+        if id not in video_to_id_dict.keys():
+            video_to_id_dict[id] = []
+        temp_df = df[df.childID == id]
+        video_to_id_dict[id].append(temp_df['videoID'])
+
+    return video_to_id_dict
+
+
 
 class LookItDataset(data.Dataset):
     def __init__(self, opt):
@@ -82,7 +98,7 @@ class LookItDataset(data.Dataset):
                 return False
         return True
 
-    def collect_paths(self, face_label_name):
+    def collect_paths(self, face_label_name, video_to_id_dict, id):
         """
         process dataset into tuples of frames
         :param face_label_name: file with face labels
@@ -93,7 +109,8 @@ class LookItDataset(data.Dataset):
             coding_path = Path(self.opt.dataset_folder, "train", "coding_first")
         else:
             coding_path = Path(self.opt.dataset_folder, "validation", "coding_first")
-        coding_names = [f.stem for f in coding_path.glob("*")]
+
+        coding_names = [f.stem for f in coding_path.glob("*") if f.stem in video_to_id_dict[id]]
         dataset_folder_path = Path(self.opt.dataset_folder, "faces")
         my_list = []
         logging.info("{}: Collecting paths for dataloader".format(self.opt.phase))
