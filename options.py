@@ -52,6 +52,8 @@ def parse_arguments_for_training():
     parser.add_argument("--log", action="store_true", help="Logs into a file instead of stdout")
     parser.add_argument("-v", "--verbosity", type=str, choices=["debug", "info", "warning"], default="info",
                         help="Selects verbosity level")
+    parser.add_argument("--id", type=str, default='all', help="defines which subject are we loading")
+    parser.add_argument("--tsv", type=str, default='no_tsv', help="defines a tsv map we are looking at")
     args = parser.parse_args()
     args.dataset_folder = Path(args.dataset_folder)
     # add some useful arguments for the rest of the code
