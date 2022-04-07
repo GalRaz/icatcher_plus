@@ -1,21 +1,20 @@
 ### Latest Results (test set, split0)
 <table>
         <tr>
-                <td align="center"> <img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/agreement.png"  alt="0" width = 300px height = 300px ></td>
+                <td align="center"> <img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/agreement.png"  alt="0" width = 400px height = 300px ></td>
                 <td align="center"> <img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/lookit_collage.png"  alt="1" width = 300px height = 300px ></td>
         </tr>
         <tr><td colspan=2>Marchman</td></tr>
         <tr>
-                <td><img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/marchman_bar.png" alt="0" width = 300px height = 300px></td>
+                <td><img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/marchman_bar.png" alt="0" width = 400px height = 300px></td>
                 <td><img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/marchman_conf.png" alt="1" width = 300px height = 300px></td>
         </tr>
         <tr><td colspan=2>Lookit</td></tr>
         <tr>
-                <td><img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/lookit_bar.png" alt="0" width = 300px height = 300px></td>
+                <td><img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/lookit_bar.png" alt="0" width = 400px height = 300px></td>
                 <td><img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/lookit_conf.png" alt="1" width = 300px height = 300px></td>
         </tr>
 </table>
-
 structure of project is as follows:
 
     ├── assets                  # contains assets for README
