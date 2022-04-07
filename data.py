@@ -15,6 +15,21 @@ import visualize
 from augmentations import RandAugment
 import pandas as pd
 
+
+def create_video_to_id_dict(tsv_path):
+    video_to_id_dict = {}
+    df = pd.read_csv(tsv_path, sep="\t")
+    id_list = df['childID']
+    for id in id_list:
+        if id not in video_to_id_dict.keys():
+            video_to_id_dict[id] = []
+        temp_df = df[df.childID == id]
+        to_add_list = temp_df['videoID']
+        for vid in to_add_list:
+            video_to_id_dict[id].append(vid)
+
+    return video_to_id_dict
+
 class DataTransforms:
     def __init__(self, img_size, mean, std):
         self.transformations = {
@@ -37,17 +52,7 @@ class DataTransforms:
             ])
 }
 
-def create_personalized_dataset(tsv_path):
-    video_to_id_dict = {}
-    df = pd.read_csv(tsv_path, sep="\t")
-    id_list = df['childID']
-    for id in id_list:
-        if id not in video_to_id_dict.keys():
-            video_to_id_dict[id] = []
-        temp_df = df[df.childID == id]
-        video_to_id_dict[id].append(temp_df['videoID'])
 
-    return video_to_id_dict
 
 
 
@@ -55,12 +60,15 @@ class LookItDataset(data.Dataset):
     def __init__(self, opt):
         super(LookItDataset, self).__init__()
         self.opt = copy.deepcopy(opt)
+        self.id = self.opt.id
+        self.tsv = self.opt.tsv
         self.paths = self.collect_paths("face_labels_fc")  # change to "face_labels" if face classifier wasn't used
         # self.get_mean_std()
         self.img_processor = DataTransforms(self.opt.image_size,
                                             self.opt.per_channel_mean,
                                             self.opt.per_channel_std).transformations[self.opt.phase]  # ew.
         self.random_augmentor = RandAugment(2, 9)
+        self.id = self.opt.id
 
     def __len__(self):
         return len(self.paths)
@@ -98,7 +106,7 @@ class LookItDataset(data.Dataset):
                 return False
         return True
 
-    def collect_paths(self, face_label_name, video_to_id_dict, id):
+    def collect_paths(self, face_label_name):
         """
         process dataset into tuples of frames
         :param face_label_name: file with face labels
@@ -109,8 +117,12 @@ class LookItDataset(data.Dataset):
             coding_path = Path(self.opt.dataset_folder, "train", "coding_first")
         else:
             coding_path = Path(self.opt.dataset_folder, "validation", "coding_first")
-
-        coding_names = [f.stem for f in coding_path.glob("*") if f.stem in video_to_id_dict[id]]
+        if self.tsv != "no_tsv":
+            video_to_id_dict = create_video_to_id_dict(self.tsv)
+        if self.id != "all":
+            coding_names = [f.stem for f in coding_path.glob("*") if f.stem in video_to_id_dict[self.id]]
+        else:
+            coding_names = [f.stem for f in coding_path.glob("*")]
         dataset_folder_path = Path(self.opt.dataset_folder, "faces")
         my_list = []
         logging.info("{}: Collecting paths for dataloader".format(self.opt.phase))
