@@ -12,7 +12,7 @@ class MyModel:
     """
     generic container class for network(torch Module), optimizer and scheduler.
     """
-    def __init__(self, opt, MAMLFlag = False):
+    def __init__(self, opt, mamlflag = False):
         self.opt = copy.deepcopy(opt)
         self.loss_fn = self.get_loss_fn()
         self.network = self.get_network()
@@ -20,7 +20,7 @@ class MyModel:
             self.load_network("latest")
         self.optimizer = self.get_optimizer()
         self.scheduler = self.get_scheduler()
-        if MAMLFlag == False:
+        if mamlflag == False:
             self.network.to(self.opt.device)
 
 

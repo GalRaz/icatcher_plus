@@ -41,7 +41,7 @@ def train_loop(rank, args):
         running_corrects = 0
         num_datapoints = 0
         for batch_index, batch in enumerate(train_dataloader.dataloader):
-            model.optimizer.zero_grad()
+            model.optimizer.zero_grad() ## ask why should we set the gradients to 0
             output = model.network(batch)
             train_loss = model.loss_fn(output, batch["label"])
             _, predictions = torch.max(output, 1)
@@ -104,6 +104,71 @@ def train_loop(rank, args):
                 model.scheduler.step(val_loss_total)
         else:
             model.scheduler.step()
+
+def innerLoop(model, batch):
+    running_loss = 0.0
+    running_corrects = 0
+    num_datapoints = 0
+    model.optimizer.zero_grad()  ## ask why should we set the gradients to 0
+    output = model.network(batch)
+    train_loss = model.loss_fn(output, batch["label"])
+    _, predictions = torch.max(output, 1)
+    train_loss.backward()
+    model.optimizer.step()
+    train_loss_np = train_loss.cpu().detach().numpy()
+    correct = torch.sum(torch.eq(predictions, batch["label"])).item()
+ #   my_logger.write_scaler("batch", "train_loss", train_loss_np,
+ #                          epoch * (len(train_dataloader.dataloader)) + batch_index)
+ #   logging.info("train: epoch: {}, batch {} / {}, loss: {}, acc: {}".format(epoch,
+ #                                                                            batch_index,
+ #                                                                            len(train_dataloader.dataloader),
+ #                                                                            train_loss_np,
+ #                                                                            (correct / batch["label"].shape[0]) * 100))
+    num_datapoints += batch["label"].shape[0]
+    running_loss += train_loss.item() * batch["label"].shape[0]
+    running_corrects += torch.sum(torch.eq(predictions, batch["label"])).item()
+    return running_loss, running_corrects, num_datapoints, running_loss, running_corrects
+
+def MAMLtrain(rank, args):
+    args.rank = rank
+    if args.gpu_id == "-1":
+        args.device = "cpu"
+    else:
+        args.device = "cuda:{}".format(args.rank)
+    setup(args)
+    my_logger = logger.Logger(args)
+
+    ## might be good to set args.phase to one of :
+    # {train_calibration , train_validation , test_calibration , test_calibration}
+
+    args.phase = "train"
+    train_dataloader = data.MyDataLoader(args)
+    ##  args.set = calibrationSet
+    ##train_calibration_dataloader = data.MyDataLoader(args)
+    ##args.set = validationSet
+    ##train_validation_dataloader = data.MyDataLoader(args)
+    args.phase = "test"
+    test_dataloader = data.MyDataLoader(args)
+    ##  args.set = calibrationSet
+    #test_calibration_dataloader = data.MyDataLoader(args)
+    ##args.set = validationSet
+    #test_validation_dataloader = data.MyDataLoader(args)
+    model = models.MAMLmodel(args)
+
+    # model and optimizer for outer loop
+    test_model = model.clone()
+    test_optim = model.optimizer
+
+    # optimizer for inner loop
+    train_optim = model.innerOptimizer
+    for i in range(args.number_of_epochs): ## number of trials
+        for batch_index, batch in enumerate(train_dataloader.dataloader): # Ti in p(T)
+            
+
+
+
+
+
 
 
 def MAMLtrain(self, steps_outer, steps_inner=1, lr_inner=0.01, lr_outer=0.001,
@@ -217,6 +282,8 @@ def predict_on_preprocessed(args):
     logging.info("validation acc: {}%".format(val_acc_total))
     logging.info("per class acc: {}".format(norm_mat.diagonal()))
     logging.info("confusion matrix (normalized): {}".format(norm_mat))
+
+
 
 
 if __name__ == "__main__":
