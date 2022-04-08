@@ -745,7 +745,7 @@ def generate_collage_plot2(sorted_IDs, all_metrics, save_path):
     lr_icc_scatter.set_ylim([0, 1])
     x_target = [all_metrics[ID]["stats"]["ICC_LT_hvh"] for ID in sorted_IDs]
     y_target = [all_metrics[ID]["stats"]["ICC_LT_hvm"] for ID in sorted_IDs]
-    lr_icc_scatter.scatter(x_target, y_target, color=label_to_color("lorange"),
+    lr_icc_scatter.scatter(x_target, y_target, color=label_to_color("lblue"),
                        label='Session')
     lr_icc_scatter.set_xlabel("Human 1 vs Human 2")
     lr_icc_scatter.set_ylabel("Human 1 vs Machine")
@@ -759,7 +759,7 @@ def generate_collage_plot2(sorted_IDs, all_metrics, save_path):
     pr_icc_scatter.set_ylim([0, 1])
     x_target = [all_metrics[ID]["stats"]["ICC_PR_hvh"] for ID in sorted_IDs]
     y_target = [all_metrics[ID]["stats"]["ICC_PR_hvm"] for ID in sorted_IDs]
-    pr_icc_scatter.scatter(x_target, y_target, color=label_to_color("lorange"),
+    pr_icc_scatter.scatter(x_target, y_target, color=label_to_color("lblue"),
                         label='Session')
     pr_icc_scatter.set_xlabel("Human 1 vs Human 2")
     pr_icc_scatter.set_ylabel("Human 1 vs Machine")
@@ -956,11 +956,11 @@ def generate_agreement_scatter(sorted_IDs, all_metrics, args, multi_dataset=Fals
     fig, ax = plt.subplots()
     ax.plot([0, 1], [0, 1], transform=ax.transAxes, color="black")
     if args.raw_dataset_type == "vcx":
-        primary_label = "Marchman Videos"
+        primary_label = "California-BW Videos"
         secondary_label = "Lookit Videos"
     else:
         primary_label = "Lookit Videos"
-        secondary_label = "Marchman Videos"
+        secondary_label = "California-BW Videos"
     x_target = [all_metrics[ID]["human1_vs_human2_session"]["agreement"] for ID in sorted_IDs]
     y_target = [all_metrics[ID]["human1_vs_machine_session"]["agreement"] for ID in sorted_IDs]
     # np.savez("temp", x_target, y_target)
@@ -1034,7 +1034,7 @@ def generate_race_vs_agreement(sorted_IDs, all_metrics, args, video_dataset):
         err.append(np.std(y[inverse == i]))
     plt.rc('font', size=16)
     fig, ax = plt.subplots(figsize=(6, 8))
-    ax.bar(range(len(labels)), data, yerr=err, color="black", width=0.8)
+    ax.bar(range(len(labels)), data, yerr=err, color=label_to_color("lblue"), width=0.8)
     ax.set_xticks(range(len(labels)))
     ax.set_xticklabels(labels)
     ax.set_ylim([0, 100])
@@ -1064,7 +1064,7 @@ def generate_gender_vs_agreement(sorted_IDs, all_metrics, args, video_dataset):
         err.append(np.std(y[inverse == i]))
     plt.rc('font', size=16)
     fig, ax = plt.subplots(figsize=(6, 8))
-    ax.bar(range(len(labels)), data, yerr=err, color="black", width=0.8)
+    ax.bar(range(len(labels)), data, yerr=err, color=label_to_color("lblue"), width=0.8)
     ax.set_xticks(range(len(labels)))
     ax.set_xticklabels(labels)
     ax.set_ylim([0, 100])
@@ -1099,7 +1099,7 @@ def generate_confidence_vs_agreement(sorted_IDs, all_metrics, args):
                     label='Lookit', align='center', ecolor='black', capsize=10)
     rects2 = ax.bar(x + width / 2, [np.mean(confidence_correct), np.mean(confidence_incorrect)],  # x - width
                     yerr=[np.std(confidence_correct), np.std(confidence_incorrect)], width=width,
-                    label='Marchman', align='center', ecolor='black', capsize=10)
+                    label='California-BW', align='center', ecolor='black', capsize=10)
     labels = ['H1-M Agree', 'H1-M Disagree']
     ax.set_xticks(x)
     ax.set_yticks(np.arange(0, 1.2, step=0.2))
@@ -1563,13 +1563,28 @@ def temp_hook(frame, cv2_bboxes, frame_counter):
         plt.close(fig)
 
 
-def print_stats(sorted_ids, all_metrics, args):
-    agreement = [all_metrics[ID]["human1_vs_machine_session"]["agreement"] for ID in sorted_ids]
-    kappa = [all_metrics[ID]["human1_vs_machine_session"]["kappa"] for ID in sorted_ids]
-    invalid = [1 - (all_metrics[ID]["human1_vs_machine_session"]["valid_frames_2"] /
-                    all_metrics[ID]["human1_vs_machine_session"]["n_frames_in_interval"]) for ID in sorted_ids]
-    ICC_LT = [all_metrics[ID]["stats"]["ICC_LT_hvm"] for ID in sorted_ids]
-    ICC_PR = [all_metrics[ID]["stats"]["ICC_PR_hvm"] for ID in sorted_ids]
+def print_stats(sorted_ids, all_metrics, hvm=True):
+    """
+    prints a bunch of metrics for H1 vs M and H1 vs H2
+    :param sorted_ids: the ids of the videos
+    :param all_metrics: all possible metrics
+    :param hvm: whether to print metrics for H1 v M or H1 v H2
+    :return:
+    """
+    if hvm:
+        choice1 = "human1_vs_machine_session"
+        choice2 = "ICC_LT_hvm"
+        choice3 = "ICC_PR_hvm"
+    else:
+        choice1 = "human1_vs_human2_session"
+        choice2 = "ICC_LT_hvh"
+        choice3 = "ICC_PR_hvh"
+    agreement = [all_metrics[ID][choice1]["agreement"] for ID in sorted_ids]
+    kappa = [all_metrics[ID][choice1]["kappa"] for ID in sorted_ids]
+    invalid = [1 - (all_metrics[ID][choice1]["valid_frames_2"] /
+                    all_metrics[ID][choice1]["n_frames_in_interval"]) for ID in sorted_ids]
+    ICC_LT = [all_metrics[ID]["stats"][choice2] for ID in sorted_ids]
+    ICC_PR = [all_metrics[ID]["stats"][choice3] for ID in sorted_ids]
     invalid_mean = np.mean(invalid) * 100
     invalid_std = np.std(invalid) * 100
     agreement_mean = np.mean(agreement) * 100
@@ -1582,6 +1597,7 @@ def print_stats(sorted_ids, all_metrics, args):
     ICC_PR_std = np.std(ICC_PR)
     CIA_mean = 0
     CIA_std = 0
+    print("hvm: {}".format(hvm))
     print("percent agreement: trial: {:.2f} +- {:.2f}".format(agreement_mean, agreement_std))
     print("% of invalid frames: {:.2f} +- {:.2f}".format(invalid_mean, invalid_std))
     print("ICC LT: {:.2f} +- {:.2f}".format(ICC_LT_mean, ICC_LT_std))
@@ -1601,7 +1617,8 @@ if __name__ == "__main__":
     # sort by percent agreement
     sorted_ids = sorted(list(all_metrics.keys()),
                         key=lambda x: all_metrics[x]["human1_vs_machine_session"]["agreement"])
-    print_stats(sorted_ids, all_metrics, args)
+    print_stats(sorted_ids, all_metrics, True)
+    print_stats(sorted_ids, all_metrics, False)
     generate_collage_plot(sorted_ids, all_metrics, args.output_folder)
     generate_collage_plot2(sorted_ids, all_metrics, args.output_folder)
     generate_dataset_plots(sorted_ids, all_metrics, args)
