@@ -26,23 +26,6 @@ class FaceClassifierArgs:
         self.dropout = 0.0
 
 
-def prep_frame(popped_frame, bbox, class_text, face):
-    """
-    prepares a frame for visualization by adding text, rectangles and arrows.
-    :param popped_frame: the frame for which to add the gizmo's to
-    :param bbox: if this is not None, adds arrow and bounding box
-    :param class_text: the text describing the class
-    :param face: bounding box of face
-    :return:
-    """
-    popped_frame = visualize.put_text(popped_frame, class_text)
-    if bbox is not None:
-        popped_frame = visualize.put_rectangle(popped_frame, face)
-        if not class_text == "away" and not class_text == "off" and not class_text == "on":
-            popped_frame = visualize.put_arrow(popped_frame, class_text, face)
-    return popped_frame
-
-
 def select_face(bboxes, frame, fc_model, fc_data_transforms, hor, ver):
     """
     selects a correct face from candidates bbox in frame
@@ -135,7 +118,7 @@ def predict_from_video(opt):
     opt.window_stride = 2
     loc = -5
     classes = {'noface': -2, 'nobabyface': -1, 'away': 0, 'left': 1, 'right': 2}
-    reverse_classes = {-2: 'away', -1: 'away', 0: 'away', 1: 'left', 2: 'right'}
+    reverse_classes = {-2: 'noface', -1: 'nobabyface', 0: 'away', 1: 'left', 2: 'right'}
     logging.info("using the following values for per-channel mean: {}".format(opt.per_channel_mean))
     logging.info("using the following values for per-channel std: {}".format(opt.per_channel_std))
     face_detector_model_file = Path("models", "face_model.caffemodel")
@@ -187,6 +170,8 @@ def predict_from_video(opt):
                         video_dataset = build_marchman_video_dataset(opt.raw_dataset_path, opt.video_filter)
                     else:
                         raise NotImplementedError
+                    # filter_files = [x for x in video_dataset.values() if
+                    #                 x["in_csv"] and x["has_1coding"] and x["public"]]
                     filter_files = [x for x in video_dataset.values() if
                                     x["in_csv"] and x["has_1coding"] and x["has_2coding"] and x[
                                         "split"] == "2_test"]
@@ -205,6 +190,7 @@ def predict_from_video(opt):
     for i in range(len(video_paths)):
         video_path = Path(str(video_paths[i]))
         answers = []
+        confidences = []
         image_sequence = []
         box_sequence = []
         frames = []
@@ -245,8 +231,11 @@ def predict_from_video(opt):
             frames.append(frame)
             cv2_bboxes = detect_face_opencv_dnn(face_detector_model, frame, 0.7)
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)  # network was trained on RGB images.
+            # if len(cv2_bboxes) > 2:
+            #     temp_hook(frame, cv2_bboxes, frame_count)
             if not cv2_bboxes:
                 answers.append(classes['noface'])  # if face detector fails, treat as away and mark invalid
+                confidences.append(-1)
                 image = np.zeros((1, opt.image_size, opt.image_size, 3), np.float64)
                 my_box = np.array([0, 0, 0, 0, 0])
                 box_sequence.append(my_box)
@@ -256,6 +245,7 @@ def predict_from_video(opt):
                 crop, my_box = extract_crop(frame, selected_bbox, opt)
                 if selected_bbox is None:
                     answers.append(classes['nobabyface'])  # if selecting face fails, treat as away and mark invalid
+                    confidences.append(-1)
                     image = np.zeros((1, opt.image_size, opt.image_size, 3), np.float64)
                     image_sequence.append((image, True))
                     my_box = np.array([0, 0, 0, 0, 0])
@@ -263,6 +253,7 @@ def predict_from_video(opt):
                 else:
                     assert crop.size != 0  # what just happened?
                     answers.append(classes['left'])  # if face detector succeeds, treat as left and mark valid
+                    confidences.append(-1)
                     image_sequence.append((crop, False))
                     box_sequence.append(my_box)
                     hor, ver = my_box[2], my_box[1]
@@ -276,11 +267,15 @@ def predict_from_video(opt):
                                       }
                         with torch.set_grad_enabled(False):
                             outputs = primary_model(to_predict)
+                            probs = torch.nn.functional.softmax(outputs, dim=1)
                             _, prediction = torch.max(outputs, 1)
+                            confidence, _ = torch.max(probs, 1)
+                            float32_conf = confidence.cpu().numpy()[0]
                             int32_pred = prediction.cpu().numpy()[0]
                     else:
                         raise NotImplementedError
                     answers[loc] = int32_pred
+                    confidences[loc] = float32_conf
                 image_sequence.pop(0)
                 box_sequence.pop(0)
                 class_text = reverse_classes[answers[loc]]
@@ -288,17 +283,17 @@ def predict_from_video(opt):
                     class_text = "off" if class_text == "away" else "on"
                 # If show_output or output_video is true, add text label, bounding box for face, and arrow showing direction
                 if opt.show_output:
-                    prepped_frame = prep_frame(popped_frame, my_box, class_text, selected_bbox)
+                    prepped_frame = visualize.prep_frame(popped_frame, my_box, class_text, selected_bbox)
                     cv2.imshow('frame', prepped_frame)
                     if cv2.waitKey(1) & 0xFF == ord('q'):
                         break
                 if opt.output_video_path:
-                    prepped_frame = prep_frame(popped_frame, my_box, class_text, selected_bbox)
+                    prepped_frame = visualize.prep_frame(popped_frame, my_box, class_text, selected_bbox)
                     video_output.write(prepped_frame)
                 # handle writing output to file
                 if opt.output_annotation:
                     if opt.output_format == "raw_output":
-                        output_file.write("{}, {}\n".format(frame_count + loc + 1, class_text))
+                        output_file.write("{}, {}, {}\n".format(frame_count + loc + 1, class_text, confidences[loc]))
                     elif opt.output_format == "PrefLookTimestamp":
                         if class_text != last_class_text:  # Record "event" for change of direction if code has changed
                             frame_ms = int((frame_count + loc + 1) * (1000. / framerate))
@@ -319,7 +314,7 @@ def predict_from_video(opt):
                 output_file.write("{},{},codingactive\n".format(start_ms, end_ms))
                 output_file.close()
             elif opt.output_format == "compressed":
-                np.savez(my_output_file_path, answers)
+                np.savez(my_output_file_path, answers, confidences)
         cap.release()
 
 

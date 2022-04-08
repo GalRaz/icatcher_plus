@@ -58,6 +58,11 @@ def build_marchman_video_dataset(raw_dataset_path, csv_location):
                                         "first_coding_file": None,
                                         "second_coding_file": None,
                                         "child_id": None,
+                                        "child_age": None,
+                                        "child_race": None,
+                                        "child_gender": None,
+                                        "skin_tone": None,
+                                        "preterm": None,
                                         "split": None,
                                         "start_timestamp": None}
     # parse csv file
@@ -71,6 +76,10 @@ def build_marchman_video_dataset(raw_dataset_path, csv_location):
     # fill video dataset with information from csv
     video_id = header.index("videoFileName")
     child_id = header.index("childID")
+    child_age = header.index("age")
+    child_race = header.index("race.ethnic")
+    child_gender = header.index("child.gender")
+    child_preterm = header.index("preterm")
     which_dataset = header.index("which.dataset")  # train, val or test video
     start_timestamp = header.index("timestamp.vidstart")  # timestamp of video start
     codingfile1 = header.index("codingFile1")
@@ -81,6 +90,10 @@ def build_marchman_video_dataset(raw_dataset_path, csv_location):
             entry["in_csv"] = True
             index = csv_videos.index(entry["video_path"].name)
             entry["child_id"] = rows[index][child_id]
+            entry["child_age"] = rows[index][child_age]
+            entry["child_race"] = rows[index][child_race]
+            entry["child_gender"] = rows[index][child_gender]
+            entry["child_preterm"] = rows[index][child_preterm]
             entry["split"] = rows[index][which_dataset]
             entry["start_timestamp"] = rows[index][start_timestamp]
             entry["first_coding_file"] = Path(raw_dataset_path / "Cal_BW Reliability" / rows[index][codingfile1])
@@ -119,6 +132,11 @@ def build_lookit_video_dataset(raw_dataset_path, csv_location):
                                  "first_coding_file": None,
                                  "second_coding_file": None,
                                  "child_id": None,
+                                 "child_age": None,
+                                 "child_race": None,
+                                 "child_gender": None,
+                                 "child_skin_tone": None,
+                                 "child_preterm": None,
                                  "split": None,
                                  "public": False}
     # parse csv file
@@ -131,6 +149,9 @@ def build_lookit_video_dataset(raw_dataset_path, csv_location):
     # fill video dataset with information from csv
     video_id = header.index("videoID")
     child_id = header.index("childID")
+    child_age = header.index("child.ageSessionRounded")
+    child_race = header.index("parent.race.nonwhite")
+    child_gender = header.index("child.gender")
     which_dataset = header.index("which.dataset")  # train, val or test video
     privacy = header.index("video.privacy")
     csv_videos = [row[video_id] for row in rows]
@@ -139,6 +160,9 @@ def build_lookit_video_dataset(raw_dataset_path, csv_location):
             entry["in_csv"] = True
             index = csv_videos.index(entry["video_id"])
             entry["child_id"] = rows[index][child_id]
+            entry["child_age"] = rows[index][child_age]
+            entry["child_race"] = rows[index][child_race]
+            entry["child_gender"] = rows[index][child_gender]
             entry["split"] = rows[index][which_dataset]
             entry["public"] = "public" in rows[index][privacy]
     # fill video dataset with information from folders

@@ -75,6 +75,7 @@ class TrivialParser(BaseParser):
 class CompressedParser(BaseParser):
     """
     parses a npz file saved for visualizations
+    to see how it is created check out test.py
     """
     def __init__(self):
         super().__init__()
@@ -85,6 +86,13 @@ class CompressedParser(BaseParser):
         data[:4] = -3  # mark first frames as invalid
         data[-4:] = -3  # mark last frames as invalid
         return data, 4, len(data)-4
+
+    def get_confidence(self, label_path):
+        data = np.load(label_path)
+        confidence = data["arr_1"]
+        confidence[:4] = -1  # mark first frames as invalid
+        confidence[-4:] = -1  # mark last frames as invalid
+        return confidence
 
 
 class LookitParser(BaseParser):
