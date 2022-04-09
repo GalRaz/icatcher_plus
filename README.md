@@ -6,8 +6,8 @@
         </tr>
         <tr><td colspan=2>Marchman</td></tr>
         <tr>
-                <td><img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/marchman_bar.png" alt="0" width = 400px height = 300px></td>
-                <td><img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/marchman_conf.png" alt="1" width = 300px height = 300px></td>
+                <td><img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/cali-bw_bar.png" alt="0" width = 400px height = 300px></td>
+                <td><img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/cali-bw_conf.png" alt="1" width = 300px height = 300px></td>
         </tr>
         <tr><td colspan=2>Lookit</td></tr>
         <tr>

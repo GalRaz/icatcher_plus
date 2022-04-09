@@ -769,13 +769,16 @@ def generate_collage_plot2(sorted_IDs, all_metrics, save_path):
     # LT plot
     lt_scatter = fig.add_subplot(3, 3, 6)
     lt_scatter.plot([0, 1], [0, 1], transform=lt_scatter.transAxes, color="black", label="Ideal trend")
-    lt_scatter.set_xlim([0, 80])
-    lt_scatter.set_ylim([0, 80])
+
     x_target = []
     y_target = []
     for ID in sorted_IDs:
         x_target += [x["looking_time_1"]/30 for x in all_metrics[ID]["human1_vs_machine_trials"]]
         y_target += [x["looking_time_2"]/30 for x in all_metrics[ID]["human1_vs_machine_trials"]]
+    maxi = np.max(x_target + y_target)
+    lt_scatter.set_xlim([0, maxi])
+    lt_scatter.set_ylim([0, maxi])
+
     lt_scatter.scatter(x_target, y_target, color=label_to_color("lorange"),
                        label='Trial', alpha=0.3)
     lt_scatter.set_xlabel("Human 1")
@@ -955,15 +958,15 @@ def generate_agreement_scatter(sorted_IDs, all_metrics, args, multi_dataset=Fals
     plt.rc('font', size=16)
     fig, ax = plt.subplots()
     ax.plot([0, 1], [0, 1], transform=ax.transAxes, color="black")
+    x_target = [all_metrics[ID]["human1_vs_human2_session"]["agreement"] for ID in sorted_IDs]
+    y_target = [all_metrics[ID]["human1_vs_machine_session"]["agreement"] for ID in sorted_IDs]
     if args.raw_dataset_type == "vcx":
         primary_label = "California-BW Videos"
         secondary_label = "Lookit Videos"
+        np.savez("cali-bw_agreement", x_target, y_target)
     else:
         primary_label = "Lookit Videos"
         secondary_label = "California-BW Videos"
-    x_target = [all_metrics[ID]["human1_vs_human2_session"]["agreement"] for ID in sorted_IDs]
-    y_target = [all_metrics[ID]["human1_vs_machine_session"]["agreement"] for ID in sorted_IDs]
-    # np.savez("temp", x_target, y_target)
     ax.scatter(x_target, y_target,
                color=label_to_color("vlblue"), label=primary_label, alpha=0.5, s=40, marker="o")
     ax.errorbar(np.mean(x_target), np.mean(y_target), xerr=np.std(x_target), yerr=np.std(y_target),
@@ -972,7 +975,7 @@ def generate_agreement_scatter(sorted_IDs, all_metrics, args, multi_dataset=Fals
     miny = min(y_target)
     plot_name = 'dataset_agreement_scatter.pdf'
     if multi_dataset:
-        data = np.load("temp.npz")
+        data = np.load("cali-bw_agreement.npz")
         x_target_2, y_target_2 = data["arr_0"], data["arr_1"]
         minx = min(np.min(x_target), np.min(x_target_2))
         miny = min(np.min(y_target), np.min(y_target_2))
@@ -1032,9 +1035,9 @@ def generate_race_vs_agreement(sorted_IDs, all_metrics, args, video_dataset):
     for i in range(len(labels)):
         data.append(np.mean(y[inverse == i]))
         err.append(np.std(y[inverse == i]))
-    plt.rc('font', size=16)
+    plt.rc('font', size=14)
     fig, ax = plt.subplots(figsize=(6, 8))
-    ax.bar(range(len(labels)), data, yerr=err, color=label_to_color("lblue"), width=0.8)
+    ax.bar(range(len(labels)), data, yerr=err, color=label_to_color("lblue"), capsize=10, width=0.8)
     ax.set_xticks(range(len(labels)))
     ax.set_xticklabels(labels)
     ax.set_ylim([0, 100])
@@ -1064,7 +1067,7 @@ def generate_gender_vs_agreement(sorted_IDs, all_metrics, args, video_dataset):
         err.append(np.std(y[inverse == i]))
     plt.rc('font', size=16)
     fig, ax = plt.subplots(figsize=(6, 8))
-    ax.bar(range(len(labels)), data, yerr=err, color=label_to_color("lblue"), width=0.8)
+    ax.bar(range(len(labels)), data, yerr=err, color=label_to_color("lblue"), capsize=10, width=0.8)
     ax.set_xticks(range(len(labels)))
     ax.set_xticklabels(labels)
     ax.set_ylim([0, 100])
@@ -1076,7 +1079,7 @@ def generate_gender_vs_agreement(sorted_IDs, all_metrics, args, video_dataset):
     plt.close(fig)
 
 
-def generate_confidence_vs_agreement(sorted_IDs, all_metrics, args):
+def generate_confidence_vs_agreement(sorted_IDs, all_metrics, args, multi_dataset=False):
     # agreement = [all_metrics[id]["human1_vs_machine_session"]["agreement"] * 100 for id in sorted_IDs]
     confidence_correct = []
     confidence_incorrect = []
@@ -1089,27 +1092,42 @@ def generate_confidence_vs_agreement(sorted_IDs, all_metrics, args):
     valid_trials_confidence = ~np.isnan(confidence_correct) & ~np.isnan(confidence_incorrect)
     confidence_correct = confidence_correct[valid_trials_confidence]
     confidence_incorrect = confidence_incorrect[valid_trials_confidence]
+    if args.raw_dataset_type == "vcx":
+        primary_label = "California-BW"
+        secondary_label = "Lookit"
+        np.savez("cali-bw_confidence", np.mean(confidence_correct), np.mean(confidence_incorrect),
+                 np.std(confidence_correct), np.std(confidence_incorrect))
+    else:
+        primary_label = "Lookit"
+        secondary_label = "California-BW"
     plt.rc('font', size=16)
     fig, ax = plt.subplots()
-
     x = np.arange(2)
     width = 0.35  # the width of the bars
     rects1 = ax.bar(x - width / 2, [np.mean(confidence_correct), np.mean(confidence_incorrect)],  # x - width
                     yerr=[np.std(confidence_correct), np.std(confidence_incorrect)], width=width,
-                    label='Lookit', align='center', ecolor='black', capsize=10)
-    rects2 = ax.bar(x + width / 2, [np.mean(confidence_correct), np.mean(confidence_incorrect)],  # x - width
-                    yerr=[np.std(confidence_correct), np.std(confidence_incorrect)], width=width,
-                    label='California-BW', align='center', ecolor='black', capsize=10)
+                    label=primary_label, align='center', ecolor='black', capsize=10)
+    if multi_dataset:
+        data = np.load("cali-bw_confidence.npz")
+        x1, x2, x3, x4 = data["arr_0"], data["arr_1"], data["arr_2"], data["arr_3"]
+        rects2 = ax.bar(x + width / 2, [x1, x2],  # x - width
+                        yerr=[x3, x4], width=width,
+                        label=secondary_label, align='center', ecolor='black', capsize=10)
     labels = ['H1-M Agree', 'H1-M Disagree']
     ax.set_xticks(x)
     ax.set_yticks(np.arange(0, 1.2, step=0.2))
     ax.set_xticklabels(labels)  # , rotation=-45
     ax.bar_label(rects1, fmt='%.2f', padding=3, label_type="center")
-    ax.bar_label(rects2, fmt='%.2f', padding=3, label_type="center")
+    if multi_dataset:
+        ax.bar_label(rects2, fmt='%.2f', padding=3, label_type="center")
     ax.legend(loc='lower right')
     ax.set_ylabel("Confidence")
     save_path = args.output_folder
-    plt.savefig(str(Path(save_path, "agreement_vs_confidence.pdf")), bbox_inches='tight')
+    if multi_dataset:
+        name = "agreement_vs_confidence_multi_dataset.pdf"
+    else:
+        name = "agreement_vs_confidence.pdf"
+    plt.savefig(str(Path(save_path, name)), bbox_inches='tight')
     plt.cla()
     plt.clf()
     plt.close(fig)
@@ -1126,18 +1144,20 @@ def generate_dataset_plots(sorted_IDs, all_metrics, args):
     save_path = args.output_folder
     generate_barplot(sorted_IDs, all_metrics, save_path)
     generate_confusion_matrices(sorted_IDs, all_metrics, args)
-    generate_agreement_scatter(sorted_IDs, all_metrics, args, False)
-    # generate_agreement_scatter(sorted_IDs, all_metrics, args, True)
     if args.raw_dataset_type == "lookit":
+        generate_agreement_scatter(sorted_IDs, all_metrics, args, True)
+        generate_confidence_vs_agreement(sorted_IDs, all_metrics, args, True)
         csv_file = Path(args.raw_dataset_folder / "prephys_split0_videos.tsv")
         video_dataset = preprocess.build_lookit_video_dataset(args.raw_dataset_folder, csv_file)
     else:
+        generate_agreement_scatter(sorted_IDs, all_metrics, args, False)
+        generate_confidence_vs_agreement(sorted_IDs, all_metrics, args, False)
         csv_file = Path(args.raw_dataset_folder / "Cal_BW_March_split0_participants.csv")
         video_dataset = preprocess.build_marchman_video_dataset(args.raw_dataset_folder, csv_file)
     generate_age_vs_agreement(sorted_IDs, all_metrics, args, video_dataset)
     generate_race_vs_agreement(sorted_IDs, all_metrics, args, video_dataset)
     generate_gender_vs_agreement(sorted_IDs, all_metrics, args, video_dataset)
-    generate_confidence_vs_agreement(sorted_IDs, all_metrics, args)
+
 
 
 def generate_collage_plot(sorted_IDs, all_metrics, save_path):
@@ -1150,7 +1170,7 @@ def generate_collage_plot(sorted_IDs, all_metrics, save_path):
     """
     classes = {"away": 0, "left": 1, "right": 2}
     # fig, axs = plt.subplots(3, 2, figsize=(10, 12))
-    fig = plt.figure(figsize=(10, 12))
+    fig = plt.figure(figsize=(15, 18))
 
     # accuracies plot
     accuracy_bar = fig.add_subplot(3, 2, (1, 2))  # three rows, two columns
@@ -1197,22 +1217,23 @@ def generate_collage_plot(sorted_IDs, all_metrics, save_path):
     on_away_scatter = fig.add_subplot(3, 2, 4)  # three rows, two columns
     # on_away_scatter = axs[1, 1]
     on_away_scatter.plot([0, 1], [0, 1], transform=on_away_scatter.transAxes, color="black", label="Ideal trend")
-    on_away_scatter.set_xlim([0, 600])
-    on_away_scatter.set_ylim([0, 600])
     x_target_away_hvh = [all_metrics[ID]["human1_vs_human2_session"]['looking_time_1']/30 for ID in sorted_IDs]
     y_target_away_hvh = [all_metrics[ID]["human1_vs_human2_session"]['looking_time_2']/30 for ID in sorted_IDs]
     x_target_away_hvm = [all_metrics[ID]["human1_vs_machine_session"]['looking_time_1']/30 for ID in sorted_IDs]
     y_target_away_hvm = [all_metrics[ID]["human1_vs_machine_session"]['looking_time_2']/30 for ID in sorted_IDs]
+    maxi = np.max(x_target_away_hvh + y_target_away_hvh + x_target_away_hvm + y_target_away_hvm)
+    on_away_scatter.set_xlim([0, maxi])
+    on_away_scatter.set_ylim([0, maxi])
     on_away_scatter.scatter(x_target_away_hvh, y_target_away_hvh, color=label_to_color("lorange"), label='Human vs Human')
-    for i in range(len(sorted_IDs)):
-        on_away_scatter.annotate(i, (x_target_away_hvh[i], y_target_away_hvh[i]))
+    # for i in range(len(sorted_IDs)):
+    #     on_away_scatter.annotate(i, (x_target_away_hvh[i], y_target_away_hvh[i]))
     on_away_scatter.scatter(x_target_away_hvm, y_target_away_hvm, color=label_to_color("mblue"), label='Human vs Machine')
-    for i in range(len(sorted_IDs)):
-        on_away_scatter.annotate(i, (x_target_away_hvm[i], y_target_away_hvm[i]))
+    # for i in range(len(sorted_IDs)):
+    #     on_away_scatter.annotate(i, (x_target_away_hvm[i], y_target_away_hvm[i]))
     on_away_scatter.set_xlabel("Human 1")
     on_away_scatter.set_ylabel("Human 2 or Machine")
     on_away_scatter.set_title("Looking time [s]")
-    on_away_scatter.legend(loc='upper right')
+    on_away_scatter.legend()
 
     # label distribution plot
     # label_scatter = fig.add_subplot(3, 2, 5)  # three rows, two columns
