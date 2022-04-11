@@ -1,7 +1,7 @@
 ---
 title: "01_Generate-Split"
 author: "Junyi Chu"
-date: '2022-01-12'
+date: '2022-04-10'
 output:
   html_document:
     df_print: paged
@@ -42,22 +42,26 @@ knitr::opts_chunk$set(
 )
 # Random seed
 set.seed(12341)
+
+#lookitdir <- "/Volumes/LookitVideo/PrefPhys-coding/"
+lookitdir <- "/Users/junyichu/Dropbox (MIT)/2 NOW/2018 Physics/Data/"
+qidir <- "/Users/junyichu/Dropbox (MIT)/2 NOW/2018 Physics/Videos for QI/"
 ```
 
 This notebook takes as input Session data (dates, age, etc) and Participant demographic data (from Lookit). For now, we use original session uuids, lookit user ids, etc. Eventually we want to use deidentified IDs.
 
 ```{r import, include=F}
 # List of video files available for scientific use
-df.videos<- read_csv("../Video-list-all.csv") %>%
+df.videos<- read_csv(paste0(lookitdir,"Video-list-all.csv")) %>%
   filter(privacy %in% c("scientific", "public"))
 
 # For those children, annotation summary
-df.kids <- read_csv("../Annotation-list-by-child_scientific.csv") %>%
+df.kids <- read_csv(paste0(lookitdir,"Annotation-list-by-child_share.csv")) %>%
   mutate(childID = ifelse(str_detect(childID, '\\.'),
                     str_sub(childID,-5,-1),
                     childID))
 df.kids_demo <- 
-  read_csv('../raw participant data/prefphys_participants_data-identifiable.csv') %>% 
+  read_csv(paste0(lookitdir,'raw participant data/prefphys_participants_data-identifying.csv')) %>% 
   select(-coded_1, -coded_2, -coded_0, -childid.video, -age_at_birth,
          -parent.age, -parent.child_birthdays,
          -parent.gender, -parent.date_created,
@@ -83,7 +87,7 @@ df.kids_demo <-
                                   parent.race.hispanic|parent.race.mideastnaf|
                                     parent.race.hpi|parent.race.native|parent.race.other))
 # Session metadata (age, age rounded, gender, session date, video duration, mood)
-df.sessions<- read_csv('../raw participant data/prefphys_sessions_metadata-identifiable.csv') %>%
+df.sessions<- read_csv(paste0(lookitdir,'raw participant data/prefphys_sessions_metadata-identifiable.csv')) %>%
   select(-n_coders, -childid.video, -uuid.video,
          -created_on, -completedStudy) %>% # remove unnecessary identifiers
   mutate(mood.lastEat = as.numeric(mood.lastEat)/60) %>% # convert hms to minutes
@@ -97,7 +101,7 @@ df.sessions<- read_csv('../raw participant data/prefphys_sessions_metadata-ident
 Clean and add pilot demographic data
 
 ```{r}
-df.pilotkids <- read_tsv("../raw participant data/pilot_participants_data-identifying.tsv") %>%
+df.pilotkids <- read_tsv(paste0(lookitdir,"raw participant data/pilot_participants_data-identifying.tsv")) %>%
   rename(uuid=shortId, 
          child=child.profileId, 
          race_identification = household_race_identification,
@@ -143,7 +147,7 @@ Clean and add pilot session data
 ```{r}
 # Add PILOT to session metadata & child demographic data
 # 
-df.sessions.pilot <- read_csv("../raw participant data/pilot_trials_data.csv") %>%
+df.sessions.pilot <- read_csv(paste0(lookitdir,"raw participant data/pilot_trials_data.csv")) %>%
   select(uuid=shortId, 
          child=child.profileId, 
          child.gender,
@@ -199,36 +203,31 @@ There are 12 videos from pilot study that we lack demographic informaion and ses
 ```{r include=FALSE}
 # define "without" function, give me x without y
 "%w/o%" <- function(x, y) x[!x %in% y]
-# 
-# # 3 sessions in session list but no videos
-# length(df.sessions$uuid %w/o% df.videos$videoID)
-# # inspect, that's fine, all are indeed missing videos.
-# df.sessions %>% 
-#   filter(uuid %in% (uuid%w/o% df.videos$videoID)) %>%
-#   view()
 
-# Have session, but no video. These are OK
+# 3 have lookit session, but no video. These are OK
 df.sessions %>% filter(uuid %in% (uuid %w/o% df.videos$videoID))
 
 # 10 videos not in the pilot study list of included sessions, that's OK
 df.videos %>% filter(videoID %in% (videoID %w/o% df.sessions$uuid))
 
-# 12 videos from pilot study lack demographic data, that's OK
+# 0 videos from pilot study lack demographic data, that's OK
 df.videos %>% filter(childID %in% (childID %w/o% df.demo$child))
 ```
 
 # Participant dataframe
 
-So generate the list of children we care about for icatcher purposes, which is we have demographic data, and video
+So generate the list of children we care about for icatcher purposes, which is we have (1) session data, (2) demographic data, and (3) video files
 
 ```{r include=FALSE}
-child_list <- intersect(df.demo$child, df.videos$childID)
+child_list <- intersect(
+  intersect(df.sessions$child, df.demo$child), 
+  df.videos$childID)
 
-df.videos.use <- df.videos %>% filter(childID %in% child_list)
-df.demo.use <- df.demo %>% filter(child %in% child_list)
-df.sessions.use <- df.sessions %>% filter(child %in% child_list,
+df.videos.share <- df.videos %>% filter(childID %in% child_list)
+df.demo.share <- df.demo %>% filter(child %in% child_list)
+df.sessions.share <- df.sessions %>% filter(child %in% child_list,
                                       uuid %in% df.videos$videoID)
-df.kids.use <- df.kids %>% filter(childID %in% child_list)
+df.kids.share <- df.kids %>% filter(childID %in% child_list)
 
 ```
 
@@ -237,13 +236,13 @@ df.kids.use <- df.kids %>% filter(childID %in% child_list)
 Only includes scientific / private sessions. These all match, nice.
 
 ```{r}
-# video, there are 10 from pilot study that arenw
-df.videos.use %>% count(childID, studyID) %>% count(studyID)
+# video
+df.videos.share %>% count(childID, studyID) %>% count(studyID)
 # shareable sessions
-df.sessions.use %>% count(child, studyid) %>% count(studyid)
+df.sessions.share %>% count(child, studyid) %>% count(studyid)
 # kids
-df.kids.use %>% count(studyID)
-df.demo.use %>% count(studyid)
+df.kids.share %>% count(studyID)
+df.demo.share %>% count(studyid)
 ```
 
 ## Participant Table
@@ -258,16 +257,16 @@ We want the variables:
 - country
 
 ```{r}
-participants <- df.demo.use %>%
+participants <- df.demo.share %>%
   select(studyid, child, child.gender, parent.race.white, parent.race.nonwhite) %>%
   mutate(child.gender = str_sub(child.gender, 1, 1),
          parent.race.nonwhite = factor(parent.race.nonwhite, 
                                           levels=c(FALSE, TRUE),
                                           labels=c("white only", "reported non-white"))) %>%
-  left_join(df.kids.use, by=c(studyid='studyID', child='childID'))
+  left_join(df.kids.share, by=c(studyid='studyID', child='childID'))
 
-videos <- df.videos.use %>% 
-  left_join(df.sessions.use,
+videos <- df.videos.share %>% 
+  left_join(df.sessions.share,
             by=c(studyID="studyid", childID="child", videoID="uuid",
                  privacy="privacy.exit")) %>%
   left_join(select(participants, studyid:parent.race.nonwhite),
@@ -290,7 +289,9 @@ sum(participants$n_coded) == sum(!is.na(videos$coder1))
 sum(participants$n_codedtwice) == sum(!is.na(videos$coder2))
 ```
 
-We have `r nrow(participants)` children contributing `r nrow(videos)` scientific/public level videos. Among these we have already coded `r sum(participants$n_coded)` once. Among those coded videos, `r sum(participants$n_codedtwice)` are coded by two humans.
+In total, we have `r nrow(participants)` children contributing `r nrow(videos)` scientific/public level videos. 
+
+Of these, `r sum(participants$n_coded)` videos have been coded. Of these, `r sum(participants$n_codedtwice)` are coded by two humans. The coded videos come from `r sum(participants$n_coded>0)` participants.
 
 ```{r}
 videos %>% # plot
@@ -359,8 +360,6 @@ videos %>% filter(child.ageSessionRounded<15) %>%
 
 ## Gender
 
-We have an even mix of gender (male/female), but we could code more females.
-
 ```{r}
 ggplot(participants, aes(x=child.gender, fill=n_coded>0)) +
   geom_bar(aes(x=child.gender, fill=n_coded>0),
@@ -378,6 +377,10 @@ ggplot(participants, aes(x=child.gender, fill=n_coded>0)) +
 Participant count by race/ethnicity (white/nonwhite). This was a multi-select checkbox, and we actually have quite a few children who selected multiple options.
 
 ```{r eval=FALSE, include=FALSE}
+# Table
+addmargins(with(participants, table(parent.race.white, parent.race.nonwhite)))
+
+#plot
 df.demo.use %>% mutate(n_races =
                      parent.race.white+parent.race.asian+parent.race.black+parent.race.hispanic+
                      parent.race.mideastnaf+parent.race.hpi+parent.race.native+parent.race.other) %>%
@@ -389,17 +392,17 @@ df.demo.use %>% mutate(n_races =
   theme_bw() + 
     theme(legend.position = c(.7, .95),
     legend.justification = c("left", "top"))
+
 ```
 
-```{r}
-addmargins(with(participants, table(parent.race.white, parent.race.nonwhite)))
-```
 
-Participants by race and coding status. There are 12 non-white participants we can code.
+Participants by race and coding status.
 
 ```{r}
+#Table
 addmargins(with(participants, 
                 table(parent.race.nonwhite,n_coded>0)), 2)
+#Plot
 ggplot(participants, aes(x=parent.race.nonwhite, fill=n_coded>0)) +
   geom_bar()
 ```
@@ -454,7 +457,7 @@ ggplot(data = participants_ML) +
 participants_ML %>% 
   count(parent.race.nonwhite) %>%
   mutate(prop = n/sum(n),
-         target_n = n*.7)
+         target_n = n*.8)
 ```
 
 ### Age
@@ -483,21 +486,21 @@ participants_ML %>%
 We follow procedure in [https://towardsdatascience.com/stratified-sampling-and-how-to-perform-it-in-r-8b753efde1ef](https://towardsdatascience.com/stratified-sampling-and-how-to-perform-it-in-r-8b753efde1ef)
 
 ```{r}
-n_training_kids = round(.7*nrow(participants_ML))
+n_training_kids = round(.8*nrow(participants_ML))
 n_test_kids = nrow(participants_ML) - n_training_kids
-n_validation_kids = round(.2*n_training_kids)
+n_validation_kids = round(.1*n_training_kids)
 ```
 
-We're targeting 30% for test (n= `r n_test_kids` kids) and 70% for training (n= `r n_training_kids`). Training set will be further divided into 20% for validation (`r n_validation_kids`). 
+We're targeting 20% for test (n= `r n_test_kids` kids) and 80% for training (n= `r n_training_kids`). Training set will be further divided into 10% for validation (`r n_validation_kids`). 
 
-### First split into 70/30 train/test
+### First split into 80/20 train/test
 
 ```{r include=FALSE}
 # Set seed
 set.seed(2222)
 # Make simplified dataset to sample from
 d = participants_ML
-n_sample = n_training_kids
+n_sample = n_test_kids
 generated = head(d,0)
 dimensions = c("child.age.bin", "parent.race.nonwhite", "child.gender")
 library(sqldf)
@@ -590,7 +593,7 @@ while (nrow(generated) < n_sample) {
 participants_ML <- participants_ML %>% 
   mutate(which.dataset = ifelse(
     childID %in% na.omit(generated$childID),
-    "1_train","2_test"))
+    "2_test","1_train"))
 rm(tmp)
 ```
 
@@ -602,31 +605,42 @@ split0 <- participants_ML
 table(split0$which.dataset)
 
 ## VIEW
-select(split0, childID,
-                           child.gender,
-                           child.age.bin,
-                           parent.race.nonwhite,
-                           which.dataset) %>%
-  arrange(child.age.bin, child.gender, parent.race.nonwhite, which.dataset) %>%
-  view()
+# select(split0, childID,
+#                            child.gender,
+#                            child.age.bin,
+#                            parent.race.nonwhite,
+#                            which.dataset) %>%
+#   arrange(child.age.bin, child.gender, parent.race.nonwhite, which.dataset) %>%
+#   view()
 
 ## MANUAL ADJUSTMENT
 split0$which.dataset[split0$childID %in% 
-                           c("diSip", #4-6mo F w
-                             "JTU1W", #4-6mo F w
-                             "KMKdO", #4-6mo F nw
-                             "1739034f-8632-4216-94a9-4cd336f77f16", #10-14mo M w
-                             "3ae67b03-bb6b-4c98-a6e3-55581f4b322b" #7mo
+                           c("WIH7v", #4-6mo F nw
+                             "09c87d6e-36c0-455d-812d-4576b1b0eefd", #7m M W
+                             "196cf907-a938-441a-8734-92e5ae5e1890", #7m M W
+                             "lVaOv"#10m M W)
                              )] <- "1_train"
 
 split0$which.dataset[split0$childID %in% 
-                           c("c409b6f6-6cce-46e2-b1ac-47299ba53a83", #7mo F w
-                             "dc0fe583-5648-42b6-8127-679f2e8e6d4f", #7mo M w
-                             "4e3e2517-4788-45ae-94cb-1a0dbd22d4d7", # 10-14mo M nw
-                             "4b65cc5b-9246-4411-b6af-c1e0de714597", # 10-14mo F nw
-                             "95bd8dcc-f844-40ca-b342-6f20d92ccb68" # 10mo F W
+                           c("9b160510-da03-4228-b086-aba9552eb782", #4m M w
+                             "0e44a3f3-c00f-4d0c-977b-a465175cddb9", #4m M nw
+                             "MTBMm", #7m F W
+                             "0a787312-132e-4358-9419-867703174245", #7m M NW
+                             "H1Ree", #7m F W
+                             "8f84d5ba-a074-451f-aca5-87ffa8298a47" #7m F NW
                              )] <- "2_test"
 
+# Plot
+ggplot(split0) +
+    geom_mosaic(aes(x=product(child.age.bin, child.gender),
+                    fill=child.gender,
+                    alpha=which.dataset))+
+    facet_wrap(.~parent.race.nonwhite, drop = T)+
+    scale_alpha_manual(values =c(.9,.6)) +
+    theme_mosaic()+
+    theme(axis.text.x = element_text(angle = 90))
+
+# Assign
 participants_ML<- split0
 testkids <- participants_ML %>% 
   filter(which.dataset=="2_test")
@@ -636,9 +650,6 @@ trainkids <- participants_ML %>%
 ```
 
 ### Split train into train/validate
-
-80/20
-
 
 ```{r sample, include=FALSE}
 # Set seed
@@ -744,39 +755,75 @@ split1 <- trainkids %>%
 table(split1$which.dataset)
 
 ## VIEW
-select(split1, childID,
-                           child.gender,
-                           child.age.bin,
-                           parent.race.nonwhite,
-                           which.dataset) %>%
-  arrange(child.age.bin, child.gender, parent.race.nonwhite, which.dataset) %>%
-  view()
+# select(split1, childID,
+#                            child.gender,
+#                            child.age.bin,
+#                            parent.race.nonwhite,
+#                            which.dataset) %>%
+#   arrange(child.age.bin, child.gender, parent.race.nonwhite, which.dataset) %>%
+#   view()
 
 ## MANUAL ADJUSTMENT
 split1$which.dataset[split1$childID %in% 
-                       c("3ae67b03-bb6b-4c98-a6e3-55581f4b322b" # 7m F NW
-                         ,"15e60e99-5828-49cf-8367-92281c8cd18c" #7m M W
-                         ,"acr9J" #7m M W
+                       c("09c87d6e-36c0-455d-812d-4576b1b0eefd" #7 M W
+                         ,"196cf907-a938-441a-8734-92e5ae5e1890" #7m M W
                          )
                            ] <- "1_train"
 
 split1$which.dataset[split1$childID %in% 
                            c(
-                             "X1Fij" #7m F W
-                             ,"WIH7v" #4m F NW
-                             ,"2089b2e8-c0ec-4e5a-ab2e-74a01b977bd1" #10m M NW
-                             ,"Wve6h" #10m M W
+                             "WIH7v" #4m F NW
+                             ,"4e3e2517-4788-45ae-94cb-1a0dbd22d4d7"
+                             ,"3ae67b03-bb6b-4c98-a6e3-55581f4b322b" #7 F NW
+                             ,"4e3e2517-4788-45ae-94cb-1a0dbd22d4d7" #10 M NW
+                             ,"c409b6f6-6cce-46e2-b1ac-47299ba53a83" #7 F NW
                            )] <- "1_validate"
 
 table(split1$which.dataset)
+
+# Plot
+with(split1, table(which.dataset, child.age.bin, parent.race.nonwhite, child.gender))
 
 # Update participants table
 validatekids <- split1  %>% 
   filter(which.dataset=="1_validate")
 
 participants_ML[participants_ML$childID %in% validatekids$childID, 'which.dataset'] <- "1_validate"
-
 ```
+
+## Manual adjustment
+
+2022-04-10: Maximize the number of doubly-coded children in test 
+
+```{r}
+participants_ML$which.dataset[participants_ML$childID %in% 
+                       c("4255d6cf-4135-4e44-bece-1ac29297661b",	#10,m,w
+                         "Wve6h", #10,m,w
+                         "7ecbcfe7-2ac3-4a47-8b7d-8c79da576a28",#4,f,w
+                         "763768d1-6f04-4ebe-a722-5d1167708ac7",#7,f,nw
+                         "MTBMm" #7m,f,w
+                         )
+                           ] <- "1_train"
+
+participants_ML$which.dataset[participants_ML$childID %in% 
+                           c("H1Ree",#	10m,f,w
+                             "PMdsp",#	10m,m,nw
+                             "1bda1d34-93e1-4609-b0a2-c26c5c01f167"#	7m,f,w
+                           )] <- "1_validate"
+
+participants_ML$which.dataset[participants_ML$childID %in% 
+                       c("43fe8a51-0325-4362-9c5f-b343fb1f6cda", #10 F NW
+                         "4e3e2517-4788-45ae-94cb-1a0dbd22d4d7", #10 F NW
+                         "193222a9-1e75-4729-812c-01f757858b76", #10 M W
+                         "1cb796b7-debc-49b9-bba1-d107a33ea4a3", #10 M W
+                         "340f7b69-4125-42dc-b632-49a57f379c8a", #4 F W
+                         "501b9e5b-b070-4cbb-9dc2-395cfad9b421", #7 F NW
+                         "c409b6f6-6cce-46e2-b1ac-47299ba53a83", #7 F W
+                         "acb7722c-7eb3-4936-abca-23d0860532b9" #7 F W
+                         )
+                           ] <- "2_test"
+```
+
 
 # Report splits
 
@@ -879,16 +926,137 @@ ggplot(participants_ML) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1))
 ```
 
+# Move Files
+
+```{r}
+df.annotations<- read_tsv(paste0(lookitdir, "annotations.tsv")) %>%
+  select(videoID, codingFile1:codingFile3)
+videos <- left_join(videos, df.annotations, by="videoID")
+
+```
+
+<!-- Read in list of annotation files -->
+
+<!-- ```{r} -->
+<!-- df.annotations<- read_csv(paste0(lookitdir, "Annotation-list-all.csv")) %>% -->
+<!--   filter(videoID %in% df.videos$videoID) -->
+<!-- # check counts -->
+<!-- nrow(df.annotations %>% distinct(videoID)) -->
+<!-- ``` -->
+
+<!-- Add annotation file names to video list -->
+
+<!-- ```{r} -->
+<!-- videos <- left_join(videos, df.annotations, -->
+<!--                        by=c(studyID="studyID", childID="childID", videoID='videoID', coder1='coderID')) %>% -->
+<!--   rename(codingFile1=annotationFileName) -->
+<!-- #add coder 2 -->
+<!-- videos <- left_join(videos, df.annotations,  -->
+<!--                        by=c(studyID="studyID", childID="childID", videoID='videoID', coder2='coderID')) %>% -->
+<!--   rename(codingFile2=annotationFileName) -->
+
+<!-- # now add coder 3 -->
+<!-- videos<- left_join(videos, df.annotations,  -->
+<!--                        by=c(studyID="studyID", childID="childID", videoID='videoID', coder3='coderID')) %>% -->
+<!--   rename(codingFile3=annotationFileName) -->
+
+<!-- ``` -->
+
+## Export file list
+
+```{r}
+filelist<-df.videos %>% filter(privacy != "private") %>%
+  filter(!is.na(coder1)) 
+
+filelist %>%
+  write_csv(paste0(qidir, "filelist.csv"))
+```
+
+## Copy Videos
+
+<!-- ```{r include=FALSE} -->
+<!-- file.copy(from=paste0(lookitdir,"video/", filelist$videoFileName), -->
+<!--           to= qidir, -->
+<!--           copy.date=T, overwrite = F) # don't overwrite -->
+
+<!-- # move all the coded ones to separate folder -->
+<!-- #file_move(paste0(qidir, df.videos$videoFileName[!is.na(df.videos$coder1)]), -->
+<!-- #          paste0(qidir, "annotated/")) -->
+<!-- ``` -->
+
+<!-- Check videos are indeed in the folder -->
+
+<!-- ```{r echo=TRUE} -->
+<!-- summary(file.exists(paste0(qidir, 'videos/', filelist$videoFileName))) -->
+
+<!-- # get missing files -->
+<!-- # (missing<- setdiff(list.files(paste0(qidir, 'videos/')), -->
+<!-- #                  filelist$videoFileName)) -->
+<!-- ``` -->
+
+
+<!-- ## Copy Annotations -->
+
+<!-- ```{r include=FALSE} -->
+<!-- # coder 1 -->
+<!-- file.copy(from=paste0(lookitdir, "annotations originalname/", -->
+<!--                       na.omit(videos$codingFile1)), -->
+<!--           to= paste0(qidir, "annotations/coder1/", na.omit(videos$codingFile1)), -->
+<!--           copy.date=T, overwrite = F) # don't overwrite -->
+
+<!-- # coder 2 -->
+<!-- file.copy(from=paste0(lookitdir, "annotations/", -->
+<!--                       na.omit(videos$codingFile2)), -->
+<!--           to= paste0(qidir, "annotations/coder2/", -->
+<!--                      na.omit(videos$codingFile2)), -->
+<!--           copy.date=T, overwrite = F) # don't overwrite -->
+
+<!-- # coder 3 -->
+<!-- file.copy(from=paste0(lookitdir, "annotations/", -->
+<!--                       na.omit(videos$codingFile3)), -->
+<!--           to= paste0(qidir, "annotations/coder3/", -->
+<!--                      na.omit(videos$codingFile3)), -->
+<!--           copy.date=T, overwrite = F) # don't overwrite -->
+<!-- ``` -->
+
+<!-- Check -->
+
+<!-- ```{r} -->
+<!-- #check -->
+<!-- summary(file.exists(paste0(qidir, "annotations/coder1/", -->
+<!--                        na.omit(videos$codingFile1)))) -->
+
+<!-- #check -->
+<!-- summary(file.exists(paste0(qidir, "annotations/coder2/", -->
+<!--                        na.omit(videos$codingFile2)))) -->
+
+<!-- #check -->
+<!-- summary(file.exists(paste0(qidir, "annotations/coder3/", -->
+<!--                        na.omit(videos$codingFile3)))) -->
+
+<!-- ``` -->
+
 
 # Export split as tsv
 
 ```{r}
-participants_ML %>% rename(studyID = studyid) %>%
-  write_csv("../ForQI/prefphys_split0_participants.tsv")
+#rename(participants_ML, studyID = studyid)
 
-videos %>% left_join(select(participants_ML, studyid, childID, which.dataset),
+write_tsv(participants_ML, paste0(lookitdir,"VideosForQI/prefphys_split0_participants.tsv"))
+write_tsv(participants_ML, paste0(qidir, "prephys_split0_participants.tsv"))
+
+#
+thelist<- videos %>% 
+  left_join(select(participants_ML, studyid, childID, which.dataset),
                      by=c(studyID="studyid",childID="childID")) %>%
-  filter(!is.na(which.dataset)) %>% 
-  write_csv("../ForQI/prefphys_split0_videos.tsv")
+  filter(!is.na(which.dataset),
+         !is.na(codingFile1)) %>% 
+  select(studyID, childID, videoID, n_coders, videoFileName, 
+         codingFile1:codingFile3,
+         child.ageSessionRounded, child.gender, parent.race.nonwhite,
+         video.privacy, consentnotes:video.actualDuration, which.dataset) 
+
+write_tsv(thelist, paste0(lookitdir, "VideosForQI/prephys_split0_videos.tsv"))
+write_tsv(thelist, paste0(qidir, "prephys_split0_videos.tsv"))
 ```
 
