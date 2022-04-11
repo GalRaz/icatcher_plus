@@ -706,7 +706,7 @@ def generate_collage_plot2(sorted_IDs, all_metrics, save_path):
     conf_mat_h2h = fig.add_subplot(3, 3, 1)  # three rows, three columns
     total_confusion_h2h = np.sum([all_metrics[ID]["human1_vs_human2_session"]["confusion_matrix"] for ID in sorted_IDs],
                                  axis=0)
-    total_confusion_h2h /= np.sum(total_confusion_h2h, -1, keepdims=True)
+    total_confusion_h2h /= np.sum(total_confusion_h2h, 0, keepdims=True)  # normalize column-wise
     sns.heatmap(total_confusion_h2h, ax=conf_mat_h2h, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues')
     conf_mat_h2h.set_xticklabels(['away', 'left', 'right'])
     conf_mat_h2h.set_yticklabels(['away', 'left', 'right'])
@@ -718,25 +718,25 @@ def generate_collage_plot2(sorted_IDs, all_metrics, save_path):
     conf_mat_h2h = fig.add_subplot(3, 3, 2)
     total_confusion_h2h = np.sum([all_metrics[ID]["human1_vs_machine_session"]["confusion_matrix"] for ID in sorted_IDs],
                                  axis=0)
-    total_confusion_h2h /= np.sum(total_confusion_h2h, -1, keepdims=True)
+    total_confusion_h2h /= np.sum(total_confusion_h2h, 0, keepdims=True)  # normalize column-wise
     sns.heatmap(total_confusion_h2h, ax=conf_mat_h2h, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues')
     conf_mat_h2h.set_xticklabels(['away', 'left', 'right'])
     conf_mat_h2h.set_yticklabels(['away', 'left', 'right'])
     conf_mat_h2h.set_xlabel('Human 1')
-    conf_mat_h2h.set_ylabel('Machine')
-    conf_mat_h2h.set_title('Human 1 vs Machine')
+    conf_mat_h2h.set_ylabel('Model')
+    conf_mat_h2h.set_title('Human 1 vs Model')
 
     # confusion matrix 3
     conf_mat_h2h = fig.add_subplot(3, 3, 3)
     total_confusion_h2h = np.sum([all_metrics[ID]["human1_vs_smachine_session"]["confusion_matrix"] for ID in sorted_IDs],
                                  axis=0)
-    total_confusion_h2h /= np.sum(total_confusion_h2h, -1, keepdims=True)
+    total_confusion_h2h /= np.sum(total_confusion_h2h, 0, keepdims=True)  # normalize column-wise
     sns.heatmap(total_confusion_h2h, ax=conf_mat_h2h, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues')
     conf_mat_h2h.set_xticklabels(['away', 'left', 'right'])
     conf_mat_h2h.set_yticklabels(['away', 'left', 'right'])
     conf_mat_h2h.set_xlabel('Human 1')
-    conf_mat_h2h.set_ylabel('Machine')
-    conf_mat_h2h.set_title(r'Human 1 vs Machine w "invlid$\leftarrow$away"')
+    conf_mat_h2h.set_ylabel('Model')
+    conf_mat_h2h.set_title("Human 1 vs Model, invalid frames = away")
 
     # LR ICC plot
     lr_icc_scatter = fig.add_subplot(3, 3, 4)
@@ -748,7 +748,7 @@ def generate_collage_plot2(sorted_IDs, all_metrics, save_path):
     lr_icc_scatter.scatter(x_target, y_target, color=label_to_color("lblue"),
                        label='Session')
     lr_icc_scatter.set_xlabel("Human 1 vs Human 2")
-    lr_icc_scatter.set_ylabel("Human 1 vs Machine")
+    lr_icc_scatter.set_ylabel("Human 1 vs Model")
     lr_icc_scatter.set_title("Looking Time ICC")
     lr_icc_scatter.legend(loc='upper left')
 
@@ -762,7 +762,7 @@ def generate_collage_plot2(sorted_IDs, all_metrics, save_path):
     pr_icc_scatter.scatter(x_target, y_target, color=label_to_color("lblue"),
                         label='Session')
     pr_icc_scatter.set_xlabel("Human 1 vs Human 2")
-    pr_icc_scatter.set_ylabel("Human 1 vs Machine")
+    pr_icc_scatter.set_ylabel("Human 1 vs Model")
     pr_icc_scatter.set_title("Percent Right ICC")
     pr_icc_scatter.legend(loc='upper left')
 
@@ -782,7 +782,7 @@ def generate_collage_plot2(sorted_IDs, all_metrics, save_path):
     lt_scatter.scatter(x_target, y_target, color=label_to_color("lorange"),
                        label='Trial', alpha=0.3)
     lt_scatter.set_xlabel("Human 1")
-    lt_scatter.set_ylabel("Machine")
+    lt_scatter.set_ylabel("Model")
     lt_scatter.set_title("Looking time [s]")
     lt_scatter.legend(loc='upper left')
 
@@ -799,7 +799,7 @@ def generate_collage_plot2(sorted_IDs, all_metrics, save_path):
     pr_scatter.scatter(x_target, y_target, color=label_to_color("lorange"),
                        label='Trial', alpha=0.3)
     pr_scatter.set_xlabel("Human 1")
-    pr_scatter.set_ylabel("Machine")
+    pr_scatter.set_ylabel("Model")
     pr_scatter.set_title("Percent Right")
     pr_scatter.legend(loc='lower center')
 
@@ -816,7 +816,7 @@ def generate_collage_plot2(sorted_IDs, all_metrics, save_path):
     pa_scatter.scatter(x_target, y_target, color=label_to_color("lorange"),
                        label='Trial', alpha=0.3)
     pa_scatter.set_xlabel("Human 1 vs Human 2")
-    pa_scatter.set_ylabel("Human 1 vs Machine")
+    pa_scatter.set_ylabel("Human 1 vs Model")
     pa_scatter.set_title("Percent Agreement")
     pa_scatter.legend(loc='upper left')
 
@@ -865,7 +865,7 @@ def generate_barplot(sorted_IDs, all_metrics, save_path):
                     label='Human-Human', align='center', ecolor='black', capsize=10)
     rects2 = ax.bar(x + (width / 2), [mean_agreement_hvm, mean_kappa_hvm, mean_icc_lt_hvm, mean_icc_pr_hvm],
                     yerr=[std_agreement_hvm, std_kappa_hvm, std_icc_lt_hvm, std_icc_pr_hvm], width=width,
-                    label='Human-Machine', align='center', ecolor='black', capsize=10)
+                    label='Human-Model', align='center', ecolor='black', capsize=10)
     labels = ['% Agree', 'Cohen\'s Kappa', 'ICC (LT)', 'ICC (PR)']
     ax.set_xticks(x)
     ax.set_yticks(np.arange(0, 1.2, step=0.2))
@@ -892,7 +892,7 @@ def generate_confusion_matrices(sorted_IDs, all_metrics, args):
     conf_mat_h2h = fig.add_subplot(2, 2, 1)
     total_confusion_h2h = np.sum([all_metrics[ID]["human1_vs_human2_session"]["confusion_matrix"] for ID in sorted_IDs],
                                  axis=0)
-    total_confusion_h2h /= np.sum(total_confusion_h2h, -1, keepdims=True)
+    total_confusion_h2h /= np.sum(total_confusion_h2h, 0, keepdims=True)  # normalize column-wise
     sns.heatmap(total_confusion_h2h, ax=conf_mat_h2h, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues',
                 annot_kws={"size": 16})
     conf_mat_h2h.set_xticklabels(['away', 'left', 'right'])
@@ -904,7 +904,7 @@ def generate_confusion_matrices(sorted_IDs, all_metrics, args):
     conf_mat2_h2h = fig.add_subplot(2, 2, 2)
     total_confusion2_h2h = np.sum([all_metrics[ID]["human1_vs_human2_session"]["confusion_matrix2"] for ID in sorted_IDs],
                                   axis=0)
-    total_confusion2_h2h /= np.sum(total_confusion2_h2h, -1, keepdims=True)
+    total_confusion2_h2h /= np.sum(total_confusion2_h2h, 0, keepdims=True)  # normalize column-wise
     sns.heatmap(total_confusion2_h2h, ax=conf_mat2_h2h, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues',
                 annot_kws={"size": 16})
     if args.raw_dataset_type == "vcx":
@@ -920,7 +920,7 @@ def generate_confusion_matrices(sorted_IDs, all_metrics, args):
     conf_mat_h2m = fig.add_subplot(2, 2, 3)
     total_confusion_h2m = np.sum([all_metrics[ID]["human1_vs_machine_session"]["confusion_matrix"] for ID in sorted_IDs],
                                  axis=0)
-    total_confusion_h2m /= np.sum(total_confusion_h2m, -1, keepdims=True)
+    total_confusion_h2m /= np.sum(total_confusion_h2m, 0, keepdims=True)  # normalize column-wise
     sns.heatmap(total_confusion_h2m, ax=conf_mat_h2m, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues',
                 annot_kws={"size": 16})
     conf_mat_h2m.set_xticklabels(['away', 'left', 'right'])
@@ -932,7 +932,7 @@ def generate_confusion_matrices(sorted_IDs, all_metrics, args):
     conf_mat2_h2m = fig.add_subplot(2, 2, 4)
     total_confusion2_h2m = np.sum([all_metrics[ID]["human1_vs_machine_session"]["confusion_matrix2"] for ID in sorted_IDs],
                                  axis=0)
-    total_confusion2_h2m /= np.sum(total_confusion2_h2m, -1, keepdims=True)
+    total_confusion2_h2m /= np.sum(total_confusion2_h2m, 0, keepdims=True)  # normalize column-wise
     sns.heatmap(total_confusion2_h2m, ax=conf_mat2_h2m, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues',
                 annot_kws={"size": 16})
     if args.raw_dataset_type == "vcx":
@@ -1183,7 +1183,7 @@ def generate_collage_plot(sorted_IDs, all_metrics, save_path):
     width = 0.35  # the width of the bars
     x = np.arange(len(labels))
     accuracy_bar.bar(x - width / 2, accuracies_hvh, width, color=label_to_color("lorange"), label='Human vs Human')
-    accuracy_bar.bar(x + width / 2, accuracies_hvm, width, color=label_to_color("mblue"), label='Human vs Machine')
+    accuracy_bar.bar(x + width / 2, accuracies_hvm, width, color=label_to_color("mblue"), label='Human vs Model')
     accuracy_bar.set_ylabel('Percent Agreement')
     accuracy_bar.set_xlabel('Video')
     accuracy_bar.set_title('Percent agreement per video')
@@ -1206,7 +1206,7 @@ def generate_collage_plot(sorted_IDs, all_metrics, save_path):
 
     transitions_bar.bar(x - width / 3, transitions_h1, width=(width / 3) - 0.1, label="Human 1", color=label_to_color("lorange"))
     transitions_bar.bar(x, transitions_h2, width=(width / 3) - 0.1, label="Human 2", color=label_to_color("lgreen"))
-    transitions_bar.bar(x + width / 3, transitions_m, width=(width / 3) - 0.1, label="Machine", color=label_to_color("mblue"))
+    transitions_bar.bar(x + width / 3, transitions_m, width=(width / 3) - 0.1, label="Model", color=label_to_color("mblue"))
     transitions_bar.set_xticks(x)
     transitions_bar.set_title('# Transitions per 100 frames')
     transitions_bar.legend()
@@ -1227,11 +1227,11 @@ def generate_collage_plot(sorted_IDs, all_metrics, save_path):
     on_away_scatter.scatter(x_target_away_hvh, y_target_away_hvh, color=label_to_color("lorange"), label='Human vs Human')
     # for i in range(len(sorted_IDs)):
     #     on_away_scatter.annotate(i, (x_target_away_hvh[i], y_target_away_hvh[i]))
-    on_away_scatter.scatter(x_target_away_hvm, y_target_away_hvm, color=label_to_color("mblue"), label='Human vs Machine')
+    on_away_scatter.scatter(x_target_away_hvm, y_target_away_hvm, color=label_to_color("mblue"), label='Human vs Model')
     # for i in range(len(sorted_IDs)):
     #     on_away_scatter.annotate(i, (x_target_away_hvm[i], y_target_away_hvm[i]))
     on_away_scatter.set_xlabel("Human 1")
-    on_away_scatter.set_ylabel("Human 2 or Machine")
+    on_away_scatter.set_ylabel("Human 2 or Model")
     on_away_scatter.set_title("Looking time [s]")
     on_away_scatter.legend()
 
@@ -1285,7 +1285,7 @@ def generate_collage_plot(sorted_IDs, all_metrics, save_path):
                        Patch(facecolor=label_to_color("right"), label="Right"),
                        Patch(facecolor="white", edgecolor='black', hatch=patterns[0], label="Human 1"),
                        Patch(facecolor="white", edgecolor='black', hatch=patterns[1], label="Human 2"),
-                       Patch(facecolor="white", edgecolor='black', hatch=patterns[2], label="Machine")]
+                       Patch(facecolor="white", edgecolor='black', hatch=patterns[2], label="Model")]
             label_bar.legend(handles=artists, bbox_to_anchor=(0.95, 1.0), loc='upper left')
         bottoms_h1 += label_counts_h1
         bottoms_h2 += label_counts_h2
@@ -1513,7 +1513,7 @@ def sandbox(metrics):
             print("{}, human accuracy: {}".format(key.stem + ".mp4", acc_human))
         acc_machine = metrics[key]["human1_vs_machine"]["accuracy"]
         if acc_machine <= 60.0:
-            print("{}, machine accuracy: {}".format(key.stem + ".mp4", acc_machine))
+            print("{}, model accuracy: {}".format(key.stem + ".mp4", acc_machine))
 
 
 def prep_frame(frame, bbox, show_bbox=True, show_arrow=False, class_text=None):

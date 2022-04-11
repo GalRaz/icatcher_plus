@@ -442,6 +442,11 @@ def process_dataset_lowest_face(args, gaze_labels_only=False, force_create=False
         st_time = time.time()
         logging.info("[process_lkt_legacy] Proccessing %s" % video_file.name)
         cur_video_folder = Path.joinpath(args.faces_folder / video_file.stem)
+        gaze_labels_filename = Path.joinpath(args.faces_folder, video_file.stem, 'gaze_labels.npy')
+        face_labels_filename = Path.joinpath(args.faces_folder, video_file.stem, 'face_labels.npy')
+        if gaze_labels_filename.exists() and face_labels_filename.exists() and not force_create:
+            logging.info("[process_lkt_legacy] skipping because destination exists")
+            continue
         cur_video_folder.mkdir(parents=True, exist_ok=True)
         img_folder = Path.joinpath(args.faces_folder, video_file.stem, 'img')
         img_folder.mkdir(parents=True, exist_ok=True)
@@ -593,6 +598,10 @@ def generate_second_gaze_labels(args, force_create=False, visualize_confusion=Fa
     suffix = next(Path(args.train_coding1_folder).glob("*")).suffix
     for video_file in video_list:
         logging.info("[gen_2nd_labels] Video: %s" % video_file.name)
+        gaze_labels_second_filename = Path.joinpath(args.faces_folder, video_file.stem, 'gaze_labels_second.npy')
+        if gaze_labels_second_filename.exists() and not force_create:
+            logging.info("[gen_2nd_labels] skipping because destination exists")
+            continue
         fps = video.get_fps(video_file)
         vfr, meta_data = video.is_video_vfr(video_file, get_meta_data=True)
         if vfr:
