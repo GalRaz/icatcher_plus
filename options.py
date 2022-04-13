@@ -127,6 +127,7 @@ def parse_arguments_for_testing():
             raise AssertionError
     if args.output_video_path:
         args.output_video_path = Path(args.output_video_path)
+        args.output_video_path.mkdir(exist_ok=False, parents=True)
         if not args.output_video_path.is_dir():
             print("--output_video_path argument must point to a folder.")
             raise AssertionError

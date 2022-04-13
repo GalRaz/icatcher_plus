@@ -461,7 +461,6 @@ def process_dataset_lowest_face(args, gaze_labels_only=False, force_create=False
         face_labels = []
 
         cap = cv2.VideoCapture(str(video_file))
-        # make sure target fps is around 30
         vfr, meta_data = video.is_video_vfr(video_file, get_meta_data=True)
         fps = video.get_fps(video_file)
         if vfr:
@@ -473,6 +472,7 @@ def process_dataset_lowest_face(args, gaze_labels_only=False, force_create=False
 
         if args.raw_dataset_type == "vcx":
             csv_file = Path(args.raw_dataset_path / "Cal_BW_March_split0_participants.csv")
+            # make sure target fps is around 30
             assert abs(fps - 30) < 0.1
             parser = parsers.VCXParser(30,
                                        csv_file,

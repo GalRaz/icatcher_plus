@@ -17,6 +17,7 @@ from matplotlib.patches import Patch
 from options import parse_arguments_for_visualizations
 import parsers
 import preprocess
+from statistics.bootstrap import bootstrap
 
 
 def label_to_color(label):
@@ -831,40 +832,52 @@ def generate_barplot(sorted_IDs, all_metrics, save_path):
     plt.rc('font', size=13)
     fig, ax = plt.subplots()
     agreement_hvh = [all_metrics[ID]["human1_vs_human2_session"]['agreement'] for ID in sorted_IDs]
-    mean_agreement_hvh = np.mean(agreement_hvh)
-    std_agreement_hvh = np.std(agreement_hvh)
+    mean_agreement_hvh, std_agreement_hvh1, std_agreement_hvh2 = bootstrap(agreement_hvh)
+    # mean_agreement_hvh = np.mean(agreement_hvh)
+    # std_agreement_hvh = np.std(agreement_hvh)
     agreement_hvm = [all_metrics[ID]["human1_vs_machine_session"]['agreement'] for ID in sorted_IDs]
-    mean_agreement_hvm = np.mean(agreement_hvm)
-    std_agreement_hvm = np.std(agreement_hvm)
-
+    mean_agreement_hvm, std_agreement_hvm1, std_agreement_hvm2 = bootstrap(agreement_hvm)
+    # mean_agreement_hvm = np.mean(agreement_hvm)
+    # std_agreement_hvm = np.std(agreement_hvm)
     kappa_hvh = [all_metrics[ID]["human1_vs_human2_session"]['kappa'] for ID in sorted_IDs]
-    mean_kappa_hvh = np.mean(kappa_hvh)
-    std_kappa_hvh = np.std(kappa_hvh)
+    mean_kappa_hvh, std_kappa_hvh1, std_kappa_hvh2 = bootstrap(kappa_hvh)
+    # mean_kappa_hvh = np.mean(kappa_hvh)
+    # std_kappa_hvh = np.std(kappa_hvh)
     kappa_hvm = [all_metrics[ID]["human1_vs_machine_session"]['kappa'] for ID in sorted_IDs]
-    mean_kappa_hvm = np.mean(kappa_hvm)
-    std_kappa_hvm = np.std(kappa_hvm)
-
+    mean_kappa_hvm, std_kappa_hvm1, std_kappa_hvm2 = bootstrap(kappa_hvm)
+    # mean_kappa_hvm = np.mean(kappa_hvm)
+    # std_kappa_hvm = np.std(kappa_hvm)
     icc_lt_hvh = [all_metrics[ID]["stats"]["ICC_LT_hvh"] for ID in sorted_IDs]
-    mean_icc_lt_hvh = np.mean(icc_lt_hvh)
-    std_icc_lt_hvh = np.std(icc_lt_hvh)
+    mean_icc_lt_hvh, std_icc_lt_hvh1, std_icc_lt_hvh2 = bootstrap(icc_lt_hvh)
+    # mean_icc_lt_hvh = np.mean(icc_lt_hvh)
+    # std_icc_lt_hvh = np.std(icc_lt_hvh)
     icc_lt_hvm = [all_metrics[ID]["stats"]["ICC_LT_hvm"] for ID in sorted_IDs]
-    mean_icc_lt_hvm = np.mean(icc_lt_hvm)
-    std_icc_lt_hvm = np.std(icc_lt_hvm)
-
+    mean_icc_lt_hvm, std_icc_lt_hvm1, std_icc_lt_hvm2 = bootstrap(icc_lt_hvm)
+    # mean_icc_lt_hvm = np.mean(icc_lt_hvm)
+    # std_icc_lt_hvm = np.std(icc_lt_hvm)
     icc_pr_hvh = [all_metrics[ID]["stats"]["ICC_PR_hvh"] for ID in sorted_IDs]
-    mean_icc_pr_hvh = np.mean(icc_pr_hvh)
-    std_icc_pr_hvh = np.std(icc_pr_hvh)
+    mean_icc_pr_hvh, std_icc_pr_hvh1, std_icc_pr_hvh2 = bootstrap(icc_pr_hvh)
+    # mean_icc_pr_hvh = np.mean(icc_pr_hvh)
+    # std_icc_pr_hvh = np.std(icc_pr_hvh)
     icc_pr_hvm = [all_metrics[ID]["stats"]["ICC_PR_hvm"] for ID in sorted_IDs]
-    mean_icc_pr_hvm = np.mean(icc_pr_hvm)
-    std_icc_pr_hvm = np.std(icc_pr_hvm)
-
+    mean_icc_pr_hvm, std_icc_pr_hvm1, std_icc_pr_hvm2 = bootstrap(icc_pr_hvm)
+    # mean_icc_pr_hvm = np.mean(icc_pr_hvm)
+    # std_icc_pr_hvm = np.std(icc_pr_hvm)
     x = np.arange(4)
     width = 0.35  # the width of the bars
-    rects1 = ax.bar(x - (width / 2), [mean_agreement_hvh, mean_kappa_hvh, mean_icc_lt_hvh, mean_icc_pr_hvh],
-                    yerr=[std_agreement_hvh, std_kappa_hvh, std_icc_lt_hvh, std_icc_pr_hvh], width=width,
+    ydata1 = np.array([mean_agreement_hvh, mean_kappa_hvh, mean_icc_lt_hvh, mean_icc_pr_hvh])
+    yerr1 = np.array([(std_agreement_hvh1, std_agreement_hvh2), (std_kappa_hvh1, std_kappa_hvh2),
+                      (std_icc_lt_hvh1, std_icc_lt_hvh2), (std_icc_pr_hvh1, std_icc_pr_hvh2)])
+    yerr1 = np.abs(yerr1 - ydata1[:, None])
+    ydata2 = np.array([mean_agreement_hvm, mean_kappa_hvm, mean_icc_lt_hvm, mean_icc_pr_hvm])
+    yerr2 = np.array([(std_agreement_hvm1, std_agreement_hvm2), (std_kappa_hvm1, std_kappa_hvm2),
+                      (std_icc_lt_hvm1, std_icc_lt_hvm2), (std_icc_pr_hvm1, std_icc_pr_hvm2)])
+    yerr2 = np.abs(yerr2 - ydata2[:, None])
+    rects1 = ax.bar(x - (width / 2), ydata1,
+                    yerr=yerr1.T, width=width,
                     label='Human-Human', align='center', ecolor='black', capsize=10)
-    rects2 = ax.bar(x + (width / 2), [mean_agreement_hvm, mean_kappa_hvm, mean_icc_lt_hvm, mean_icc_pr_hvm],
-                    yerr=[std_agreement_hvm, std_kappa_hvm, std_icc_lt_hvm, std_icc_pr_hvm], width=width,
+    rects2 = ax.bar(x + (width / 2), ydata2,
+                    yerr=yerr2.T, width=width,
                     label='Human-Model', align='center', ecolor='black', capsize=10)
     labels = ['% Agree', 'Cohen\'s Kappa', 'ICC (LT)', 'ICC (PR)']
     ax.set_xticks(x)
@@ -969,8 +982,14 @@ def generate_agreement_scatter(sorted_IDs, all_metrics, args, multi_dataset=Fals
         secondary_label = "California-BW Videos"
     ax.scatter(x_target, y_target,
                color=label_to_color("vlblue"), label=primary_label, alpha=0.5, s=40, marker="o")
-    ax.errorbar(np.mean(x_target), np.mean(y_target), xerr=np.std(x_target), yerr=np.std(y_target),
-                color=label_to_color("vblue"), marker='o', capsize=3, ms=10)  # ms=40
+    meanx, confx1, confx2 = bootstrap(x_target)
+    meany, confy1, confy2 = bootstrap(y_target)
+    ax.errorbar(meanx, meany,
+                xerr=np.array([meanx - confx1, confx2 - meanx])[:, None],
+                yerr=np.array([meany - confy1, confy2 - meany])[:, None],
+                barsabove=True,
+                color="k", markerfacecolor=label_to_color("vblue"),
+                linewidth=1, marker='o', capsize=3, ms=10)  # ms=40
     minx = min(x_target)
     miny = min(y_target)
     plot_name = 'dataset_agreement_scatter.pdf'
@@ -981,8 +1000,14 @@ def generate_agreement_scatter(sorted_IDs, all_metrics, args, multi_dataset=Fals
         miny = min(np.min(y_target), np.min(y_target_2))
         ax.scatter(x_target_2, y_target_2,
                    color=label_to_color("vlgreen"), label=secondary_label, alpha=0.5, s=40, marker="^")
-        ax.errorbar(np.mean(x_target_2), np.mean(y_target_2), xerr=np.std(x_target_2), yerr=np.std(y_target_2),
-                    color=label_to_color("vgreen"), marker='^', capsize=3, ms=10)  # ms=40
+        meanx, confx1, confx2 = bootstrap(x_target_2)
+        meany, confy1, confy2 = bootstrap(y_target_2)
+        ax.errorbar(meanx, meany,
+                    xerr=(meanx - confx1, confx2 - meanx),
+                    yerr=(meany - confy1, confy2 - meany),
+                    barsabove=True,
+                    color="k", markerfacecolor=label_to_color("vgreen"),
+                    linewidth=1, marker='^', capsize=3, ms=10)  # ms=40
         plot_name = "multi_dataset_agreement_scatter.pdf"
     final_min = min(minx, miny)
     ax.set_xlim([final_min, 1])
@@ -1033,11 +1058,16 @@ def generate_race_vs_agreement(sorted_IDs, all_metrics, args, video_dataset):
     data = []
     err = []
     for i in range(len(labels)):
-        data.append(np.mean(y[inverse == i]))
-        err.append(np.std(y[inverse == i]))
+        mean, conf1, conf2 = bootstrap(y[inverse == i])
+        data.append(mean)
+        err.append((mean - conf1, conf2 - mean))
+    # for i in range(len(labels)):
+    #     data.append(np.mean(y[inverse == i]))
+    #     err.append(np.std(y[inverse == i]))
     plt.rc('font', size=14)
     fig, ax = plt.subplots(figsize=(6, 8))
-    ax.bar(range(len(labels)), data, yerr=err, color=label_to_color("lblue"), capsize=10, width=0.8)
+    ax.bar(range(len(labels)), data, yerr=np.array(err).T,
+           color=label_to_color("lblue"), capsize=10, width=0.8)
     ax.set_xticks(range(len(labels)))
     ax.set_xticklabels(labels)
     ax.set_ylim([0, 100])
@@ -1063,11 +1093,16 @@ def generate_gender_vs_agreement(sorted_IDs, all_metrics, args, video_dataset):
     data = []
     err = []
     for i in range(len(labels)):
-        data.append(np.mean(y[inverse == i]))
-        err.append(np.std(y[inverse == i]))
+        mean, confb, confu = bootstrap(y[inverse == i])
+        data.append(mean)
+        err.append((mean - confb, confu - mean))
+    # for i in range(len(labels)):
+    #     data.append(np.mean(y[inverse == i]))
+    #     err.append(np.std(y[inverse == i]))
     plt.rc('font', size=16)
     fig, ax = plt.subplots(figsize=(6, 8))
-    ax.bar(range(len(labels)), data, yerr=err, color=label_to_color("lblue"), capsize=10, width=0.8)
+    ax.bar(range(len(labels)), data, yerr=np.array(err).T,
+           color=label_to_color("lblue"), capsize=10, width=0.8)
     ax.set_xticks(range(len(labels)))
     ax.set_xticklabels(labels)
     ax.set_ylim([0, 100])
@@ -1095,8 +1130,7 @@ def generate_confidence_vs_agreement(sorted_IDs, all_metrics, args, multi_datase
     if args.raw_dataset_type == "vcx":
         primary_label = "California-BW"
         secondary_label = "Lookit"
-        np.savez("cali-bw_confidence", np.mean(confidence_correct), np.mean(confidence_incorrect),
-                 np.std(confidence_correct), np.std(confidence_incorrect))
+        np.savez("cali-bw_confidence", confidence_correct, confidence_incorrect)
     else:
         primary_label = "Lookit"
         secondary_label = "California-BW"
@@ -1104,14 +1138,26 @@ def generate_confidence_vs_agreement(sorted_IDs, all_metrics, args, multi_datase
     fig, ax = plt.subplots()
     x = np.arange(2)
     width = 0.35  # the width of the bars
-    rects1 = ax.bar(x - width / 2, [np.mean(confidence_correct), np.mean(confidence_incorrect)],  # x - width
-                    yerr=[np.std(confidence_correct), np.std(confidence_incorrect)], width=width,
+    correct_mean, correct_confb, correct_confu = bootstrap(confidence_correct)
+    incorrect_mean, incorrect_confb, incorrect_confu = bootstrap(confidence_incorrect)
+    ydata = np.array([correct_mean, incorrect_mean])
+    yerr = np.array([(correct_confb, correct_confu),
+                     (incorrect_confb, incorrect_confu)])
+    yerr = np.abs(yerr - ydata[:, None])
+    rects1 = ax.bar(x - width / 2, ydata,
+                    yerr=yerr.T, width=width,
                     label=primary_label, align='center', ecolor='black', capsize=10)
     if multi_dataset:
         data = np.load("cali-bw_confidence.npz")
-        x1, x2, x3, x4 = data["arr_0"], data["arr_1"], data["arr_2"], data["arr_3"]
-        rects2 = ax.bar(x + width / 2, [x1, x2],  # x - width
-                        yerr=[x3, x4], width=width,
+        x1, x2 = data["arr_0"], data["arr_1"]
+        correct_mean2, correct_confb2, correct_confu2 = bootstrap(x1)
+        incorrect_mean2, incorrect_confb2, incorrect_confu2 = bootstrap(x2)
+        ydata = np.array([correct_mean2, incorrect_mean2])
+        yerr = np.array([(correct_confb2, correct_confu2),
+                         (incorrect_confb2, incorrect_confu2)])
+        yerr = np.abs(yerr - ydata[:, None])
+        rects2 = ax.bar(x + width / 2, ydata,
+                        yerr=yerr, width=width,
                         label=secondary_label, align='center', ecolor='black', capsize=10)
     labels = ['H1-M Agree', 'H1-M Disagree']
     ax.set_xticks(x)
@@ -1442,15 +1488,24 @@ def create_cache_metrics(args, force_create=False):
     return all_metrics
 
 
-def put_text(img, class_name):
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    top_left_corner_text = (10, 30)
+def put_text(img, text, loc=None):
+    """
+    inserts a text into image
+    :param img:
+    :param class_name:
+    :param loc:
+    :return:
+    """
+    font = cv2.FONT_HERSHEY_DUPLEX
+    if loc is not None:
+        text_location = loc
+    else:
+        text_location = (10, 30)  # top_left_corner_text
     font_scale = 1
     font_color = (255, 255, 255)
     line_type = 2
 
-    cv2.putText(img, class_name,
-                top_left_corner_text,
+    cv2.putText(img, text, text_location,
                 font,
                 font_scale,
                 font_color,
@@ -1516,7 +1571,7 @@ def sandbox(metrics):
             print("{}, model accuracy: {}".format(key.stem + ".mp4", acc_machine))
 
 
-def prep_frame(frame, bbox, show_bbox=True, show_arrow=False, class_text=None):
+def prep_frame(frame, bbox, show_bbox=True, show_arrow=False, conf=None, class_text=None):
     """
     prepares a frame for visualization by adding text, rectangles and arrows.
     :param frame: the frame for which to add the gizmo's to
@@ -1528,8 +1583,11 @@ def prep_frame(frame, bbox, show_bbox=True, show_arrow=False, class_text=None):
     """
     if class_text is not None:
         frame = put_text(frame, class_text)
-    if show_bbox:
+    if show_bbox and bbox is not None:
         frame = put_rectangle(frame, bbox)
+    if conf and bbox is not None:
+        frame = put_text(frame, "{:.02f}".format(conf),
+                         loc=(bbox[0], bbox[1] + bbox[3]))
     if show_arrow:
         if class_text is not None:
             if class_text == "right" or class_text == "left":
@@ -1606,25 +1664,30 @@ def print_stats(sorted_ids, all_metrics, hvm=True):
                     all_metrics[ID][choice1]["n_frames_in_interval"]) for ID in sorted_ids]
     ICC_LT = [all_metrics[ID]["stats"][choice2] for ID in sorted_ids]
     ICC_PR = [all_metrics[ID]["stats"][choice3] for ID in sorted_ids]
-    invalid_mean = np.mean(invalid) * 100
-    invalid_std = np.std(invalid) * 100
-    agreement_mean = np.mean(agreement) * 100
-    agreement_std = np.std(agreement) * 100
-    kappa_mean = np.mean(kappa)
-    kappa_std = np.std(kappa)
-    ICC_LT_mean = np.mean(ICC_LT)
-    ICC_LT_std = np.std(ICC_LT)
-    ICC_PR_mean = np.mean(ICC_PR)
-    ICC_PR_std = np.std(ICC_PR)
+    invalid_mean, invalid_conf1, invalid_conf2 = bootstrap(np.array(invalid)*100)
+    # invalid_mean = np.mean(invalid) * 100
+    # invalid_std = np.std(invalid) * 100
+    agreement_mean, agreement_conf1, agreement_conf2 = bootstrap(np.array(agreement)*100)
+    # agreement_mean = np.mean(agreement) * 100
+    # agreement_std = np.std(agreement) * 100
+    kappa_mean, kappa_conf1, kappa_conf2 = bootstrap(kappa)
+    # kappa_mean = np.mean(kappa)
+    # kappa_std = np.std(kappa)
+    ICC_LT_mean, ICC_LT_conf1, ICC_LT_conf2 = bootstrap(ICC_LT)
+    # ICC_LT_mean = np.mean(ICC_LT)
+    # ICC_LT_std = np.std(ICC_LT)
+    ICC_PR_mean, ICC_PR_conf1, ICC_PR_conf2 = bootstrap(ICC_PR)
+    # ICC_PR_mean = np.mean(ICC_PR)
+    # ICC_PR_std = np.std(ICC_PR)
     CIA_mean = 0
     CIA_std = 0
     print("hvm: {}".format(hvm))
-    print("percent agreement: trial: {:.2f} +- {:.2f}".format(agreement_mean, agreement_std))
-    print("% of invalid frames: {:.2f} +- {:.2f}".format(invalid_mean, invalid_std))
-    print("ICC LT: {:.2f} +- {:.2f}".format(ICC_LT_mean, ICC_LT_std))
-    print("ICC PR: {:.2f} +- {:.2f}".format(ICC_PR_mean, ICC_PR_std))
-    print("Cohens Kappa: {:.2f} +- {:.2f}".format(kappa_mean, kappa_std))
-    print("CIA: {:.2f} +- {:.2f}".format(CIA_mean, CIA_std))
+    print("percent agreement: trial: {:.2f} [{:.2f}, {:.2f}]".format(agreement_mean, agreement_conf1, agreement_conf2))
+    print("% of invalid frames: {:.2f} [{:.2f}, {:.2f}]".format(invalid_mean, invalid_conf1, invalid_conf2))
+    print("ICC LT: {:.2f} [{:.2f}, {:.2f}]".format(ICC_LT_mean, ICC_LT_conf1, ICC_LT_conf2))
+    print("ICC PR: {:.2f} [{:.2f}, {:.2f}]".format(ICC_PR_mean, ICC_PR_conf1, ICC_PR_conf2))
+    print("Cohens Kappa: {:.2f} [{:.2f}, {:.2f}]".format(kappa_mean, kappa_conf1, kappa_conf2))
+    print("CIA: {:.2f} [{:.2f}, {:.2f}]".format(CIA_mean, CIA_std, CIA_std))
 
 
 if __name__ == "__main__":

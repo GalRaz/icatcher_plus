@@ -1,4 +1,5 @@
 import cv2
+from PIL import Image
 from pathlib import Path
 import numpy as np
 from preprocess import detect_face_opencv_dnn, build_lookit_video_dataset, build_marchman_video_dataset
@@ -9,7 +10,7 @@ import face_classifier
 import torch
 import models
 import data
-from PIL import Image
+import video
 
 
 class FaceClassifierArgs:
@@ -68,10 +69,8 @@ def select_face(bboxes, frame, fc_model, fc_data_transforms, hor, ver):
             # crop_img = faces[idxs[i]]
             bbox = bboxes[idxs[i]]
             # hor, ver = centers[i]
-    else:
-        # todo: improve face selection mechanism
-        bbox = min(bboxes, key=lambda x: x[3] - x[1])  # select lowest face in image, probably belongs to kid
-        # crop_img = frame[bbox[1]:bbox[1] + bbox[3], bbox[0]:bbox[0] + bbox[2]]
+    else:   # select lowest face in image, probably belongs to kid
+        bbox = min(bboxes, key=lambda x: x[3] - x[1])
     return bbox
 
 
@@ -162,6 +161,7 @@ def predict_from_video(opt):
         if video_path.is_dir():
             logging.warning("Video folder provided as source. Make sure it contains video files only.")
             video_paths = list(video_path.glob("*"))
+            video_ids = None
             if opt.video_filter:
                 if opt.video_filter.is_file():
                     if opt.raw_dataset_type == "lookit":
@@ -172,9 +172,10 @@ def predict_from_video(opt):
                         raise NotImplementedError
                     # filter_files = [x for x in video_dataset.values() if
                     #                 x["in_csv"] and x["has_1coding"] and x["public"]]
-                    filter_files = [x for x in video_dataset.values() if
-                                    x["in_csv"] and x["has_1coding"] and x["has_2coding"] and x[
-                                        "split"] == "2_test"]
+                    filter_files = [x for x in video_dataset.values() if x["video_id"] == "13079.16.M.TL316B-18-2"]
+                    # filter_files = [x for x in video_dataset.values() if
+                    #                 x["in_csv"] and x["has_1coding"] and x["has_2coding"] and x[
+                    #                     "split"] == "2_test"]
                     video_ids = [x["video_id"] for x in filter_files]
                     filter_files = [x["video_path"].stem for x in filter_files]
                 else:  # directory
@@ -193,30 +194,42 @@ def predict_from_video(opt):
         confidences = []
         image_sequence = []
         box_sequence = []
+        bbox_sequence = []
         frames = []
         frame_count = 0
         last_class_text = ""  # Initialize so that we see the first class assignment as an event to record
         logging.info("predicting on : {}".format(video_paths[i]))
         cap = cv2.VideoCapture(video_paths[i])
         # Get some basic info about the video
-        width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
-        height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+
+        vfr, meta_data = video.is_video_vfr(video_path, get_meta_data=True)
+        framerate = video.get_fps(video_path)
+        if vfr:
+            logging.warning("video file: {} has variable frame rate".format(str(video_path.name)))
+            logging.info(str(meta_data))
+            if opt.output_video_path:
+                # todo: support this by extracting frame timestamps
+                # i.e.: frame_info, vfr_frame_counter, _ = video.get_frame_information(video_path)
+                logging.error("output_video_path argument passed, but video is VFR ! this is currently not supported")
+                raise NotImplementedError
+        else:
+            logging.info("video fps: {}".format(framerate))
+        width = meta_data["width"]
+        height = meta_data["height"]
         resolution = (int(width), int(height))
-        framerate = int(cap.get(cv2.CAP_PROP_FPS))
         # If creating annotated video output, set up now
         if opt.output_video_path:
             fourcc = cv2.VideoWriter_fourcc(*"MP4V")  # may need to be adjusted per available codecs & OS
-            my_suffix = video_path.suffix
-            if not my_suffix:
-                my_suffix = ".mp4"
-            my_video_path = Path(opt.output_video_path, video_path.stem + "_output{}".format(my_suffix))
+            my_video_path = Path(opt.output_video_path, video_path.stem + "_output.mp4")
             video_output = cv2.VideoWriter(str(my_video_path), fourcc, framerate, resolution, True)
         if opt.output_annotation:
             if opt.output_format == "compressed":
-                if video_ids:
+                if video_ids is not None:
                     my_output_file_path = Path(opt.output_annotation, video_ids[i])
                     if Path(str(my_output_file_path) + ".npz").is_file():
                         continue
+                else:
+                    my_output_file_path = Path(opt.output_annotation, video_path.stem)
             else:
                 my_output_file_path = Path(opt.output_annotation, video_path.stem + opt.output_file_suffix)
                 output_file = open(my_output_file_path, "w", newline="")
@@ -232,14 +245,15 @@ def predict_from_video(opt):
             cv2_bboxes = detect_face_opencv_dnn(face_detector_model, frame, 0.7)
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)  # network was trained on RGB images.
             # if len(cv2_bboxes) > 2:
-            #     temp_hook(frame, cv2_bboxes, frame_count)
+            #     visualize.temp_hook(frame, cv2_bboxes, frame_count)
             if not cv2_bboxes:
                 answers.append(classes['noface'])  # if face detector fails, treat as away and mark invalid
                 confidences.append(-1)
                 image = np.zeros((1, opt.image_size, opt.image_size, 3), np.float64)
                 my_box = np.array([0, 0, 0, 0, 0])
-                box_sequence.append(my_box)
                 image_sequence.append((image, True))
+                box_sequence.append(my_box)
+                bbox_sequence.append(None)
             else:
                 selected_bbox = select_face(cv2_bboxes, frame, fc_model, fc_data_transforms, hor, ver)
                 crop, my_box = extract_crop(frame, selected_bbox, opt)
@@ -247,19 +261,23 @@ def predict_from_video(opt):
                     answers.append(classes['nobabyface'])  # if selecting face fails, treat as away and mark invalid
                     confidences.append(-1)
                     image = np.zeros((1, opt.image_size, opt.image_size, 3), np.float64)
-                    image_sequence.append((image, True))
                     my_box = np.array([0, 0, 0, 0, 0])
+                    image_sequence.append((image, True))
                     box_sequence.append(my_box)
+                    bbox_sequence.append(None)
                 else:
                     assert crop.size != 0  # what just happened?
                     answers.append(classes['left'])  # if face detector succeeds, treat as left and mark valid
                     confidences.append(-1)
                     image_sequence.append((crop, False))
                     box_sequence.append(my_box)
+                    bbox_sequence.append(selected_bbox)
                     hor, ver = my_box[2], my_box[1]
             if len(image_sequence) == opt.sliding_window_size:  # we have enough frames for prediction, predict for middle frame
-                popped_frame = frames[loc]
+                cur_frame = frames[loc]
+                cur_bbox = bbox_sequence[loc]
                 frames.pop(0)
+                bbox_sequence.pop(0)
                 if not image_sequence[opt.sliding_window_size // 2][1]:  # if middle image is valid
                     if opt.architecture == "icatcher+":
                         to_predict = {"imgs": torch.tensor([x[0] for x in image_sequence[0::2]], dtype=torch.float).squeeze().permute(0, 3, 1, 2).to(opt.device),
@@ -281,14 +299,15 @@ def predict_from_video(opt):
                 class_text = reverse_classes[answers[loc]]
                 if opt.on_off:
                     class_text = "off" if class_text == "away" else "on"
-                # If show_output or output_video is true, add text label, bounding box for face, and arrow showing direction
                 if opt.show_output:
-                    prepped_frame = visualize.prep_frame(popped_frame, my_box, class_text, selected_bbox)
+                    prepped_frame = visualize.prep_frame(cur_frame, cur_bbox,
+                                                         show_arrow=True, conf=confidences[loc], class_text=class_text)
                     cv2.imshow('frame', prepped_frame)
                     if cv2.waitKey(1) & 0xFF == ord('q'):
                         break
                 if opt.output_video_path:
-                    prepped_frame = visualize.prep_frame(popped_frame, my_box, class_text, selected_bbox)
+                    prepped_frame = visualize.prep_frame(cur_frame, cur_bbox,
+                                                         show_arrow=True, conf=confidences[loc], class_text=class_text)
                     video_output.write(prepped_frame)
                 # handle writing output to file
                 if opt.output_annotation:
