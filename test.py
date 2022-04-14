@@ -172,10 +172,10 @@ def predict_from_video(opt):
                         raise NotImplementedError
                     # filter_files = [x for x in video_dataset.values() if
                     #                 x["in_csv"] and x["has_1coding"] and x["public"]]
-                    filter_files = [x for x in video_dataset.values() if x["video_id"] == "13079.16.M.TL316B-18-2"]
-                    # filter_files = [x for x in video_dataset.values() if
-                    #                 x["in_csv"] and x["has_1coding"] and x["has_2coding"] and x[
-                    #                     "split"] == "2_test"]
+                    # filter_files = [x for x in video_dataset.values() if x["video_id"] == ""]
+                    filter_files = [x for x in video_dataset.values() if
+                                    x["in_csv"] and x["has_1coding"] and x["has_2coding"] and x[
+                                        "split"] == "2_test"]
                     video_ids = [x["video_id"] for x in filter_files]
                     filter_files = [x["video_path"].stem for x in filter_files]
                 else:  # directory

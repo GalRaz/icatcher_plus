@@ -340,9 +340,11 @@ def compare_coding_files(human_coding_file, human_coding_file2, machine_coding_f
     human1_uncol = parser.uncollapse_labels(human, start1, end1)
     human2_uncol = parser.uncollapse_labels(human2, start2, end2)
     # bins = [[x, x+30] for x in range(0, end1, 30)]
+    logging.info("trial level stats")
     metrics["human1_vs_machine_trials"] = compare_uncollapsed_coding_files(human1_uncol, machine_uncol, trial_times,
                                                                            confidence=machine_confidence)
     # metrics["human1_vs_machine_100msbins"] = compare_uncollapsed_coding_files(human1_uncol, machine_uncol, bins)
+    logging.info("session level stats")
     metrics["human1_vs_machine_session"] = compare_uncollapsed_coding_files(human1_uncol,
                                                                             machine_uncol,
                                                                             [[0, max(end1, mend)]])
@@ -1003,8 +1005,8 @@ def generate_agreement_scatter(sorted_IDs, all_metrics, args, multi_dataset=Fals
         meanx, confx1, confx2 = bootstrap(x_target_2)
         meany, confy1, confy2 = bootstrap(y_target_2)
         ax.errorbar(meanx, meany,
-                    xerr=(meanx - confx1, confx2 - meanx),
-                    yerr=(meany - confy1, confy2 - meany),
+                    xerr=np.array([meanx - confx1, confx2 - meanx])[:, None],
+                    yerr=np.array([meanx - confx1, confx2 - meanx])[:, None],
                     barsabove=True,
                     color="k", markerfacecolor=label_to_color("vgreen"),
                     linewidth=1, marker='^', capsize=3, ms=10)  # ms=40
