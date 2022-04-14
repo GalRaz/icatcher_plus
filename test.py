@@ -312,13 +312,13 @@ def predict_from_video(opt):
                 # handle writing output to file
                 if opt.output_annotation:
                     if opt.output_format == "raw_output":
-                        output_file.write("{}, {}, {}\n".format(frame_count + loc + 1, class_text, confidences[loc]))
+                        output_file.write("{}, {}, {:.02f}\n".format(str(frame_count + loc + 1), class_text, confidences[loc]))
                     elif opt.output_format == "PrefLookTimestamp":
                         if class_text != last_class_text:  # Record "event" for change of direction if code has changed
                             frame_ms = int((frame_count + loc + 1) * (1000. / framerate))
                             output_file.write("{},0,{}\n".format(frame_ms, class_text))
                             last_class_text = class_text
-                logging.info("frame: {}, class: {}".format(str(frame_count + loc + 1), class_text))
+                logging.info("frame: {}, class: {}, confidence: {:.02f}".format(str(frame_count + loc + 1), class_text, confidences[loc]))
             ret_val, frame = cap.read()
             frame_count += 1
         # finished processing a video file, cleanup
@@ -334,6 +334,8 @@ def predict_from_video(opt):
                 output_file.close()
             elif opt.output_format == "compressed":
                 np.savez(my_output_file_path, answers, confidences)
+            elif opt.output_format == "raw_output":
+                output_file.close()
         cap.release()
 
 

@@ -1081,6 +1081,41 @@ def generate_race_vs_agreement(sorted_IDs, all_metrics, args, video_dataset):
     plt.close(fig)
 
 
+def generate_preterm_vs_agreement(sorted_IDs, all_metrics, args, video_dataset):
+    x = []
+    y = []
+    for id in sorted_IDs:
+        agreement = all_metrics[id]["human1_vs_machine_session"]["agreement"] * 100
+        preterm = video_dataset[id]["preterm"]
+        x.append(preterm)
+        y.append(agreement)
+
+    labels, inverse = np.unique(x, return_inverse=True)
+    y = np.array(y)
+    data = []
+    err = []
+    for i in range(len(labels)):
+        mean, confb, confu = bootstrap(y[inverse == i])
+        data.append(mean)
+        err.append((mean - confb, confu - mean))
+    # for i in range(len(labels)):
+    #     data.append(np.mean(y[inverse == i]))
+    #     err.append(np.std(y[inverse == i]))
+    plt.rc('font', size=16)
+    fig, ax = plt.subplots(figsize=(6, 8))
+    ax.bar(range(len(labels)), data, yerr=np.array(err).T,
+           color=label_to_color("lblue"), capsize=10, width=0.8)
+    ax.set_xticks(range(len(labels)))
+    ax.set_xticklabels(labels)
+    ax.set_ylim([0, 100])
+    ax.set_ylabel("Percent Agreement")
+    save_path = args.output_folder
+    plt.savefig(str(Path(save_path, "agreement_vs_preterm.pdf")), bbox_inches='tight')
+    plt.cla()
+    plt.clf()
+    plt.close(fig)
+
+
 def generate_gender_vs_agreement(sorted_IDs, all_metrics, args, video_dataset):
     x = []
     y = []
@@ -1202,6 +1237,7 @@ def generate_dataset_plots(sorted_IDs, all_metrics, args):
         generate_confidence_vs_agreement(sorted_IDs, all_metrics, args, False)
         csv_file = Path(args.raw_dataset_folder / "Cal_BW_March_split0_participants.csv")
         video_dataset = preprocess.build_marchman_video_dataset(args.raw_dataset_folder, csv_file)
+        generate_preterm_vs_agreement(sorted_IDs, all_metrics, args, video_dataset)
     generate_age_vs_agreement(sorted_IDs, all_metrics, args, video_dataset)
     generate_race_vs_agreement(sorted_IDs, all_metrics, args, video_dataset)
     generate_gender_vs_agreement(sorted_IDs, all_metrics, args, video_dataset)
