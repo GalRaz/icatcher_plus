@@ -315,10 +315,10 @@ def compare_coding_files(human_coding_file, human_coding_file2, machine_coding_f
     machine_confidence = parser.get_confidence(machine_coding_file)
     trial_times = None
     if args.human_coding_format == "vcx":
-        csv_file = Path(args.raw_dataset_folder / "Cal_BW_March_split0_participants.csv")
+        csv_file = Path(args.raw_dataset_path / "Cal_BW_March_split0_participants.csv")
         parser = parsers.VCXParser(30, csv_file)
     elif args.human_coding_format == "lookit":
-        csv_file = Path(args.raw_dataset_folder / "prephys_split0_videos.tsv")
+        csv_file = Path(args.raw_dataset_path / "prephys_split0_videos.tsv")
         parser = parsers.LookitParser(30, csv_file)
     else:
         raise NotImplementedError
@@ -1231,18 +1231,17 @@ def generate_dataset_plots(sorted_IDs, all_metrics, args):
     if args.raw_dataset_type == "lookit":
         generate_agreement_scatter(sorted_IDs, all_metrics, args, True)
         generate_confidence_vs_agreement(sorted_IDs, all_metrics, args, True)
-        csv_file = Path(args.raw_dataset_folder / "prephys_split0_videos.tsv")
-        video_dataset = preprocess.build_lookit_video_dataset(args.raw_dataset_folder, csv_file)
+        csv_file = Path(args.raw_dataset_path / "prephys_split0_videos.tsv")
+        video_dataset = preprocess.build_lookit_video_dataset(args.raw_dataset_path, csv_file)
     else:
         generate_agreement_scatter(sorted_IDs, all_metrics, args, False)
         generate_confidence_vs_agreement(sorted_IDs, all_metrics, args, False)
-        csv_file = Path(args.raw_dataset_folder / "Cal_BW_March_split0_participants.csv")
-        video_dataset = preprocess.build_marchman_video_dataset(args.raw_dataset_folder, csv_file)
+        csv_file = Path(args.raw_dataset_path / "Cal_BW_March_split0_participants.csv")
+        video_dataset = preprocess.build_marchman_video_dataset(args.raw_dataset_path, csv_file)
         generate_preterm_vs_agreement(sorted_IDs, all_metrics, args, video_dataset)
     generate_age_vs_agreement(sorted_IDs, all_metrics, args, video_dataset)
     generate_race_vs_agreement(sorted_IDs, all_metrics, args, video_dataset)
     generate_gender_vs_agreement(sorted_IDs, all_metrics, args, video_dataset)
-
 
 
 def generate_collage_plot(sorted_IDs, all_metrics, save_path):
@@ -1502,8 +1501,28 @@ def create_cache_metrics(args, force_create=False):
 
         coding_intersect = set(human_annotation2).intersection(set(human_annotation))
         coding_intersect = coding_intersect.intersection(set(machine_annotation))
+
+        if args.unique_children_only:
+            if args.raw_dataset_type == "lookit":
+                video_dataset = preprocess.build_lookit_video_dataset(args.raw_dataset_path,
+                                                                      Path(args.raw_dataset_path, args.db_file_name))
+            elif args.raw_dataset_type == "vcx":
+                video_dataset = preprocess.build_marchman_video_dataset(args.raw_dataset_path,
+                                                                        Path(args.raw_dataset_path, args.db_file_name))
+            else:
+                raise NotImplementedError
+            filter_files = [x for x in video_dataset.values() if
+                            x["in_csv"] and x["has_1coding"] and x["has_2coding"] and x[
+                                "split"] == "2_test"]
+            video_children_id = [x["child_id"] for x in filter_files]
+            _, indices = np.unique(video_children_id, return_index=True)
+            unique_videos = np.array(filter_files)[indices].tolist()
+            unique_videos = [x["video_id"] for x in unique_videos]
+            coding_intersect = coding_intersect.intersection(set(unique_videos))
+
         # sort the file paths alphabetically to pair them up
         coding_intersect = sorted(list(coding_intersect))
+
         assert len(coding_intersect) > 0
         all_metrics = {}
         for i, code_file in enumerate(coding_intersect):
@@ -1737,11 +1756,11 @@ def print_stats(sorted_ids, all_metrics, hvm=True):
         print("disagree ratio: {:.2f} [{:.2f}, {:.2f}]".format(disagree_ratio_mean,
                                                                disagree_ratio_conf1,
                                                                disagree_ratio_conf2))
-    print("percent agreement: trial: {:.2f} [{:.2f}, {:.2f}]".format(agreement_mean, agreement_conf1, agreement_conf2))
-    print("% of invalid frames: {:.2f} [{:.2f}, {:.2f}]".format(invalid_mean, invalid_conf1, invalid_conf2))
+    print("percent agreement: trial: {:.2f}% [{:.2f}%, {:.2f}%]".format(agreement_mean, agreement_conf1, agreement_conf2))
+    print("% of invalid frames: {:.2f}% [{:.2f}%, {:.2f}%]".format(invalid_mean, invalid_conf1, invalid_conf2))
+    print("Cohens Kappa: {:.2f} [{:.2f}, {:.2f}]".format(kappa_mean, kappa_conf1, kappa_conf2))
     print("ICC LT: {:.2f} [{:.2f}, {:.2f}]".format(ICC_LT_mean, ICC_LT_conf1, ICC_LT_conf2))
     print("ICC PR: {:.2f} [{:.2f}, {:.2f}]".format(ICC_PR_mean, ICC_PR_conf1, ICC_PR_conf2))
-    print("Cohens Kappa: {:.2f} [{:.2f}, {:.2f}]".format(kappa_mean, kappa_conf1, kappa_conf2))
 
 
 if __name__ == "__main__":

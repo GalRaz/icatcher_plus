@@ -153,7 +153,7 @@ def parse_arguments_for_testing():
 def parse_arguments_for_visualizations():
     parser = argparse.ArgumentParser()
     parser.add_argument("output_folder", type=str, default="output", help="path to output results.")
-    parser.add_argument("raw_dataset_folder", type=str, help="path to raw dataset folder")
+    parser.add_argument("raw_dataset_path", type=str, help="path to raw dataset folder")
     parser.add_argument("--raw_dataset_type", type=str, choices=["lookit", "vcx", "generic"], default="lookit",
                         help="the type of dataset to preprocess")
     parser.add_argument("dataset_folder", type=str, help="path to preprocessed dataset folder")
@@ -174,37 +174,42 @@ def parse_arguments_for_visualizations():
                                  "compressed",
                                  "vcx",
                                  "PrefLookTimestamp"])
+    parser.add_argument("--unique_children_only", action="store_true", default=False,
+                        help="only uses unique children for visualizations")
     parser.add_argument("--log", help="If present, writes log to this path")
     parser.add_argument("-v", "--verbosity", type=str, choices=["debug", "info", "warning"], default="info",
                         help="Selects verbosity level")
     args = parser.parse_args()
+
     args.output_folder = Path(args.output_folder)
     args.output_folder.mkdir(parents=True, exist_ok=True)
+
     args.dataset_folder = Path(args.dataset_folder)
     assert args.dataset_folder.is_dir()
-    args.raw_dataset_folder = Path(args.raw_dataset_folder)
-    assert args.raw_dataset_folder.is_dir()
+
+    args.raw_dataset_path = Path(args.raw_dataset_path)
+    assert args.raw_dataset_path.is_dir()
+
+    if args.raw_dataset_type == "lookit":
+        args.raw_video_folder = Path(args.raw_dataset_path, "videos")
+        args.db_file_name = "prephys_split0_videos.tsv"
+    elif args.raw_dataset_type == "vcx":
+        args.raw_video_folder = Path(args.raw_dataset_path, "Cal_BW MOV")
+        args.db_file_name = "Cal_BW_March_split0_participants.csv"
+    else:
+        raise NotImplementedError
+    assert args.raw_video_folder.is_dir()
+
     args.human_codings_folder = Path(args.human_codings_folder)
     args.human2_codings_folder = Path(args.human2_codings_folder)
     if not args.human_codings_folder.is_dir() or not args.human2_codings_folder.is_dir():
         import preprocess
-        if args.raw_dataset_type == "lookit":
-            preprocess.create_annotation_split(args, "prephys_split0_videos.tsv")
-        elif args.raw_dataset_type == "vcx":
-            preprocess.create_annotation_split(args, "Cal_BW_March_split0_participants.csv")
-        else:
-            raise NotImplementedError
+        preprocess.create_annotation_split(args, args.db_file_name)
     assert args.human_codings_folder.is_dir()
     assert args.human2_codings_folder.is_dir()
     args.machine_codings_folder = Path(args.machine_codings_folder)
     assert args.machine_codings_folder.is_dir()
-    if args.raw_dataset_type == "lookit":
-        args.raw_video_folder = Path(args.raw_dataset_folder, "videos")
-    elif args.raw_dataset_type == "vcx":
-        args.raw_video_folder = Path(args.raw_dataset_folder, "Cal_BW MOV")
-    else:
-        raise NotImplementedError
-    assert args.raw_video_folder.is_dir()
+
     args.faces_folder = Path(args.dataset_folder, "faces")
     assert args.faces_folder.is_dir()
     return args

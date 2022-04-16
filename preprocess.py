@@ -22,7 +22,6 @@ def create_annotation_split(args, csv_name):
     """
     creates a folder with 2 subfolders (coding1, coding2)
     each having an annotation by different coders for videos in the test set
-    note: works only for lookit dataset
     :param output_location: location to create folder
     :param raw_dataset_path: path to raw dataset
     :return:
