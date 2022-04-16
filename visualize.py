@@ -343,19 +343,8 @@ def compare_coding_files(human_coding_file, human_coding_file2, machine_coding_f
     logging.info("trial level stats")
     metrics["human1_vs_machine_trials"] = compare_uncollapsed_coding_files(human1_uncol, machine_uncol, trial_times,
                                                                            confidence=machine_confidence)
-    # metrics["human1_vs_machine_100msbins"] = compare_uncollapsed_coding_files(human1_uncol, machine_uncol, bins)
-    logging.info("session level stats")
-    metrics["human1_vs_machine_session"] = compare_uncollapsed_coding_files(human1_uncol,
-                                                                            machine_uncol,
-                                                                            [[0, max(end1, mend)]])
-    metrics["human1_vs_smachine_session"] = compare_uncollapsed_coding_files(human1_uncol,
-                                                                             special_machine,
-                                                                             [[0, max(end1, mend)]])
     metrics["human1_vs_human2_trials"] = compare_uncollapsed_coding_files(human1_uncol, human2_uncol, trial_times)
-    # metrics["human1_vs_human2_100msbins"] = compare_uncollapsed_coding_files(human1_uncol, human2_uncol, bins)
-    metrics["human1_vs_human2_session"] = compare_uncollapsed_coding_files(human1_uncol,
-                                                                           human2_uncol,
-                                                                           [[0, max(end1, end2)]])
+    # metrics["human1_vs_machine_100msbins"] = compare_uncollapsed_coding_files(human1_uncol, machine_uncol, bins)
     ICC_looking_time_hvm = calc_ICC(metrics["human1_vs_machine_trials"],
                                     "looking_time_1", "looking_time_2",
                                     len(trial_times))
@@ -373,6 +362,18 @@ def compare_coding_files(human_coding_file, human_coding_file2, machine_coding_f
                         "ICC_PR_hvm": ICC_percent_r_hvm,
                         "ICC_PR_hvh": ICC_percent_r_hvh
                         }
+
+    logging.info("session level stats")
+    metrics["human1_vs_machine_session"] = compare_uncollapsed_coding_files(human1_uncol,
+                                                                            machine_uncol,
+                                                                            [[0, max(end1, mend)]])
+    metrics["human1_vs_smachine_session"] = compare_uncollapsed_coding_files(human1_uncol,
+                                                                             special_machine,
+                                                                             [[0, max(end1, mend)]])
+    # metrics["human1_vs_human2_100msbins"] = compare_uncollapsed_coding_files(human1_uncol, human2_uncol, bins)
+    metrics["human1_vs_human2_session"] = compare_uncollapsed_coding_files(human1_uncol,
+                                                                           human2_uncol,
+                                                                           [[0, max(end1, end2)]])
     return metrics
 
 
@@ -1207,7 +1208,7 @@ def generate_confidence_vs_agreement(sorted_IDs, all_metrics, args, multi_datase
     ax.set_ylabel("Confidence")
     save_path = args.output_folder
     if multi_dataset:
-        name = "agreement_vs_confidence_multi_dataset.pdf"
+        name = "multi_dataset_agreement_vs_confidence.pdf"
     else:
         name = "agreement_vs_confidence.pdf"
     plt.savefig(str(Path(save_path, name)), bbox_inches='tight')
@@ -1717,15 +1718,30 @@ def print_stats(sorted_ids, all_metrics, hvm=True):
     ICC_PR_mean, ICC_PR_conf1, ICC_PR_conf2 = bootstrap(ICC_PR)
     # ICC_PR_mean = np.mean(ICC_PR)
     # ICC_PR_std = np.std(ICC_PR)
-    CIA_mean = 0
-    CIA_std = 0
     print("hvm: {}".format(hvm))
+    if hvm:
+        disagree_ratios = []
+        for ID in sorted_ids:
+            raw1 = all_metrics[ID]["human1_vs_human2_session"]["raw_coding1"]
+            raw2 = all_metrics[ID]["human1_vs_human2_session"]["raw_coding2"]
+            raw3 = all_metrics[ID]["human1_vs_machine_session"]["raw_coding2"]
+            mutually_valid_frames = np.logical_and(raw3, np.logical_and(raw1 >= 0, raw2 >= 0))
+            humans_agree = raw1[mutually_valid_frames] == raw2[mutually_valid_frames]
+            humans_disagree = ~humans_agree
+            machine_disagree = raw1[mutually_valid_frames] != raw3[mutually_valid_frames]
+            # machine_agree = ~machine_disagree
+            total_disagree = np.sum(machine_disagree & humans_disagree)
+            total_human_disagree = np.sum(humans_disagree)
+            disagree_ratios.append(100 * total_disagree / total_human_disagree)
+        disagree_ratio_mean, disagree_ratio_conf1, disagree_ratio_conf2 = bootstrap(np.array(disagree_ratios))
+        print("disagree ratio: {:.2f} [{:.2f}, {:.2f}]".format(disagree_ratio_mean,
+                                                               disagree_ratio_conf1,
+                                                               disagree_ratio_conf2))
     print("percent agreement: trial: {:.2f} [{:.2f}, {:.2f}]".format(agreement_mean, agreement_conf1, agreement_conf2))
     print("% of invalid frames: {:.2f} [{:.2f}, {:.2f}]".format(invalid_mean, invalid_conf1, invalid_conf2))
     print("ICC LT: {:.2f} [{:.2f}, {:.2f}]".format(ICC_LT_mean, ICC_LT_conf1, ICC_LT_conf2))
     print("ICC PR: {:.2f} [{:.2f}, {:.2f}]".format(ICC_PR_mean, ICC_PR_conf1, ICC_PR_conf2))
     print("Cohens Kappa: {:.2f} [{:.2f}, {:.2f}]".format(kappa_mean, kappa_conf1, kappa_conf2))
-    print("CIA: {:.2f} [{:.2f}, {:.2f}]".format(CIA_mean, CIA_std, CIA_std))
 
 
 if __name__ == "__main__":

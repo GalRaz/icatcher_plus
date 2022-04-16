@@ -123,7 +123,12 @@ def predict_from_video(opt):
     face_detector_model_file = Path("models", "face_model.caffemodel")
     config_file = Path("models", "config.prototxt")
     path_to_primary_model = opt.model
-    primary_model = models.GazeCodingModel(opt).to(opt.device)
+    if opt.architecture == "icatcher+":
+        primary_model = models.GazeCodingModel(opt).to(opt.device)
+    elif opt.architecture == "icatcher_vanilla":
+        primary_model = models.iCatcherOriginal(opt).to(opt.device)
+    else:
+        raise NotImplementedError
     if opt.device == 'cpu':
         state_dict = torch.load(str(path_to_primary_model), map_location=torch.device(opt.device))
     else:
@@ -210,8 +215,7 @@ def predict_from_video(opt):
             if opt.output_video_path:
                 # todo: support this by extracting frame timestamps
                 # i.e.: frame_info, vfr_frame_counter, _ = video.get_frame_information(video_path)
-                logging.error("output_video_path argument passed, but video is VFR ! this is currently not supported")
-                raise NotImplementedError
+                logging.warning("output_video_path argument passed, but input video is VFR !")
         else:
             logging.info("video fps: {}".format(framerate))
         width = meta_data["width"]
@@ -283,15 +287,17 @@ def predict_from_video(opt):
                         to_predict = {"imgs": torch.tensor([x[0] for x in image_sequence[0::2]], dtype=torch.float).squeeze().permute(0, 3, 1, 2).to(opt.device),
                                       "boxs": torch.tensor(box_sequence[::2], dtype=torch.float).to(opt.device)
                                       }
-                        with torch.set_grad_enabled(False):
-                            outputs = primary_model(to_predict)
-                            probs = torch.nn.functional.softmax(outputs, dim=1)
-                            _, prediction = torch.max(outputs, 1)
-                            confidence, _ = torch.max(probs, 1)
-                            float32_conf = confidence.cpu().numpy()[0]
-                            int32_pred = prediction.cpu().numpy()[0]
+                    elif opt.architecture == "icatcher_vanilla":
+                        to_predict = {"imgs": torch.tensor([x[0] for x in image_sequence[0::2]], dtype=torch.float).permute(1, 0, 4, 2, 3).to(opt.device)}
                     else:
                         raise NotImplementedError
+                    with torch.set_grad_enabled(False):
+                        outputs = primary_model(to_predict)
+                        probs = torch.nn.functional.softmax(outputs, dim=1)
+                        _, prediction = torch.max(outputs, 1)
+                        confidence, _ = torch.max(probs, 1)
+                        float32_conf = confidence.cpu().numpy()[0]
+                        int32_pred = prediction.cpu().numpy()[0]
                     answers[loc] = int32_pred
                     confidences[loc] = float32_conf
                 image_sequence.pop(0)

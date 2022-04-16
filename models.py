@@ -163,36 +163,37 @@ class iCatcherOriginal(torch.nn.Module):
         self.network = torch.nn.ModuleList([
             torch.nn.Conv2d(3, 16, stride=(1, 1), kernel_size=(3, 3), padding=(0, 0)),
             torch.nn.ReLU(),
-            torch.nn.MaxPool2d((2, 2), stride=1),
+            torch.nn.MaxPool2d((2, 2)),
             torch.nn.Conv2d(16, 32, stride=1, kernel_size=(3, 3), padding=0),
             torch.nn.ReLU(),
             torch.nn.Conv2d(32, 32, stride=1, kernel_size=(3, 3), padding=0),
             torch.nn.ReLU(), 
-            torch.nn.MaxPool2d((2, 2), stride=1),
+            torch.nn.MaxPool2d((2, 2)),
             torch.nn.Conv2d(32, 64, stride=1, kernel_size=(3, 3), padding=0),
             torch.nn.ReLU(),
             torch.nn.Conv2d(64, 64, stride=1, kernel_size=(3, 3), padding=0),
-            torch.nn.Flatten(),
-            torch.nn.Linear(495616, 32),
-            torch.nn.ReLU(),
-            torch.nn.Linear(32, 16),
-            torch.nn.ReLU(),
-            torch.nn.Linear(16, 3),
+            torch.nn.Flatten(1)
         ])
+        self.predictor = Predictor_vanilla().to(self.args.device)
         self.network.to(self.args.device)
 
     def forward(self, x):
         x = x['imgs']
-        seq = []
-        out = x
-        for tt in range(x.shape[1]):
-            out = x[:, tt, :, :, :]
-            for i, layer in enumerate(self.network):
-                out = layer(out)
-            seq.append(out)
-        seq = torch.stack(seq, dim=0)
-        seq = seq.transpose(1, 0)[:, 2, :]
-        return seq
+        embedding = x.view(-1, 3, 100, 100)
+        for i, layer in enumerate(self.network):
+            embedding = layer(embedding)
+        pred = self.predictor(embedding.view(x.shape[0], -1))
+        # seq = []
+        # out = x
+        # for tt in range(x.shape[1]):
+        #     out = x[:, tt, :, :, :]
+        #     for i, layer in enumerate(self.network):
+        #         out = layer(out)
+        #     seq.append(out)
+        # seq = torch.stack(seq, dim=0)
+        # seq = seq.transpose(1, 0)[:, 2, :]
+        # return seq
+        return pred
 
 
 class RNNModel(torch.nn.Module):
@@ -284,6 +285,23 @@ class Encoder_box(torch.nn.Module):
         x = self.dropout(F.relu(self.bn(x)))
         x = self.fc2(x)
 
+        return x
+
+
+class Predictor_vanilla(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        in_channel = 64 * 18 * 18 * 5
+        self.fc1 = torch.nn.Linear(in_channel, 32)
+        self.fc2 = torch.nn.Linear(32, 16)
+        self.fc3 = torch.nn.Linear(16, 3)
+
+    def forward(self, x):
+        x = self.fc1(x)
+        x = F.relu(x)
+        x = self.fc2(x)
+        x = F.relu(x)
+        x = self.fc3(x)
         return x
 
 
