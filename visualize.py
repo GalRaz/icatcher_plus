@@ -1087,7 +1087,7 @@ def generate_preterm_vs_agreement(sorted_IDs, all_metrics, args, video_dataset):
     y = []
     for id in sorted_IDs:
         agreement = all_metrics[id]["human1_vs_machine_session"]["agreement"] * 100
-        preterm = video_dataset[id]["preterm"]
+        preterm = video_dataset[id]["child_preterm"]
         x.append(preterm)
         y.append(agreement)
 
@@ -1195,7 +1195,7 @@ def generate_confidence_vs_agreement(sorted_IDs, all_metrics, args, multi_datase
                          (incorrect_confb2, incorrect_confu2)])
         yerr = np.abs(yerr - ydata[:, None])
         rects2 = ax.bar(x + width / 2, ydata,
-                        yerr=yerr, width=width,
+                        yerr=yerr.T, width=width,
                         label=secondary_label, align='center', ecolor='black', capsize=10)
     labels = ['H1-M Agree', 'H1-M Disagree']
     ax.set_xticks(x)
@@ -1217,6 +1217,72 @@ def generate_confidence_vs_agreement(sorted_IDs, all_metrics, args, multi_datase
     plt.close(fig)
 
 
+def generate_transitions_plot(sorted_IDs, all_metrics, args, multi_dataset=False):
+    transitions_h1 = [100 * all_metrics[ID]["human1_vs_human2_session"]['n_transitions_1'] /
+                      all_metrics[ID]["human1_vs_human2_session"]['valid_frames_1'] for ID in sorted_IDs]
+    transitions_h2 = [100 * all_metrics[ID]["human1_vs_human2_session"]['n_transitions_2'] /
+                      all_metrics[ID]["human1_vs_human2_session"]['valid_frames_2'] for ID in sorted_IDs]
+    transitions_h3 = [100 * all_metrics[ID]["human1_vs_machine_session"]['n_transitions_2'] /
+                      all_metrics[ID]["human1_vs_machine_session"]['valid_frames_2'] for ID in sorted_IDs]
+    transitions_h1 = np.array(transitions_h1)
+    transitions_h2 = np.array(transitions_h2)
+    transitions_h3 = np.array(transitions_h3)
+    if args.raw_dataset_type == "vcx":
+        primary_label = "California-BW"
+        secondary_label = "Lookit"
+        np.savez("cali-bw_transitions_per_100", transitions_h1, transitions_h2, transitions_h3)
+    else:
+        primary_label = "Lookit"
+        secondary_label = "California-BW"
+    plt.rc('font', size=16)
+    fig, ax = plt.subplots()
+    x = np.arange(3)
+    width = 0.35  # the width of the bars
+    transitions_h1_mean, transitions_h1_confb, transitions_h1_confu = bootstrap(transitions_h1)
+    transitions_h2_mean, transitions_h2_confb, transitions_h2_confu = bootstrap(transitions_h2)
+    transitions_h3_mean, transitions_h3_confb, transitions_h3_confu = bootstrap(transitions_h3)
+    ydata = np.array([transitions_h1_mean, transitions_h2_mean, transitions_h3_mean])
+    yerr = np.array([(transitions_h1_confb, transitions_h1_confu),
+                     (transitions_h2_confb, transitions_h2_confu),
+                     (transitions_h3_confb, transitions_h3_confu)])
+    yerr = np.abs(yerr - ydata[:, None])
+    rects1 = ax.bar(x - width / 2, ydata,
+                    yerr=yerr.T, width=width,
+                    label=primary_label, align='center', ecolor='black', capsize=10)
+    if multi_dataset:
+        data = np.load("cali-bw_transitions_per_100.npz")
+        x1, x2, x3 = data["arr_0"], data["arr_1"], data["arr_2"]
+        transitions_h1_mean, transitions_h1_confb, transitions_h1_confu = bootstrap(x1)
+        transitions_h2_mean, transitions_h2_confb, transitions_h2_confu = bootstrap(x2)
+        transitions_h3_mean, transitions_h3_confb, transitions_h3_confu = bootstrap(transitions_h3)
+        ydata = np.array([transitions_h1_mean, transitions_h2_mean, transitions_h3_mean])
+        yerr = np.array([(transitions_h1_confb, transitions_h1_confu),
+                         (transitions_h2_confb, transitions_h2_confu),
+                         (transitions_h3_confb, transitions_h3_confu)])
+        yerr = np.abs(yerr - ydata[:, None])
+        rects2 = ax.bar(x + width / 2, ydata,
+                        yerr=yerr.T, width=width,
+                        label=secondary_label, align='center', ecolor='black', capsize=10)
+    labels = ['Human 1', 'Human 2', 'Model']
+    ax.set_xticks(x)
+    # ax.set_yticks(np.arange(0, 1.2, step=0.2))
+    ax.set_xticklabels(labels)  # , rotation=-45
+    ax.bar_label(rects1, fmt='%.2f', padding=3, label_type="center")
+    if multi_dataset:
+        ax.bar_label(rects2, fmt='%.2f', padding=3, label_type="center")
+    ax.legend(loc='lower right')
+    ax.set_ylabel("Transitions per 100 frames")
+    save_path = args.output_folder
+    if multi_dataset:
+        name = "multi_dataset_transitions_per_100_bar_plot.pdf"
+    else:
+        name = "transitions_per_100_bar_plot.pdf"
+    plt.savefig(str(Path(save_path, name)), bbox_inches='tight')
+    plt.cla()
+    plt.clf()
+    plt.close(fig)
+
+
 def generate_dataset_plots(sorted_IDs, all_metrics, args):
     """
     creates all the plots that relate to the entire dataset
@@ -1231,11 +1297,13 @@ def generate_dataset_plots(sorted_IDs, all_metrics, args):
     if args.raw_dataset_type == "lookit":
         generate_agreement_scatter(sorted_IDs, all_metrics, args, True)
         generate_confidence_vs_agreement(sorted_IDs, all_metrics, args, True)
+        generate_transitions_plot(sorted_IDs, all_metrics, args, True)
         csv_file = Path(args.raw_dataset_path / "prephys_split0_videos.tsv")
         video_dataset = preprocess.build_lookit_video_dataset(args.raw_dataset_path, csv_file)
     else:
         generate_agreement_scatter(sorted_IDs, all_metrics, args, False)
         generate_confidence_vs_agreement(sorted_IDs, all_metrics, args, False)
+        generate_transitions_plot(sorted_IDs, all_metrics, args, False)
         csv_file = Path(args.raw_dataset_path / "Cal_BW_March_split0_participants.csv")
         video_dataset = preprocess.build_marchman_video_dataset(args.raw_dataset_path, csv_file)
         generate_preterm_vs_agreement(sorted_IDs, all_metrics, args, video_dataset)
@@ -1502,7 +1570,7 @@ def create_cache_metrics(args, force_create=False):
         coding_intersect = set(human_annotation2).intersection(set(human_annotation))
         coding_intersect = coding_intersect.intersection(set(machine_annotation))
 
-        if args.unique_children_only:
+        if args.unique_children_only:  # allow only one video per child
             if args.raw_dataset_type == "lookit":
                 video_dataset = preprocess.build_lookit_video_dataset(args.raw_dataset_path,
                                                                       Path(args.raw_dataset_path, args.db_file_name))
@@ -1744,6 +1812,13 @@ def print_stats(sorted_ids, all_metrics, hvm=True):
             raw1 = all_metrics[ID]["human1_vs_human2_session"]["raw_coding1"]
             raw2 = all_metrics[ID]["human1_vs_human2_session"]["raw_coding2"]
             raw3 = all_metrics[ID]["human1_vs_machine_session"]["raw_coding2"]
+            start = max(all_metrics[ID]["human1_vs_human2_session"]["start"],
+                        all_metrics[ID]["human1_vs_machine_session"]["start"])
+            end = min(all_metrics[ID]["human1_vs_human2_session"]["end"],
+                        all_metrics[ID]["human1_vs_machine_session"]["end"])
+            raw1 = raw1[start:end]
+            raw2= raw2[start:end]
+            raw3 = raw3[start:end]
             mutually_valid_frames = np.logical_and(raw3, np.logical_and(raw1 >= 0, raw2 >= 0))
             humans_agree = raw1[mutually_valid_frames] == raw2[mutually_valid_frames]
             humans_disagree = ~humans_agree
@@ -1753,7 +1828,7 @@ def print_stats(sorted_ids, all_metrics, hvm=True):
             total_human_disagree = np.sum(humans_disagree)
             disagree_ratios.append(100 * total_disagree / total_human_disagree)
         disagree_ratio_mean, disagree_ratio_conf1, disagree_ratio_conf2 = bootstrap(np.array(disagree_ratios))
-        print("disagree ratio: {:.2f} [{:.2f}, {:.2f}]".format(disagree_ratio_mean,
+        print("disagree ratio: {:.2f}% [{:.2f}%, {:.2f}%]".format(disagree_ratio_mean,
                                                                disagree_ratio_conf1,
                                                                disagree_ratio_conf2))
     print("percent agreement: trial: {:.2f}% [{:.2f}%, {:.2f}%]".format(agreement_mean, agreement_conf1, agreement_conf2))

@@ -61,7 +61,7 @@ def build_marchman_video_dataset(raw_dataset_path, csv_location):
                                         "child_race": None,
                                         "child_gender": None,
                                         "skin_tone": None,
-                                        "preterm": None,
+                                        "child_preterm": None,
                                         "split": None,
                                         "start_timestamp": None}
     # parse csv file
