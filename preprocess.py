@@ -30,11 +30,11 @@ def create_annotation_split(args, csv_name):
     coding2_location = args.human2_codings_folder
     coding1_location.mkdir(parents=True, exist_ok=True)
     coding2_location.mkdir(parents=True, exist_ok=True)
-    csv_location = Path(args.raw_dataset_folder, csv_name)
+    csv_location = Path(args.raw_dataset_path, csv_name)
     if args.raw_dataset_type == "lookit":
-        db = build_lookit_video_dataset(args.raw_dataset_folder, csv_location)
+        db = build_lookit_video_dataset(args.raw_dataset_path, csv_location)
     elif args.raw_dataset_type == "vcx":
-        db = build_marchman_video_dataset(args.raw_dataset_folder, csv_location)
+        db = build_marchman_video_dataset(args.raw_dataset_path, csv_location)
     test_subset = [x for x in db.values() if x["in_csv"] and x["has_1coding"] and x["has_2coding"] and x["split"] == "2_test"]
     coding1_files = [(x["video_id"], x["first_coding_file"]) for x in test_subset]
     coding2_files = [(x["video_id"], x["second_coding_file"]) for x in test_subset]
