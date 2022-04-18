@@ -1184,7 +1184,8 @@ def generate_confidence_vs_agreement(sorted_IDs, all_metrics, args, multi_datase
     yerr = np.abs(yerr - ydata[:, None])
     rects1 = ax.bar(x - width / 2, ydata,
                     yerr=yerr.T, width=width,
-                    label=primary_label, align='center', ecolor='black', capsize=10)
+                    label=primary_label, align='center', ecolor='black',
+                    color=label_to_color("vlblue"), capsize=10)
     if multi_dataset:
         data = np.load("cali-bw_confidence.npz")
         x1, x2 = data["arr_0"], data["arr_1"]
@@ -1196,7 +1197,8 @@ def generate_confidence_vs_agreement(sorted_IDs, all_metrics, args, multi_datase
         yerr = np.abs(yerr - ydata[:, None])
         rects2 = ax.bar(x + width / 2, ydata,
                         yerr=yerr.T, width=width,
-                        label=secondary_label, align='center', ecolor='black', capsize=10)
+                        label=secondary_label, align='center', ecolor='black',
+                        color=label_to_color("vlgreen"), capsize=10)
     labels = ['H1-M Agree', 'H1-M Disagree']
     ax.set_xticks(x)
     ax.set_yticks(np.arange(0, 1.2, step=0.2))
@@ -1248,7 +1250,8 @@ def generate_transitions_plot(sorted_IDs, all_metrics, args, multi_dataset=False
     yerr = np.abs(yerr - ydata[:, None])
     rects1 = ax.bar(x - width / 2, ydata,
                     yerr=yerr.T, width=width,
-                    label=primary_label, align='center', ecolor='black', capsize=10)
+                    label=primary_label, color=label_to_color("vlblue"),
+                    align='center', ecolor='black', capsize=10)
     if multi_dataset:
         data = np.load("cali-bw_transitions_per_100.npz")
         x1, x2, x3 = data["arr_0"], data["arr_1"], data["arr_2"]
@@ -1261,8 +1264,8 @@ def generate_transitions_plot(sorted_IDs, all_metrics, args, multi_dataset=False
                          (transitions_h3_confb, transitions_h3_confu)])
         yerr = np.abs(yerr - ydata[:, None])
         rects2 = ax.bar(x + width / 2, ydata,
-                        yerr=yerr.T, width=width,
-                        label=secondary_label, align='center', ecolor='black', capsize=10)
+                        yerr=yerr.T, width=width, label=secondary_label,
+                        color=label_to_color("vlgreen"), align='center', ecolor='black', capsize=10)
     labels = ['Human 1', 'Human 2', 'Model']
     ax.set_xticks(x)
     # ax.set_yticks(np.arange(0, 1.2, step=0.2))
@@ -1817,7 +1820,7 @@ def print_stats(sorted_ids, all_metrics, hvm=True):
             end = min(all_metrics[ID]["human1_vs_human2_session"]["end"],
                         all_metrics[ID]["human1_vs_machine_session"]["end"])
             raw1 = raw1[start:end]
-            raw2= raw2[start:end]
+            raw2 = raw2[start:end]
             raw3 = raw3[start:end]
             mutually_valid_frames = np.logical_and(raw3, np.logical_and(raw1 >= 0, raw2 >= 0))
             humans_agree = raw1[mutually_valid_frames] == raw2[mutually_valid_frames]
