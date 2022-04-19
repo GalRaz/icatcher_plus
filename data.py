@@ -99,7 +99,6 @@ class LookItDataset(data.Dataset):
         logging.info("{}: Collecting paths for dataloader".format(self.opt.phase))
         video_counter = 0
         for name in coding_names:
-        #############################
             gaze_labels = np.load(str(Path.joinpath(dataset_folder_path, name, f'gaze_labels.npy')))
             gaze_labels_second = None
             if self.opt.use_mutually_agreed:
@@ -140,7 +139,6 @@ class LookItDataset(data.Dataset):
                             continue
                     img_files_seg = []
                     box_files_seg = []
-
                     for i in range(self.opt.sliding_window_size):
                         img_files_seg.append(f'{name}/img/{frame_number + i:05d}_{face_label_seg[i]:01d}.png')
                         box_files_seg.append(f'{name}/box/{frame_number + i:05d}_{face_label_seg[i]:01d}.npy')
@@ -157,9 +155,8 @@ class LookItDataset(data.Dataset):
                 continue
             video_counter += 1
         logging.info("Used {} videos, for a total of {} datapoints".format(video_counter, len(my_list)))
-        return my_list ## returns a list with frames and labels?
+        return my_list
 
-## mabey have the option to get C and get V
     def __getitem__(self, index):
         img_files_seg, box_files_seg, class_seg = self.paths[index]
         flip = 0
@@ -203,7 +200,7 @@ class LookItDataset(data.Dataset):
         }
 
 
-class MyDataLoader: ## add new option of maml dataset that supports the option of calibration and validation sets
+class MyDataLoader:
     def __init__(self, opt):
         self.opt = copy.deepcopy(opt)
         shuffle = (self.opt.phase == "train")

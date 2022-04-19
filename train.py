@@ -41,7 +41,7 @@ def train_loop(rank, args):
         running_corrects = 0
         num_datapoints = 0
         for batch_index, batch in enumerate(train_dataloader.dataloader):
-            model.optimizer.zero_grad() ## ask why should we set the gradients to 0
+            model.optimizer.zero_grad()
             output = model.network(batch)
             train_loss = model.loss_fn(output, batch["label"])
             _, predictions = torch.max(output, 1)
@@ -105,127 +105,6 @@ def train_loop(rank, args):
         else:
             model.scheduler.step()
 
-def innerLoop(model, batch):
-    running_loss = 0.0
-    running_corrects = 0
-    num_datapoints = 0
-    model.optimizer.zero_grad()  ## ask why should we set the gradients to 0
-    output = model.network(batch)
-    train_loss = model.loss_fn(output, batch["label"])
-    _, predictions = torch.max(output, 1)
-    train_loss.backward()
-    model.optimizer.step()
-    train_loss_np = train_loss.cpu().detach().numpy()
-    correct = torch.sum(torch.eq(predictions, batch["label"])).item()
- #   my_logger.write_scaler("batch", "train_loss", train_loss_np,
- #                          epoch * (len(train_dataloader.dataloader)) + batch_index)
- #   logging.info("train: epoch: {}, batch {} / {}, loss: {}, acc: {}".format(epoch,
- #                                                                            batch_index,
- #                                                                            len(train_dataloader.dataloader),
- #                                                                            train_loss_np,
- #                                                                            (correct / batch["label"].shape[0]) * 100))
-    num_datapoints += batch["label"].shape[0]
-    running_loss += train_loss.item() * batch["label"].shape[0]
-    running_corrects += torch.sum(torch.eq(predictions, batch["label"])).item()
-    return running_loss, running_corrects, num_datapoints, running_loss, running_corrects
-
-def MAMLtrain(rank, args):
-    args.rank = rank
-    if args.gpu_id == "-1":
-        args.device = "cpu"
-    else:
-        args.device = "cuda:{}".format(args.rank)
-    setup(args)
-    my_logger = logger.Logger(args)
-
-    ## might be good to set args.phase to one of :
-    # {train_calibration , train_validation , test_calibration , test_calibration}
-
-    args.phase = "train"
-    train_dataloader = data.MyDataLoader(args)
-    ##  args.set = calibrationSet
-    ##train_calibration_dataloader = data.MyDataLoader(args)
-    ##args.set = validationSet
-    ##train_validation_dataloader = data.MyDataLoader(args)
-    args.phase = "test"
-    test_dataloader = data.MyDataLoader(args)
-    ##  args.set = calibrationSet
-    #test_calibration_dataloader = data.MyDataLoader(args)
-    ##args.set = validationSet
-    #test_validation_dataloader = data.MyDataLoader(args)
-    model = models.MAMLmodel(args)
-
-    # model and optimizer for outer loop
-    test_model = model.clone()
-    test_optim = model.optimizer
-
-    # optimizer for inner loop
-    train_optim = model.innerOptimizer
-    for i in range(args.number_of_epochs): ## number of trials
-        for batch_index, batch in enumerate(train_dataloader.dataloader): # Ti in p(T)
-            
-
-
-
-
-
-
-
-def MAMLtrain(self, steps_outer, steps_inner=1, lr_inner=0.01, lr_outer=0.001,
-          disable_tqdm=False):
-    self.lr_inner = lr_inner
-    print('\nBeginning meta-learning for k = %d' % self.k)
-    print('> Please check tensorboard logs for progress.\n')
-
-    # Outer loop optimizer
-    optimizer = torch.optim.Adam(self.model.params(), lr=lr_outer)
-
-    # Model and optimizer for validation
-    valid_model = self.model.clone()
-    valid_optim = torch.optim.SGD(valid_model.params(), lr=self.lr_inner)
-
-    for i in tqdm(range(steps_outer), disable=disable_tqdm):
-        for j in range(steps_inner):
-            # Make copy of main model
-            self.meta_model.copy(self.model, same_var=True)
-
-            # Get a task
-            train_data, test_data = self.train_tasks.sample(num_train=self.k)
-
-            # Run the rest of the inner loop
-            task_loss = self.inner_loop(train_data, self.lr_inner)
-
-        # Calculate gradients on a held-out set
-        new_task_loss = forward_and_backward(
-            self.meta_model, test_data, train_data=train_data,
-        )
-
-        # Update the main model
-        optimizer.step()
-        optimizer.zero_grad()
-
-        if (i + 1) % 100 == 0:
-            # Log to Tensorflow
-            if self.tensorboard is not None:
-                self.tensorboard.add_scalar('meta-train/train-loss', task_loss, i)
-                self.tensorboard.add_scalar('meta-train/valid-loss', new_task_loss, i)
-
-            # Validation
-            losses = []
-            for j in range(self.valid_tasks.num_tasks):
-                valid_model.copy(self.model)
-                train_data, test_data = self.valid_tasks.sample_for_task(j, num_train=self.k)
-                train_loss = forward_and_backward(valid_model, train_data, valid_optim)
-                valid_loss = forward(valid_model, test_data, train_data=train_data)
-                losses.append((train_loss, valid_loss))
-            train_losses, valid_losses = zip(*losses)
-            if self.tensorboard is not None:
-                self.tensorboard.add_scalar('meta-valid/train-loss', np.mean(train_losses), i)
-                self.tensorboard.add_scalar('meta-valid/valid-loss', np.mean(valid_losses), i)
-
-    # Save MAML initial parameters
-    self.save_model_parameters()
-
 
 def setup(args):
     if args.rank == 0:  # setup logging
@@ -283,7 +162,121 @@ def predict_on_preprocessed(args):
     logging.info("per class acc: {}".format(norm_mat.diagonal()))
     logging.info("confusion matrix (normalized): {}".format(norm_mat))
 
+    ##############################################################################################################
 
+
+def get_data_ready_to_use(args, paths):
+    img_files_seg, box_files_seg, class_seg = paths
+    imgs = []
+    for img_file in img_files_seg:
+        img = Image.open(args.opt.dataset_folder / "faces" / img_file).convert('RGB')
+        img = args.img_processor(img)
+        imgs.append(img)
+    imgs = torch.stack(imgs)
+
+    boxs = []
+    for box_file in box_files_seg:
+        box = np.load(args.opt.dataset_folder / "faces" / box_file, allow_pickle=True).item()
+        box = torch.tensor([box['face_size'], box['face_ver'], box['face_hor'], box['face_height'], box['face_width']])
+        boxs.append(box)
+    boxs = torch.stack(boxs)
+    boxs = boxs.float()
+    imgs = imgs.to(args.opt.device)
+    boxs = boxs.to(args.opt.device)
+    class_seg = torch.as_tensor(class_seg).to(args.opt.device)
+    return {
+        'imgs': imgs,  # n x 3 x 100 x 100
+        'boxs': boxs,  # n x 5
+        'label': class_seg,  # n x 1
+        'path': img_files_seg[2]  # n x 1
+    }
+
+
+##################################
+def sample(path, k, l):
+    calibration_path = path[:k]
+    validation_path = path[k:k + l]
+    return calibration_path, validation_path
+
+
+############################
+
+def get_new_metamodel_weights(meta_model, temp_model, validation_set):
+    meta_model.optimizer.zero_grad()
+    output = temp_model.network(validation_set)
+    train_loss = temp_model.innerScheduler(output, validation_set["label"])
+    train_loss.backward()
+    meta_model.optimizer.step(train_loss)
+
+
+############################
+def innerLoop(model, batch):
+    #    running_loss = 0.0
+    #    running_corrects = 0
+    #    num_datapoints = 0
+    model.optimizer.zero_grad()
+    output = model.network(batch)  ### does this returns a list of results acording to the network?
+    train_loss = model.innerScheduler(output, batch["label"])
+    _, predictions = torch.max(output, 1)
+    train_loss.backward()
+    model.innerOptimizer.step()
+
+
+#    train_loss_np = train_loss.cpu().detach().numpy()
+#    correct = torch.sum(torch.eq(predictions, batch["label"])).item()
+#   my_logger.write_scaler("batch", "train_loss", train_loss_np,
+#                          epoch * (len(train_dataloader.dataloader)) + batch_index)
+#   logging.info("train: epoch: {}, batch {} / {}, loss: {}, acc: {}".format(epoch,
+#                                                                            batch_index,
+#                                                                            len(train_dataloader.dataloader),
+#                                                                            train_loss_np,
+#                                                                            (correct / batch["label"].shape[0]) * 100))
+#    num_datapoints = batch["label"].shape[0]
+#    running_loss = train_loss.item() * batch["label"].shape[0]
+#    running_corrects = torch.sum(torch.eq(predictions, batch["label"])).item()
+#    return running_loss, running_corrects, num_datapoints
+
+##############################
+def MAMLtrain(rank, args):
+    args.rank = rank
+    if args.gpu_id == "-1":
+        args.device = "cpu"
+    else:
+        args.device = "cuda:{}".format(args.rank)
+    setup(args)
+    my_logger = logger.Logger(args)
+
+    ## might be good to set args.phase to one of :
+    # {train_calibration , train_validation , test_calibration , test_calibration}
+
+    args.phase = "train"
+    train_dataloader = data.MyDataLoader(args)
+    args.phase = "test"
+    test_dataloader = data.MyDataLoader(args)
+    meta_model = models.MAMLmodel(args)
+
+    # model and optimizer for outer loop
+    outer_optim = meta_model.optimizer
+
+    # optimizer for inner loop
+    test_model = meta_model.clone()
+    inner_optim = meta_model.innerOptimizer
+    for i in range(args.number_of_epochs):  ## number of trials
+        for task_index, task in enumerate(train_dataloader.dataloader):  # Ti in p(T)
+            task_model = test_model.clone()
+            train_samples, test_samples = sample(task, test_model.K, test_model.L)
+            calibration_samples = []
+            validation_samples = []
+            for train_sample in train_samples:
+                calibration_samples.append(get_data_ready_to_use(args, train_sample))
+            for test_sample in test_samples:
+                validation_samples.append(get_data_ready_to_use(args, test_sample))
+
+            innerLoop(task_model, calibration_samples)  # updating test model weights
+            get_new_metamodel_weights(meta_model, task_model, validation_samples)
+
+
+###################################################################################################################
 
 
 if __name__ == "__main__":

@@ -370,14 +370,16 @@ class Encoder_box_seq(torch.nn.Module):
 
         return x
 
-
+#########new
 class MAMLmodel(MyModel):
 
     def __init__(self, opt):
         super().__init__(opt, True)
-
+        self.lr = self.opt.lr
         self.innerOptimizer = self.get_inner_optimizer(self.opt.inneroptimizer)
         self.innerScheduler = self.get_inner_scheduler(self.opt.inner_lr_policy)
+        self.K = self.opt.K
+        self.L = self.opt.L
         self.network.to(self.opt.device)
 
 
@@ -415,5 +417,7 @@ class MAMLmodel(MyModel):
         else:
             raise NotImplementedError
         return scheduler
+
+#########
 
 

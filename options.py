@@ -28,14 +28,17 @@ def parse_arguments_for_training():
     parser.add_argument("--loss", type=str, choices=["cat_cross_entropy"], default="cat_cross_entropy",
                         help="Selects loss function to optimize")
     parser.add_argument("--optimizer", type=str, choices=["adam", "SGD"], default="adam")
+    ##########new
     parser.add_argument("--inneroptimizer", type=str, choices=["adam", "SGD"], default="SGD")
+    ############
     parser.add_argument("--lr", type=float, default=1e-5, help="Initial learning rate")
     parser.add_argument("--lr_policy", type=str, choices=["lambda", "plateau", "multi_step", "cyclic"],
                         default="plateau",
                         help="learning rate scheduler policy")
+    #########new
     parser.add_argument("--inner_lr_policy", type=str, choices=["lambda", "plateau", "multi_step", "cyclic"],
-                        default="plateau",
-                        help="learning rate scheduler policy for inner loop")
+                        default="plateau", help="learning rate scheduler policy for inner loop")
+    ############
     parser.add_argument("--lr_decay_rate", type=int, default=0.98, help="Decay rate for lamda lr policy.")
     parser.add_argument("--continue_train", action="store_true", help="Continue training from latest iteration")
     parser.add_argument("--use_disjoint", action="store_true",
@@ -56,6 +59,12 @@ def parse_arguments_for_training():
     parser.add_argument("--log", action="store_true", help="Logs into a file instead of stdout")
     parser.add_argument("-v", "--verbosity", type=str, choices=["debug", "info", "warning"], default="info",
                         help="Selects verbosity level")
+    ###### new
+    parser.add_argument("-K", "--calibrationSetSize", type=int, default=1,
+                        help="Select the number of datapoint in the calibration set")
+    parser.add_argument("-L", "--validationSetSize", type=int, default=10,
+                        help="Select the number of datapoint in the validation set")
+    ########
     args = parser.parse_args()
     args.dataset_folder = Path(args.dataset_folder)
     # add some useful arguments for the rest of the code
