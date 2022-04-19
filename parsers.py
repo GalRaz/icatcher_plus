@@ -427,7 +427,7 @@ class DatavyuParser(BaseParser):
             coding[data['look_type'] == 'e'] = -1  # error looks
             coding = coding.squeeze()
             trials = self.get_trial_intervals(0, label_path)
-            return coding, coding[0], trials[-1][1]
+            return coding, trials[0][0], trials[-1][1]
         else:
             return None
 
