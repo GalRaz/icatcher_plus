@@ -282,9 +282,17 @@ def MAMLtrain(rank, args):
 if __name__ == "__main__":
     args = options.parse_arguments_for_training()
     if args.distributed:
+        if args.train_type == "MAML":
+            mp.spawn(MAMLtrain,
+                     args=(args,),
+                     nprocs=args.world_size,
+                     join=True)
         mp.spawn(train_loop,
                  args=(args,),
                  nprocs=args.world_size,
                  join=True)
+
     else:
+        if args.train_type == "MAML":
+            MAMLtrain(0,args)
         train_loop(0, args)

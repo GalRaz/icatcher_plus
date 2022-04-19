@@ -11,6 +11,8 @@ def parse_arguments_for_training():
     :return:
     """
     parser = argparse.ArgumentParser()
+    parser.add_argument("--train_type", type=str, default="MAML",
+                        help="Selects the training algorithm")
     parser.add_argument("experiment_name", help="The name of the experiment.")
     parser.add_argument("dataset_folder", help="The path to the folder containing the data")
     parser.add_argument("--number_of_classes", type=int, default=3, help="number of classes to predict")
