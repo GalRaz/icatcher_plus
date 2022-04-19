@@ -213,7 +213,7 @@ def preprocess_raw_lookit_dataset(args):
     elif args.split_type == "split0_train":
         videos = [x for x in video_dataset.values() if x["in_csv"] and x["has_1coding"] and (x["split"] == "1_train" or x["split"] == "1_validate")]
     elif args.split_type == "split0_test":
-        videos = [x for x in video_dataset.values() if x["in_csv"] and x["has_1coding"] and x["split"] == "2_test"]
+        videos = [x for x in video_dataset.values() if x["in_csv"] and x["has_1coding"] and x["has_2coding"] and x["split"] == "2_test"]
     else:
         raise NotImplementedError
     videos = np.array(videos)

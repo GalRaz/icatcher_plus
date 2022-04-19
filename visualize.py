@@ -152,7 +152,7 @@ def frame_to_time_ms(frame, fps=30):
     return int(frame * 1000 / fps)
 
 
-def get_stats_in_interval(start, end, coding1, coding2, confidence):
+def get_stats_in_interval(start, end, coding1, coding2, confidence, valid_class_num):
     """
     given two codings (single dimensional numpy arrays) and a start and end time,
     calculates various metrics we care about. assumes coding1[i], coding2[i] refer to same time
@@ -161,6 +161,7 @@ def get_stats_in_interval(start, end, coding1, coding2, confidence):
     :param coding1: np array (1 dimensional)
     :param coding2: np array (1 dimensional)
     :param confidence: optional np array (1 dimensional) of confidence scores for one of the coding files
+    :param valid_class_num: number of valid classes in dataset
     :return:
     """
     # fix in case one coding ends sooner than end
@@ -171,6 +172,8 @@ def get_stats_in_interval(start, end, coding1, coding2, confidence):
         coding1 = np.concatenate((coding1, -3*np.ones(diff1, dtype=int)))
     if diff2 > 0:
         coding2 = np.concatenate((coding2, -3*np.ones(diff2, dtype=int)))
+        if confidence is not None:
+            confidence = np.concatenate((confidence, -1*np.ones(diff2, dtype=int)))
     coding1_interval = coding1[start:end]
     coding2_interval = coding2[start:end]
     mutually_valid_frames = np.logical_and(coding1_interval >= 0, coding2_interval >= 0)
@@ -215,8 +218,11 @@ def get_stats_in_interval(start, end, coding1, coding2, confidence):
         agreement = 0
     else:
         agreement = np.sum(equal[mutually_valid_frames]) / equal_and_non_equal
-    _, mat3, _ = calculate_confusion_matrix(coding1_interval_mut_valid, coding2_interval_mut_valid,
-                                            class_num=3, flip_xy=True, verbose=False)
+    if valid_class_num == 3:
+        _, mat3, _ = calculate_confusion_matrix(coding1_interval_mut_valid, coding2_interval_mut_valid,
+                                                class_num=3, flip_xy=True, verbose=False)
+    else:
+        mat3 = None
 
     on_screen_1 = coding1_interval_mut_valid.copy()
     on_screen_1[on_screen_1 > 0] = 1
@@ -279,20 +285,22 @@ def get_stats_in_interval(start, end, coding1, coding2, confidence):
             }
 
 
-def compare_uncollapsed_coding_files(coding1, coding2, intervals, confidence=None):
+def compare_uncollapsed_coding_files(coding1, coding2, intervals, confidence=None, valid_class_num=3):
     """
     computes various metrics between two codings on a set of intervals
     :param coding1: first coding, uncollapsed numpyarray of events
     :param coding2: second coding, uncollapsed numpyarray of events
     :param intervals: list of lists where each internal list contains 2 entries indicating start and end time of interval.
     :param confidence: confidence of one of the codings, uncollapsed float np array of confidence (-1 for invalid)
+    :param valid_class_num: number of valid classes in dataset
     note: intervals are considered as [) i.e. includes start time, but excludes end time.
     :return: array of dictionaries containing various metrics (1 dict per interval)
     """
     results = []
-    for interval in intervals:
+    for i, interval in enumerate(intervals):
+        # logging.info("trial: {} / {}".format(i, len(intervals)))
         t_start, t_end = interval[0], interval[1]
-        results.append(get_stats_in_interval(t_start, t_end, coding1, coding2, confidence))
+        results.append(get_stats_in_interval(t_start, t_end, coding1, coding2, confidence, valid_class_num))
     if len(results) == 1:
         results = results[0]
     return results
@@ -313,6 +321,11 @@ def compare_coding_files(human_coding_file, human_coding_file2, machine_coding_f
         raise NotImplementedError
     machine, mstart, mend = parser.parse(machine_coding_file.stem, machine_coding_file)
     machine_confidence = parser.get_confidence(machine_coding_file)
+    if args.raw_dataset_type == "datavyu":
+        machine[machine > 0] = 1
+        valid_class_num = 2
+    else:
+        valid_class_num = 3
     trial_times = None
     if args.human_coding_format == "vcx":
         csv_file = Path(args.raw_dataset_path / "Cal_BW_March_split0_participants.csv")
@@ -320,43 +333,57 @@ def compare_coding_files(human_coding_file, human_coding_file2, machine_coding_f
     elif args.human_coding_format == "lookit":
         csv_file = Path(args.raw_dataset_path / "prephys_split0_videos.tsv")
         parser = parsers.LookitParser(30, csv_file)
+    elif args.human_coding_format == "datavyu":
+        parser = parsers.DatavyuParser()
     else:
         raise NotImplementedError
     human, start1, end1 = parser.parse(human_coding_file.stem, human_coding_file)
-    human2, start2, end2 = parser.parse(human_coding_file2.stem, human_coding_file2)
+    if human_coding_file2:
+        human2, start2, end2 = parser.parse(human_coding_file2.stem, human_coding_file2)
+        if end1 != end2:
+            logging.warning("humans don't agree on ending: {}".format(human_coding_file))
+            logging.warning("diff: {}".format(np.abs(end1 - end2)))
     if args.human_coding_format == "lookit":
         labels = parser.load_and_sort(human_coding_file)
         trial_times = parser.get_trial_intervals(start1, labels)
     elif args.human_coding_format == "vcx":
         trial_times = parser.get_trial_intervals(start1, human)
-    if end1 != end2:
-        logging.warning("humans don't agree on ending: {}".format(human_coding_file))
-        logging.warning("diff: {}".format(np.abs(end1 - end2)))
+    elif args.human_coding_format == "datavyu":
+        trial_times = parser.get_trial_intervals(start1, human_coding_file)
+    else:
+        raise NotImplementedError
     metrics = {}
     machine_uncol = parser.uncollapse_labels(machine, mstart, mend)
     # create a version of machine annotation where machine "invalid" is replaced with "away"
     special_machine = machine_uncol.copy()
     special_machine[special_machine < 0] = 0
     human1_uncol = parser.uncollapse_labels(human, start1, end1)
-    human2_uncol = parser.uncollapse_labels(human2, start2, end2)
-    # bins = [[x, x+30] for x in range(0, end1, 30)]
     logging.info("trial level stats")
     metrics["human1_vs_machine_trials"] = compare_uncollapsed_coding_files(human1_uncol, machine_uncol, trial_times,
-                                                                           confidence=machine_confidence)
-    metrics["human1_vs_human2_trials"] = compare_uncollapsed_coding_files(human1_uncol, human2_uncol, trial_times)
-    # metrics["human1_vs_machine_100msbins"] = compare_uncollapsed_coding_files(human1_uncol, machine_uncol, bins)
+                                                                           confidence=machine_confidence,
+                                                                           valid_class_num=valid_class_num)
+    if human_coding_file2:
+        human2_uncol = parser.uncollapse_labels(human2, start2, end2)
+        metrics["human1_vs_human2_trials"] = compare_uncollapsed_coding_files(human1_uncol, human2_uncol, trial_times)
+        ICC_looking_time_hvh = calc_ICC(metrics["human1_vs_human2_trials"],
+                                        "looking_time_1", "looking_time_2",
+                                        len(trial_times))
+        ICC_percent_r_hvh = calc_ICC(metrics["human1_vs_human2_trials"],
+                                     "percent_r_1", "percent_r_2",
+                                     len(trial_times))
+    else:
+        ICC_looking_time_hvh = None
+        ICC_percent_r_hvh = None
     ICC_looking_time_hvm = calc_ICC(metrics["human1_vs_machine_trials"],
                                     "looking_time_1", "looking_time_2",
                                     len(trial_times))
-    ICC_looking_time_hvh = calc_ICC(metrics["human1_vs_human2_trials"],
-                                    "looking_time_1", "looking_time_2",
-                                    len(trial_times))
-    ICC_percent_r_hvm = calc_ICC(metrics["human1_vs_machine_trials"],
-                                 "percent_r_1", "percent_r_2",
-                                 len(trial_times))
-    ICC_percent_r_hvh = calc_ICC(metrics["human1_vs_human2_trials"],
-                                 "percent_r_1", "percent_r_2",
-                                 len(trial_times))
+    if not args.raw_dataset_type == "datavyu":
+        ICC_percent_r_hvm = calc_ICC(metrics["human1_vs_machine_trials"],
+                                     "percent_r_1", "percent_r_2",
+                                     len(trial_times))
+    else:
+        ICC_percent_r_hvm = None
+
     metrics["stats"] = {"ICC_LT_hvm": ICC_looking_time_hvm,
                         "ICC_LT_hvh": ICC_looking_time_hvh,
                         "ICC_PR_hvm": ICC_percent_r_hvm,
@@ -366,14 +393,16 @@ def compare_coding_files(human_coding_file, human_coding_file2, machine_coding_f
     logging.info("session level stats")
     metrics["human1_vs_machine_session"] = compare_uncollapsed_coding_files(human1_uncol,
                                                                             machine_uncol,
-                                                                            [[0, max(end1, mend)]])
+                                                                            [[0, max(end1, mend)]],
+                                                                            valid_class_num=valid_class_num)
     metrics["human1_vs_smachine_session"] = compare_uncollapsed_coding_files(human1_uncol,
                                                                              special_machine,
-                                                                             [[0, max(end1, mend)]])
-    # metrics["human1_vs_human2_100msbins"] = compare_uncollapsed_coding_files(human1_uncol, human2_uncol, bins)
-    metrics["human1_vs_human2_session"] = compare_uncollapsed_coding_files(human1_uncol,
-                                                                           human2_uncol,
-                                                                           [[0, max(end1, end2)]])
+                                                                             [[0, max(end1, mend)]],
+                                                                             valid_class_num=valid_class_num)
+    if human_coding_file2:
+        metrics["human1_vs_human2_session"] = compare_uncollapsed_coding_files(human1_uncol,
+                                                                               human2_uncol,
+                                                                               [[0, max(end1, end2)]])
     return metrics
 
 
@@ -1303,13 +1332,15 @@ def generate_dataset_plots(sorted_IDs, all_metrics, args):
         generate_transitions_plot(sorted_IDs, all_metrics, args, True)
         csv_file = Path(args.raw_dataset_path / "prephys_split0_videos.tsv")
         video_dataset = preprocess.build_lookit_video_dataset(args.raw_dataset_path, csv_file)
-    else:
+    elif args.raw_dataset_type == "vcx":
         generate_agreement_scatter(sorted_IDs, all_metrics, args, False)
         generate_confidence_vs_agreement(sorted_IDs, all_metrics, args, False)
         generate_transitions_plot(sorted_IDs, all_metrics, args, False)
         csv_file = Path(args.raw_dataset_path / "Cal_BW_March_split0_participants.csv")
         video_dataset = preprocess.build_marchman_video_dataset(args.raw_dataset_path, csv_file)
         generate_preterm_vs_agreement(sorted_IDs, all_metrics, args, video_dataset)
+    else:
+        raise NotImplementedError
     generate_age_vs_agreement(sorted_IDs, all_metrics, args, video_dataset)
     generate_race_vs_agreement(sorted_IDs, all_metrics, args, video_dataset)
     generate_gender_vs_agreement(sorted_IDs, all_metrics, args, video_dataset)
@@ -1467,9 +1498,9 @@ def plot_luminance_vs_accuracy(sorted_IDs, all_metrics, args):
     # plt.xlim([0, 1])
     # plt.ylim([0, 1])
     plt.xlabel("Luminance")
-    plt.ylabel("iCatcher accuracy")
-    plt.title("iCatcher accuracy versus mean video luminance for all doubly coded videos")
-    plt.savefig(Path(args.output_folder, 'iCatcher_lum_vs_acc.png'))
+    plt.ylabel("Percent Agreement")
+    # plt.title("iCatcher accuracy versus mean video luminance for all doubly coded videos")
+    plt.savefig(Path(args.output_folder, 'agreement_vs_luminance.pdf'))
     plt.cla()
     plt.clf()
 
@@ -1482,6 +1513,8 @@ def get_face_pixel_density(id, faces_folder):
     :return:
     """
     face_areas = []
+    if faces_folder is None:
+        return None
     file = Path(faces_folder, id, 'face_labels_fc.npy')
     if file.is_file():
         face_labels = np.load(file)
@@ -1505,6 +1538,8 @@ def get_face_location_std(id, faces_folder):
     :return:
     """
     movements = []
+    if faces_folder is None:
+        return None
     file = Path(faces_folder, id, 'face_labels_fc.npy')
     if file.is_file():
         face_labels = np.load(file)
@@ -1526,10 +1561,10 @@ def plot_face_pixel_density_vs_accuracy(sorted_IDs, all_metrics, args):
     plt.figure(figsize=(8.0, 6.0))
     densities = [all_metrics[x]["stats"]["avg_face_pixel_density"] for x in sorted_IDs]
     plt.scatter(densities, [all_metrics[id]["human1_vs_machine_session"]["agreement"] for id in sorted_IDs])
-    plt.xlabel("Face pixel denisty")
-    plt.ylabel("iCatcher accuracy")
-    plt.title("iCatcher accuracy versus average face pixel density per video")
-    plt.savefig(Path(args.output_folder, 'iCatcher_face_density_acc.png'))
+    plt.xlabel("Face pixel density")
+    plt.ylabel("Percent Agreement")
+    # plt.title("iCatcher accuracy versus average face pixel density per video")
+    plt.savefig(Path(args.output_folder, 'agreement_vs_face_density.pdf'))
     plt.cla()
     plt.clf()
 
@@ -1539,9 +1574,9 @@ def plot_face_location_vs_accuracy(sorted_IDs, all_metrics, args):
     stds = [all_metrics[x]["stats"]["avg_face_loc_std"] for x in sorted_IDs]
     plt.scatter(stds, [all_metrics[id]["human1_vs_machine_session"]["agreement"] for id in sorted_IDs])
     plt.xlabel("Face location std in pixels")
-    plt.ylabel("iCatcher accuracy")
-    plt.title("iCatcher accuracy versus face location pixel std")
-    plt.savefig(Path(args.output_folder, 'iCatcher_face_location_std_acc.png'))
+    plt.ylabel("Percent Agreement")
+    # plt.title("iCatcher accuracy versus face location pixel std")
+    plt.savefig(Path(args.output_folder, 'agreement_vs_face_loc_std.pdf'))
     plt.cla()
     plt.clf()
 
@@ -1563,15 +1598,16 @@ def create_cache_metrics(args, force_create=False):
         for file in Path(args.human_codings_folder).glob("*"):
             human_annotation.append(file.stem)
             human_ext = file.suffix
-        for file in Path(args.human2_codings_folder).glob("*"):
-            human_annotation2.append(file.stem)
-            human2_ext = file.suffix
         for file in Path(args.machine_codings_folder).glob("*"):
             machine_annotation.append(file.stem)
             machine_ext = file.suffix
 
-        coding_intersect = set(human_annotation2).intersection(set(human_annotation))
-        coding_intersect = coding_intersect.intersection(set(machine_annotation))
+        coding_intersect = set(machine_annotation).intersection(set(human_annotation))
+        if args.human2_codings_folder:
+            for file in Path(args.human2_codings_folder).glob("*"):
+                human_annotation2.append(file.stem)
+                human2_ext = file.suffix
+            coding_intersect = coding_intersect.intersection(set(human_annotation2))
 
         if args.unique_children_only:  # allow only one video per child
             if args.raw_dataset_type == "lookit":
@@ -1599,8 +1635,11 @@ def create_cache_metrics(args, force_create=False):
         for i, code_file in enumerate(coding_intersect):
             logging.info("computing stats: {} / {}".format(i, len(coding_intersect) - 1))
             human_coding_file = Path(args.human_codings_folder, code_file + human_ext)
-            human_coding_file2 = Path(args.human2_codings_folder, code_file + human2_ext)
             machine_coding_file = Path(args.machine_codings_folder, code_file + machine_ext)
+            if args.human2_codings_folder:
+                human_coding_file2 = Path(args.human2_codings_folder, code_file + human2_ext)
+            else:
+                human_coding_file2 = None
             key = human_coding_file.stem
             try:
                 res = compare_coding_files(human_coding_file, human_coding_file2, machine_coding_file, args)
@@ -1771,12 +1810,13 @@ def temp_hook(frame, cv2_bboxes, frame_counter):
         plt.close(fig)
 
 
-def print_stats(sorted_ids, all_metrics, hvm=True):
+def print_stats(sorted_ids, all_metrics, hvm, args):
     """
     prints a bunch of metrics for H1 vs M and H1 vs H2
     :param sorted_ids: the ids of the videos
     :param all_metrics: all possible metrics
     :param hvm: whether to print metrics for H1 v M or H1 v H2
+    :param args: command line arguments
     :return:
     """
     if hvm:
@@ -1805,11 +1845,14 @@ def print_stats(sorted_ids, all_metrics, hvm=True):
     ICC_LT_mean, ICC_LT_conf1, ICC_LT_conf2 = bootstrap(ICC_LT)
     # ICC_LT_mean = np.mean(ICC_LT)
     # ICC_LT_std = np.std(ICC_LT)
-    ICC_PR_mean, ICC_PR_conf1, ICC_PR_conf2 = bootstrap(ICC_PR)
+    if not args.raw_dataset_type == "datavyu":
+        ICC_PR_mean, ICC_PR_conf1, ICC_PR_conf2 = bootstrap(ICC_PR)
+    else:
+        ICC_PR_mean, ICC_PR_conf1, ICC_PR_conf2 = 0, 0, 0
     # ICC_PR_mean = np.mean(ICC_PR)
     # ICC_PR_std = np.std(ICC_PR)
     print("hvm: {}".format(hvm))
-    if hvm:
+    if not hvm:
         disagree_ratios = []
         for ID in sorted_ids:
             raw1 = all_metrics[ID]["human1_vs_human2_session"]["raw_coding1"]
@@ -1852,12 +1895,14 @@ if __name__ == "__main__":
     # sort by percent agreement
     sorted_ids = sorted(list(all_metrics.keys()),
                         key=lambda x: all_metrics[x]["human1_vs_machine_session"]["agreement"])
-    print_stats(sorted_ids, all_metrics, True)
-    print_stats(sorted_ids, all_metrics, False)
-    generate_collage_plot(sorted_ids, all_metrics, args.output_folder)
-    generate_collage_plot2(sorted_ids, all_metrics, args.output_folder)
-    generate_dataset_plots(sorted_ids, all_metrics, args)
-    generate_session_plots(sorted_ids, all_metrics, args)
-    # plot_face_pixel_density_vs_accuracy(sorted_ids, all_metrics, args)
-    # plot_face_location_vs_accuracy(sorted_ids, all_metrics, args)
-    # plot_luminance_vs_accuracy(sorted_ids, all_metrics, args)
+    print_stats(sorted_ids, all_metrics, True, args)
+    if args.human2_codings_folder:
+        print_stats(sorted_ids, all_metrics, False, args)
+        generate_collage_plot(sorted_ids, all_metrics, args.output_folder)
+        generate_collage_plot2(sorted_ids, all_metrics, args.output_folder)
+        generate_dataset_plots(sorted_ids, all_metrics, args)
+        if args.faces_folder:
+            plot_face_pixel_density_vs_accuracy(sorted_ids, all_metrics, args)
+            plot_face_location_vs_accuracy(sorted_ids, all_metrics, args)
+            plot_luminance_vs_accuracy(sorted_ids, all_metrics, args)
+        generate_session_plots(sorted_ids, all_metrics, args)

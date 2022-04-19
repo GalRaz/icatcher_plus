@@ -3,6 +3,7 @@ import logging
 from pathlib import Path
 import numpy as np
 import preprocess
+import pandas as pd
 
 
 class BaseParser:
@@ -409,3 +410,39 @@ class VCXParser(BaseParser):
                 trials_times.append([prev_frame, response[0]])
                 prev_frame = response[0]
         return trials_times
+
+
+class DatavyuParser(BaseParser):
+    """
+    parses datavyu files
+    """
+    def __init__(self):
+        super().__init__()
+
+    def parse(self, video_id, label_path):
+        if label_path:  # AW/LB are the coder initials, and they used different column names unfortunately
+            data = pd.read_csv(label_path)
+            coding = np.ones([len(data), 1])  # on looks are not coded (implied by other conditions)
+            coding[data['look_type'] == 'n'] = 0  # off looks
+            coding[data['look_type'] == 'e'] = -1  # error looks
+            coding = coding.squeeze()
+            trials = self.get_trial_intervals(0, label_path)
+            return coding, coding[0], trials[-1][1]
+        else:
+            return None
+
+    def get_trial_intervals(self, start, label_path):
+        if label_path:
+            data = pd.read_csv(label_path)  # read data
+            data = data[data['trial_type'] != 'a']  # remove attention getter trials (haven't been coded meticulously)
+            onset_col = data['trial_onset']
+            onset_times = np.unique(onset_col)
+            onset_frames = [data['nFrame'].iloc[np.where(onset_col==time)[0][0]] for time in onset_times[~np.isnan(onset_times)]]  # first frame of trial
+            offset_col = data['trial_offset']  # get offset column
+            offset_times = np.unique(offset_col)  # unique offset times, add one
+            offset_frames = [1 + data['nFrame'].iloc[np.where(offset_col==time)[0][-1]] for time in offset_times[~np.isnan(offset_times)]]  # last frame of trial
+            zipped_trial_times = list(np.dstack([onset_frames, offset_frames]).flatten())  # interleave onsets and offsets
+            zipped_trial_times = [zipped_trial_times[i: i+2] for i in range(0, len(zipped_trial_times), 2)]  # convert to list of lists
+            return zipped_trial_times
+        else:
+            return None
