@@ -10,6 +10,7 @@ import torch.distributed as dist
 import numpy as np
 from pathlib import Path
 from visualize import calculate_confusion_matrix
+from PIL import Image
 
 
 def train_loop(rank, args):
