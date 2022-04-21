@@ -18,7 +18,7 @@ def parse_arguments_for_training():
     parser.add_argument("--number_of_classes", type=int, default=3, help="number of classes to predict")
     parser.add_argument("--batch_size", type=int, default=16, help="Batch size to train with")
     parser.add_argument("--image_size", type=int, default=100, help="All images will be resized to this size")
-    parser.add_argument("--sliding_window_size", type=int, default=9, help="Number of frames in rolling window of each datapoint")
+    parser.add_argument("--sliding_window_size", type=int, default=10, help="Number of frames in rolling window of each datapoint")
     parser.add_argument("--window_stride", type=int, default=2, help="Stride between frames in rolling window")
     parser.add_argument("--eliminate_transitions", action="store_true",
                         help="If true, does not use frames where transitions occur (train only!)")
@@ -62,9 +62,9 @@ def parse_arguments_for_training():
     parser.add_argument("-v", "--verbosity", type=str, choices=["debug", "info", "warning"], default="info",
                         help="Selects verbosity level")
     ###### new
-    parser.add_argument("-K", "--calibrationSetSize", type=int, default=1,
+    parser.add_argument("--K", "--calibrationSetSize", type=int, default=1,
                         help="Select the number of datapoint in the calibration set")
-    parser.add_argument("-L", "--validationSetSize", type=int, default=10,
+    parser.add_argument("--L", "--validationSetSize", type=int, default=10,
                         help="Select the number of datapoint in the validation set")
     ########
     args = parser.parse_args()

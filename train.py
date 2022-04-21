@@ -4,6 +4,7 @@ import logging
 import logger
 import data
 import models
+import copy
 import torch
 import torch.multiprocessing as mp
 import torch.distributed as dist
@@ -50,12 +51,14 @@ def train_loop(rank, args):
             model.optimizer.step()
             train_loss_np = train_loss.cpu().detach().numpy()
             correct = torch.sum(torch.eq(predictions, batch["label"])).item()
-            my_logger.write_scaler("batch", "train_loss", train_loss_np, epoch*(len(train_dataloader.dataloader)) + batch_index)
+            my_logger.write_scaler("batch", "train_loss", train_loss_np,
+                                   epoch * (len(train_dataloader.dataloader)) + batch_index)
             logging.info("train: epoch: {}, batch {} / {}, loss: {}, acc: {}".format(epoch,
                                                                                      batch_index,
                                                                                      len(train_dataloader.dataloader),
                                                                                      train_loss_np,
-                                                                                     (correct / batch["label"].shape[0]) * 100))
+                                                                                     (correct / batch["label"].shape[
+                                                                                         0]) * 100))
             num_datapoints += batch["label"].shape[0]
             running_loss += train_loss.item() * batch["label"].shape[0]
             running_corrects += torch.sum(torch.eq(predictions, batch["label"])).item()
@@ -154,7 +157,8 @@ def predict_on_preprocessed(args):
             # running_loss += val_loss.item() * batch["label"].shape[0]
             running_corrects += torch.sum(torch.eq(predictions, batch["label"])).item()
     norm_mat, mat, total_acc = calculate_confusion_matrix(None, None,
-                                                          Path(args.experiment_path, "confusion_matrix_{}.png".format(args.use_disjoint)),
+                                                          Path(args.experiment_path,
+                                                               "confusion_matrix_{}.png".format(args.use_disjoint)),
                                                           confusion_matrix.numpy())
     # val_loss_total = running_loss / num_datapoints
     val_acc_total = (running_corrects / num_datapoints) * 100
@@ -194,10 +198,12 @@ def get_data_ready_to_use(args, paths):
 
 
 ##################################
-def sample(path, k, l):
-    calibration_path = path[:k]
-    validation_path = path[k:k + l]
-    return calibration_path, validation_path
+def sample(dict, k, l):
+    calibration_dict, validation_dict = {}, {}
+    for key in dict:
+        calibration_dict[key] = dict[key][:k]
+        validation_dict[key] = dict[key][k:k + l]
+    return calibration_dict, validation_dict
 
 
 ############################
@@ -239,6 +245,7 @@ def innerLoop(model, batch):
 
 ##############################
 def MAMLtrain(rank, args):
+    print("start  train *********************************************************")
     args.rank = rank
     if args.gpu_id == "-1":
         args.device = "cpu"
@@ -260,18 +267,18 @@ def MAMLtrain(rank, args):
     outer_optim = meta_model.optimizer
 
     # optimizer for inner loop
-    test_model = meta_model.clone()
+    test_model = copy.deepcopy(meta_model)
     inner_optim = meta_model.innerOptimizer
     for i in range(args.number_of_epochs):  ## number of trials
         for task_index, task in enumerate(train_dataloader.dataloader):  # Ti in p(T)
-            task_model = test_model.clone()
-            train_samples, test_samples = sample(task, test_model.K, test_model.L)
-            calibration_samples = []
-            validation_samples = []
-            for train_sample in train_samples:
-                calibration_samples.append(get_data_ready_to_use(args, train_sample))
-            for test_sample in test_samples:
-                validation_samples.append(get_data_ready_to_use(args, test_sample))
+            task_model = copy.deepcopy(test_model)
+            calibration_samples, validation_samples = sample(task, test_model.K, test_model.L)
+            #            calibration_samples = []
+            #            validation_samples = []
+            #            for train_sample in train_samples:
+            #                calibration_samples.append(get_data_ready_to_use(args, train_sample))
+            #            for test_sample in test_samples:
+            #                validation_samples.append(get_data_ready_to_use(args, test_sample))
 
             innerLoop(task_model, calibration_samples)  # updating test model weights
             get_new_metamodel_weights(meta_model, task_model, validation_samples)
@@ -282,6 +289,7 @@ def MAMLtrain(rank, args):
 
 if __name__ == "__main__":
     args = options.parse_arguments_for_training()
+    print("after parsing args *********************************************************")
     if args.distributed:
         if args.train_type == "MAML":
             mp.spawn(MAMLtrain,
@@ -295,5 +303,5 @@ if __name__ == "__main__":
 
     else:
         if args.train_type == "MAML":
-            MAMLtrain(0,args)
+            MAMLtrain(0, args)
         train_loop(0, args)
