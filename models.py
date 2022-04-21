@@ -237,8 +237,6 @@ class GazeCodingModel(torch.nn.Module):
     def __init__(self, args, add_box=True):
         super().__init__()
         self.args = args
-        print(args.sliding_window_size)
-        print(args.window_stride)
         self.n = args.sliding_window_size // args.window_stride
         self.add_box = add_box
         self.encoder_img = resnet18(num_classes=256).to(self.args.device)
@@ -248,8 +246,6 @@ class GazeCodingModel(torch.nn.Module):
     def forward(self, data):
         imgs = data['imgs']  # bs x n x 3 x 100 x 100
         boxs = data['boxs']  # bs x n x 5
-        print(imgs.shape)
-        print(boxs.shape)
         embedding = self.encoder_img(imgs.view(-1, 3, 100, 100)).view(-1, self.n, 256)
         if self.add_box:
             box_embedding = self.encoder_box(boxs.view(-1, 5)).view(-1, self.n, 256)

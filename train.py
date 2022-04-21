@@ -211,7 +211,7 @@ def sample(dict, k, l):
 def get_new_metamodel_weights(meta_model, temp_model, validation_set):
     meta_model.optimizer.zero_grad()
     output = temp_model.network(validation_set)
-    train_loss = temp_model.innerScheduler(output, validation_set["label"])
+    train_loss = temp_model.loss_fn(output, validation_set["label"])
     train_loss.backward()
     meta_model.optimizer.step(train_loss)
 
@@ -223,7 +223,7 @@ def innerLoop(model, batch):
     #    num_datapoints = 0
     model.optimizer.zero_grad()
     output = model.network(batch)  ### does this returns a list of results acording to the network?
-    train_loss = model.innerScheduler(output, batch["label"])
+    train_loss = model.loss_fn(output, batch["label"])
     _, predictions = torch.max(output, 1)
     train_loss.backward()
     model.innerOptimizer.step()
@@ -245,7 +245,6 @@ def innerLoop(model, batch):
 
 ##############################
 def MAMLtrain(rank, args):
-    print("start  train *********************************************************")
     args.rank = rank
     if args.gpu_id == "-1":
         args.device = "cpu"
@@ -289,7 +288,6 @@ def MAMLtrain(rank, args):
 
 if __name__ == "__main__":
     args = options.parse_arguments_for_training()
-    print("after parsing args *********************************************************")
     if args.distributed:
         if args.train_type == "MAML":
             mp.spawn(MAMLtrain,
