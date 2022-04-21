@@ -17,7 +17,7 @@ from matplotlib.patches import Patch
 from options import parse_arguments_for_visualizations
 import parsers
 import preprocess
-from statistics.bootstrap import bootstrap
+from statistics.bootstrap import bootstrap, bootstrap_ttest
 
 
 def label_to_color(label):
@@ -1860,14 +1860,29 @@ def print_stats(sorted_ids, all_metrics, hvm, args):
     ICC_LT_mean, ICC_LT_conf1, ICC_LT_conf2 = bootstrap(ICC_LT)
     # ICC_LT_mean = np.mean(ICC_LT)
     # ICC_LT_std = np.std(ICC_LT)
-    if not args.raw_dataset_type == "datavyu":
-        ICC_PR_mean, ICC_PR_conf1, ICC_PR_conf2 = bootstrap(ICC_PR)
-    else:
+    if args.raw_dataset_type == "datavyu":
         ICC_PR_mean, ICC_PR_conf1, ICC_PR_conf2 = 0, 0, 0
+    else:
+        ICC_PR_mean, ICC_PR_conf1, ICC_PR_conf2 = bootstrap(ICC_PR)
     # ICC_PR_mean = np.mean(ICC_PR)
     # ICC_PR_std = np.std(ICC_PR)
+
+    data = np.load("cali-bw_agreement.npz")
+    cali_hvh, cali_hvm = data["arr_0"], data["arr_1"]
+
     print("hvm: {}".format(hvm))
+    if hvm:
+        if args.raw_dataset_type == "lookit":
+            t, ci_low, ci_high = bootstrap_ttest(cali_hvm, agreement)
+            print("bootstrapped t-test hvm agreement: t={:.2f} [{:.2f}, {:.2f}]".format(t,
+                                                                                        ci_low,
+                                                                                        ci_high))
     if not hvm:
+        if args.raw_dataset_type == "lookit":
+            t, ci_low, ci_high = bootstrap_ttest(cali_hvh, agreement)
+            print("bootstrapped t-test hvh agreement: t={:.2f} [{:.2f}, {:.2f}]".format(t,
+                                                                                        ci_low,
+                                                                                        ci_high))
         disagree_ratios = []
         for ID in sorted_ids:
             raw1 = all_metrics[ID]["human1_vs_human2_session"]["raw_coding1"]
@@ -1911,6 +1926,7 @@ if __name__ == "__main__":
     sorted_ids = sorted(list(all_metrics.keys()),
                         key=lambda x: all_metrics[x]["human1_vs_machine_session"]["agreement"])
     print_stats(sorted_ids, all_metrics, True, args)
+
     if args.human2_codings_folder:
         print_stats(sorted_ids, all_metrics, False, args)
         generate_collage_plot(sorted_ids, all_metrics, args.output_folder)
