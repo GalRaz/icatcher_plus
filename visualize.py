@@ -426,20 +426,6 @@ def calc_ICC(metrics, dependant_measure1, dependant_measure2, n_trials):
     return LT_ICC
 
 
-def save_metrics_csv(sorted_IDs, all_metrics, inference):
-    with open(f'iCatcher/plots/CSV_reports/{inference}', 'w', newline='') as csvfile:
-        csv_writer = csv.writer(csvfile, delimiter=',')
-        header = ["video ID", f'{inference} label path', "Accuracy"]
-        csv_writer.writerow(header)
-        for ID in sorted_IDs:
-            row = []
-            row.append(ID)
-            bucket_root = "gaze-coding/iCatcher/pre-trained-inference/"
-            row.append(bucket_root + all_metrics[ID][inference]['filename'])
-            row.append(all_metrics[ID][inference]['accuracy'])
-            csv_writer.writerow(row)
-
-
 def pick_interesting_frames(coding1, coding2, machine_code):
     """
     given 3 coding files, selects interesting frames where annotators agree and disagree
@@ -584,7 +570,7 @@ def session_frame_by_frame_plot(target_ID, metric, session_path):
     times2 = metric["human1_vs_human2_session"]["times_coding1"]
     times3 = metric["human1_vs_machine_session"]["times_coding2"]
     times = [times1, times2, times3]
-    video_label = ["Human 2", "Human 1", "iCatcher"]
+    video_label = ["Human 2", "Human 1", "iCatcher+"]
     trial_times = [x["end"] for x in metric["human1_vs_human2_trials"]]
     # coding1 = all_metrics[target_ID]["human1_vs_human2_session"]['raw_coding1']
     # coding2 = all_metrics[target_ID]["human1_vs_human2_session"]['raw_coding2']
@@ -635,9 +621,9 @@ def session_image_collage_plot(target_ID, metric, session_path):
     ax.set_yticks(np.arange(3) * (imgs.shape[0] / 3) + imgs.shape[0] / 6)
     ax.set_axisbelow(False)
     # ax.set_yticks([0.33-(1/6), 0.66-(1/6), 1-(1/6)])
-    # ax.set_yticklabels(["iCatcher: Correct " + u"\u263A", "iCatcher: Invalid 😐", "iCatcher: Wrong " + u"\u2639"])
+    # ax.set_yticklabels(["iCatcher+: Correct " + u"\u263A", "iCatcher+: Invalid 😐", "iCatcher+: Wrong " + u"\u2639"])
     ax.set_yticklabels(["Correct", "Invalid", "Incorrect"])
-    ax.set_ylabel("iCatcher")
+    ax.set_ylabel("iCatcher+")
     # ax.set_ylim(imgs.shape[0] - 0.5, -0.5)
     # ax.set_xlim(imgs.shape[0] - 0.5, -0.5)
     fig.tight_layout()
@@ -939,7 +925,7 @@ def generate_confusion_matrices(sorted_IDs, all_metrics, args):
                                  axis=0)
     total_confusion_h2h /= np.sum(total_confusion_h2h, 0, keepdims=True)  # normalize column-wise
     sns.heatmap(total_confusion_h2h, ax=conf_mat_h2h, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues',
-                annot_kws={"size": 16})
+                annot_kws={"size": 24})
     conf_mat_h2h.set_xticklabels(['away', 'left', 'right'])
     conf_mat_h2h.set_yticklabels(['away', 'left', 'right'])
     conf_mat_h2h.set_xlabel('Human 1')
@@ -951,7 +937,7 @@ def generate_confusion_matrices(sorted_IDs, all_metrics, args):
                                   axis=0)
     total_confusion2_h2h /= np.sum(total_confusion2_h2h, 0, keepdims=True)  # normalize column-wise
     sns.heatmap(total_confusion2_h2h, ax=conf_mat2_h2h, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues',
-                annot_kws={"size": 16})
+                annot_kws={"size": 26})
     if args.raw_dataset_type == "vcx":
         conf_mat2_h2h.set_xticklabels(['off*', 'on'])
         conf_mat2_h2h.set_yticklabels(['off*', 'on'])
@@ -967,11 +953,11 @@ def generate_confusion_matrices(sorted_IDs, all_metrics, args):
                                  axis=0)
     total_confusion_h2m /= np.sum(total_confusion_h2m, 0, keepdims=True)  # normalize column-wise
     sns.heatmap(total_confusion_h2m, ax=conf_mat_h2m, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues',
-                annot_kws={"size": 16})
+                annot_kws={"size": 24})
     conf_mat_h2m.set_xticklabels(['away', 'left', 'right'])
     conf_mat_h2m.set_yticklabels(['away', 'left', 'right'])
     conf_mat_h2m.set_xlabel('Human 1')
-    conf_mat_h2m.set_ylabel('iCatcher')
+    conf_mat_h2m.set_ylabel('iCatcher+')
     conf_mat_h2m.set_box_aspect(1)
 
     conf_mat2_h2m = fig.add_subplot(2, 2, 4)
@@ -979,7 +965,7 @@ def generate_confusion_matrices(sorted_IDs, all_metrics, args):
                                  axis=0)
     total_confusion2_h2m /= np.sum(total_confusion2_h2m, 0, keepdims=True)  # normalize column-wise
     sns.heatmap(total_confusion2_h2m, ax=conf_mat2_h2m, vmin=0, vmax=1, annot=True, fmt='.2%', cbar=False, cmap='Blues',
-                annot_kws={"size": 16})
+                annot_kws={"size": 26})
     if args.raw_dataset_type == "vcx":
         conf_mat2_h2m.set_xticklabels(['off*', 'on'])
         conf_mat2_h2m.set_yticklabels(['off*', 'on'])
@@ -987,7 +973,7 @@ def generate_confusion_matrices(sorted_IDs, all_metrics, args):
         conf_mat2_h2m.set_xticklabels(['off', 'on'])
         conf_mat2_h2m.set_yticklabels(['off', 'on'])
     conf_mat2_h2m.set_xlabel('Human 1')
-    conf_mat2_h2m.set_ylabel('iCatcher')
+    conf_mat2_h2m.set_ylabel('iCatcher+')
     conf_mat2_h2m.set_box_aspect(1)
 
     fig.tight_layout()
@@ -1504,7 +1490,7 @@ def plot_luminance_vs_accuracy(sorted_IDs, all_metrics, args):
     # plt.ylim([0, 1])
     plt.xlabel("Luminance")
     plt.ylabel("Percent Agreement")
-    # plt.title("iCatcher accuracy versus mean video luminance for all doubly coded videos")
+    # plt.title("iCatcher+ accuracy versus mean video luminance for all doubly coded videos")
     plt.savefig(Path(args.output_folder, 'agreement_vs_luminance.pdf'))
     plt.cla()
     plt.clf()
@@ -1573,7 +1559,7 @@ def plot_face_pixel_density_vs_accuracy(sorted_IDs, all_metrics, args):
                 color=color)
     plt.xlabel("Face pixel density")
     plt.ylabel("Percent Agreement")
-    # plt.title("iCatcher accuracy versus average face pixel density per video")
+    # plt.title("iCatcher+ accuracy versus average face pixel density per video")
     plt.savefig(Path(args.output_folder, 'agreement_vs_face_density.pdf'))
     plt.cla()
     plt.clf()
@@ -1590,7 +1576,7 @@ def plot_face_location_vs_accuracy(sorted_IDs, all_metrics, args):
                 color=color)
     plt.xlabel("Face location std in pixels")
     plt.ylabel("Percent Agreement")
-    # plt.title("iCatcher accuracy versus face location pixel std")
+    # plt.title("iCatcher+ accuracy versus face location pixel std")
     plt.savefig(Path(args.output_folder, 'agreement_vs_face_loc_std.pdf'))
     plt.cla()
     plt.clf()
@@ -1877,6 +1863,35 @@ def print_stats(sorted_ids, all_metrics, hvm, args):
             print("bootstrapped t-test hvm agreement: t={:.2f} [{:.2f}, {:.2f}]".format(t,
                                                                                         ci_low,
                                                                                         ci_high))
+            t, ci_low, ci_high = bootstrap_ttest(ICC_LT, ICC_PR)
+            print("bootstrapped t-test hvm LT vs PR: t={:.2f} [{:.2f}, {:.2f}]".format(t,
+                                                                                       ci_low,
+                                                                                       ci_high))
+        confidence_correct = []
+        confidence_incorrect = []
+        for ID in sorted_ids:
+            confidence_correct += [x["confidence_metrics"][0] for x in all_metrics[ID]["human1_vs_machine_trials"]]
+            confidence_incorrect += [x["confidence_metrics"][1] for x in all_metrics[ID]["human1_vs_machine_trials"]]
+        confidence_correct = np.array(confidence_correct)
+        confidence_incorrect = np.array(confidence_incorrect)
+        valid_trials_confidence = ~np.isnan(confidence_correct) & ~np.isnan(confidence_incorrect)
+        confidence_correct = confidence_correct[valid_trials_confidence]
+        confidence_incorrect = confidence_incorrect[valid_trials_confidence]
+        t, ci_low, ci_high = bootstrap_ttest(confidence_correct, confidence_incorrect)
+        print("bootstrapped t-test hvm confidence: t={:.2f} [{:.2f}, {:.2f}]".format(t,
+                                                                                     ci_low,
+                                                                                     ci_high))
+
+        transitions_h1 = [100 * all_metrics[ID]["human1_vs_machine_session"]['n_transitions_1'] /
+                          all_metrics[ID]["human1_vs_human2_session"]['valid_frames_1'] for ID in sorted_ids]
+        transitions_h2 = [100 * all_metrics[ID]["human1_vs_machine_session"]['n_transitions_2'] /
+                          all_metrics[ID]["human1_vs_machine_session"]['valid_frames_2'] for ID in sorted_ids]
+        transitions_h1 = np.array(transitions_h1)
+        transitions_h2 = np.array(transitions_h2)
+        t, ci_low, ci_high = bootstrap_ttest(transitions_h1, transitions_h2)
+        print("bootstrapped t-test hvm transitions: t={:.2f} [{:.2f}, {:.2f}]".format(t,
+                                                                                      ci_low,
+                                                                                      ci_high))
     if not hvm:
         if args.raw_dataset_type == "lookit":
             t, ci_low, ci_high = bootstrap_ttest(cali_hvh, agreement)
