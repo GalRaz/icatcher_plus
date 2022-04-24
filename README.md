@@ -1,4 +1,4 @@
-### Latest Results (test set, split0)
+### Best Results (test set)
 <table>
         <tr>
                 <td align="center"> <img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/agreement.png"  alt="0" width = 400px height = 300px ></td>
@@ -16,14 +16,14 @@
         </tr>
 </table>
 
-### installation
+### Installation
 Use conda with the environment.yml file to create a virtual environment:
 
 `conda env create --prefix /path/to/virtual/environment -f "/path/to/environment.yml"`
 
 another system requirement is having [ffmpeg](https://ffmpeg.org/download.html) installed.
 
-### project structure:
+### Project Structure:
 
 
     ├── assets                  # contains assets for README
@@ -49,7 +49,7 @@ another system requirement is having [ffmpeg](https://ffmpeg.org/download.html) 
     ├── video.py                # API to ffmpeg functionallity
     ├── visualize.py            # compares human annotation with results from icatcher to reproduce paper results
     
-### contributions
+### Contributions
 Feel free to contribute by submitting a pull request. Make sure to run all tests under /tests
 
 
