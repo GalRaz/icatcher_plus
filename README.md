@@ -4,7 +4,7 @@
                 <td align="center"> <img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/agreement.png"  alt="0" width = 400px height = 300px ></td>
                 <td align="center"><img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/agreement_vs_confidence.png"  alt="0" width = 400px height = 300px ></td>
         </tr>
-        <tr><td colspan=2>Marchman</td></tr>
+        <tr><td colspan=2>California-BW</td></tr>
         <tr>
                 <td><img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/cali-bw_bar.png" alt="0" width = 400px height = 300px></td>
                 <td><img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/cali-bw_conf.png" alt="1" width = 300px height = 300px></td>
