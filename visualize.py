@@ -1881,17 +1881,17 @@ def print_stats(sorted_ids, all_metrics, hvm, args):
         print("bootstrapped t-test hvm confidence: t={:.2f} [{:.2f}, {:.2f}]".format(t,
                                                                                      ci_low,
                                                                                      ci_high))
-
-        transitions_h1 = [100 * all_metrics[ID]["human1_vs_machine_session"]['n_transitions_1'] /
-                          all_metrics[ID]["human1_vs_human2_session"]['valid_frames_1'] for ID in sorted_ids]
-        transitions_h2 = [100 * all_metrics[ID]["human1_vs_machine_session"]['n_transitions_2'] /
-                          all_metrics[ID]["human1_vs_machine_session"]['valid_frames_2'] for ID in sorted_ids]
-        transitions_h1 = np.array(transitions_h1)
-        transitions_h2 = np.array(transitions_h2)
-        t, ci_low, ci_high = bootstrap_ttest(transitions_h1, transitions_h2)
-        print("bootstrapped t-test hvm transitions: t={:.2f} [{:.2f}, {:.2f}]".format(t,
-                                                                                      ci_low,
-                                                                                      ci_high))
+        if args.raw_dataset_type != "datavyu":
+            transitions_h1 = [100 * all_metrics[ID]["human1_vs_machine_session"]['n_transitions_1'] /
+                              all_metrics[ID]["human1_vs_human2_session"]['valid_frames_1'] for ID in sorted_ids]
+            transitions_h2 = [100 * all_metrics[ID]["human1_vs_machine_session"]['n_transitions_2'] /
+                              all_metrics[ID]["human1_vs_machine_session"]['valid_frames_2'] for ID in sorted_ids]
+            transitions_h1 = np.array(transitions_h1)
+            transitions_h2 = np.array(transitions_h2)
+            t, ci_low, ci_high = bootstrap_ttest(transitions_h1, transitions_h2)
+            print("bootstrapped t-test hvm transitions: t={:.2f} [{:.2f}, {:.2f}]".format(t,
+                                                                                          ci_low,
+                                                                                          ci_high))
     if not hvm:
         if args.raw_dataset_type == "lookit":
             t, ci_low, ci_high = bootstrap_ttest(cali_hvh, agreement)
