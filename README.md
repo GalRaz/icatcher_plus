@@ -2,7 +2,7 @@
 <table>
         <tr>
                 <td align="center"> <img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/agreement.png"  alt="0" width = 400px height = 300px ></td>
-                <td align="center"></td>
+                <td align="center"><img src="https://github.com/shariliu/joint_eyetracking_project/blob/main/assets/agreement_vs_confidence.png"  alt="0" width = 400px height = 300px ></td>
         </tr>
         <tr><td colspan=2>Marchman</td></tr>
         <tr>
