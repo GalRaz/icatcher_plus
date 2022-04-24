@@ -17,7 +17,7 @@ from matplotlib.patches import Patch
 from options import parse_arguments_for_visualizations
 import parsers
 import preprocess
-from statistics.bootstrap import bootstrap, bootstrap_ttest
+from statistics.bootstrap import bootstrap, t_test
 
 
 def label_to_color(label):
@@ -1859,14 +1859,10 @@ def print_stats(sorted_ids, all_metrics, hvm, args):
     print("hvm: {}".format(hvm))
     if hvm:
         if args.raw_dataset_type == "lookit":
-            t, ci_low, ci_high = bootstrap_ttest(cali_hvm, agreement)
-            print("bootstrapped t-test hvm agreement: t={:.2f} [{:.2f}, {:.2f}]".format(t,
-                                                                                        ci_low,
-                                                                                        ci_high))
-            t, ci_low, ci_high = bootstrap_ttest(ICC_LT, ICC_PR)
-            print("bootstrapped t-test hvm LT vs PR: t={:.2f} [{:.2f}, {:.2f}]".format(t,
-                                                                                       ci_low,
-                                                                                       ci_high))
+            t, p = t_test(cali_hvm, agreement)
+            print("t-test hvm agreement: t={:.2f}, p={:.8f}]".format(t, p))
+            t, p = t_test(ICC_LT, ICC_PR)
+            print("t-test hvm LT vs PR: t={:.2f}, p={:.8f}]".format(t, p))
         confidence_correct = []
         confidence_incorrect = []
         for ID in sorted_ids:
@@ -1877,10 +1873,8 @@ def print_stats(sorted_ids, all_metrics, hvm, args):
         valid_trials_confidence = ~np.isnan(confidence_correct) & ~np.isnan(confidence_incorrect)
         confidence_correct = confidence_correct[valid_trials_confidence]
         confidence_incorrect = confidence_incorrect[valid_trials_confidence]
-        t, ci_low, ci_high = bootstrap_ttest(confidence_correct, confidence_incorrect)
-        print("bootstrapped t-test hvm confidence: t={:.2f} [{:.2f}, {:.2f}]".format(t,
-                                                                                     ci_low,
-                                                                                     ci_high))
+        t, p = t_test(confidence_correct, confidence_incorrect)
+        print("t-test hvm confidence: t={:.2f}, p={:.8f}".format(t, p))
         if args.raw_dataset_type != "datavyu":
             transitions_h1 = [100 * all_metrics[ID]["human1_vs_machine_session"]['n_transitions_1'] /
                               all_metrics[ID]["human1_vs_human2_session"]['valid_frames_1'] for ID in sorted_ids]
@@ -1888,16 +1882,12 @@ def print_stats(sorted_ids, all_metrics, hvm, args):
                               all_metrics[ID]["human1_vs_machine_session"]['valid_frames_2'] for ID in sorted_ids]
             transitions_h1 = np.array(transitions_h1)
             transitions_h2 = np.array(transitions_h2)
-            t, ci_low, ci_high = bootstrap_ttest(transitions_h1, transitions_h2)
-            print("bootstrapped t-test hvm transitions: t={:.2f} [{:.2f}, {:.2f}]".format(t,
-                                                                                          ci_low,
-                                                                                          ci_high))
+            t, p = t_test(transitions_h1, transitions_h2)
+            print("t-test hvm transitions: t={:.2f}, p={:.8f}".format(t, p))
     if not hvm:
         if args.raw_dataset_type == "lookit":
-            t, ci_low, ci_high = bootstrap_ttest(cali_hvh, agreement)
-            print("bootstrapped t-test hvh agreement: t={:.2f} [{:.2f}, {:.2f}]".format(t,
-                                                                                        ci_low,
-                                                                                        ci_high))
+            t, p = t_test(cali_hvh, agreement)
+            print("t-test hvh agreement: t={:.2f}, p={:.8f}".format(t, p))
         disagree_ratios = []
         for ID in sorted_ids:
             raw1 = all_metrics[ID]["human1_vs_human2_session"]["raw_coding1"]
