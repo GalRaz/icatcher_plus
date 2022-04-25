@@ -1853,8 +1853,9 @@ def print_stats(sorted_ids, all_metrics, hvm, args):
     # ICC_PR_mean = np.mean(ICC_PR)
     # ICC_PR_std = np.std(ICC_PR)
 
-    data = np.load("cali-bw_agreement.npz")
-    cali_hvh, cali_hvm = data["arr_0"], data["arr_1"]
+    if args.raw_dataset_type != "datavyu":
+        data = np.load("cali-bw_agreement.npz")
+        cali_hvh, cali_hvm = data["arr_0"], data["arr_1"]
 
     print("hvm: {}".format(hvm))
     if hvm:
