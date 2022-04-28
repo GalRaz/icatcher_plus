@@ -191,9 +191,13 @@ def get_new_metamodel_weights(meta_model, temp_model, validation_set):
     tmp_model_params =  temp_model.optimizer.param_groups[0]
     i = 0
     for f in meta_model.network.parameters():
+        if i == 0 :
+            print("*****************************************************************************************")
+            print(f)
+            print("*****************************************************************************************")
+
         f.data.sub_( meta_model.inner_lr * tmp_model_params.get('params')[i].grad)
         i += 1
-    meta_model.optimizer.step()
 
 
 ############################
@@ -247,7 +251,7 @@ def MAMLtrain(rank, args):
             k, v = state_dict.popitem(False)
             new_k = '.'.join(k.split(".")[1:])
             new_dict[new_k] = v
-        meta_model.load_state_dict(new_dict)
+        meta_model.network.load_state_dict(new_dict)
 
     ## might be good to set args.phase to one of :
     # {train_calibration , train_validation , test_calibration , test_calibration}
