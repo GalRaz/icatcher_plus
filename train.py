@@ -12,6 +12,8 @@ import numpy as np
 from pathlib import Path
 from visualize import calculate_confusion_matrix
 from PIL import Image
+import torch
+
 
 
 def train_loop(rank, args):
@@ -170,34 +172,7 @@ def predict_on_preprocessed(args):
     ##############################################################################################################
 
 
-def get_data_ready_to_use(args, paths):
-    img_files_seg, box_files_seg, class_seg = paths
-    imgs = []
-    for img_file in img_files_seg:
-        img = Image.open(args.opt.dataset_folder / "faces" / img_file).convert('RGB')
-        img = args.img_processor(img)
-        imgs.append(img)
-    imgs = torch.stack(imgs)
 
-    boxs = []
-    for box_file in box_files_seg:
-        box = np.load(args.opt.dataset_folder / "faces" / box_file, allow_pickle=True).item()
-        box = torch.tensor([box['face_size'], box['face_ver'], box['face_hor'], box['face_height'], box['face_width']])
-        boxs.append(box)
-    boxs = torch.stack(boxs)
-    boxs = boxs.float()
-    imgs = imgs.to(args.opt.device)
-    boxs = boxs.to(args.opt.device)
-    class_seg = torch.as_tensor(class_seg).to(args.opt.device)
-    return {
-        'imgs': imgs,  # n x 3 x 100 x 100
-        'boxs': boxs,  # n x 5
-        'label': class_seg,  # n x 1
-        'path': img_files_seg[2]  # n x 1
-    }
-
-
-##################################
 def sample(dict, k, l):
     calibration_dict, validation_dict = {}, {}
     for key in dict:
@@ -213,7 +188,12 @@ def get_new_metamodel_weights(meta_model, temp_model, validation_set):
     output = temp_model.network(validation_set)
     train_loss = temp_model.loss_fn(output, validation_set["label"])
     train_loss.backward()
-    meta_model.optimizer.step(train_loss)
+    tmp_model_params =  temp_model.optimizer.param_groups[0]
+    i = 0
+    for f in meta_model.network.parameters():
+        f.data.sub_( meta_model.inner_lr * tmp_model_params.get('params')[i].grad)
+        i += 1
+    meta_model.optimizer.step()
 
 
 ############################
@@ -253,6 +233,22 @@ def MAMLtrain(rank, args):
     setup(args)
     my_logger = logger.Logger(args)
 
+    meta_model = models.MAMLmodel(args)
+    if args.device == 'cpu':
+        state_dict = torch.load(str(args.model_path), map_location=torch.device(args.device))
+    else:
+        state_dict = torch.load(str(args.model_path))
+    try:
+        meta_model.network.load_state_dict(state_dict)
+    except RuntimeError:  # deal with old models that were encapsulated with "net"
+        from collections import OrderedDict
+        new_dict = OrderedDict()
+        for i in range(len(state_dict)):
+            k, v = state_dict.popitem(False)
+            new_k = '.'.join(k.split(".")[1:])
+            new_dict[new_k] = v
+        meta_model.load_state_dict(new_dict)
+
     ## might be good to set args.phase to one of :
     # {train_calibration , train_validation , test_calibration , test_calibration}
 
@@ -260,8 +256,6 @@ def MAMLtrain(rank, args):
     train_dataloader = data.MyDataLoader(args)
     args.phase = "test"
     test_dataloader = data.MyDataLoader(args)
-    meta_model = models.MAMLmodel(args)
-
     # model and optimizer for outer loop
     outer_optim = meta_model.optimizer
 
@@ -272,12 +266,6 @@ def MAMLtrain(rank, args):
         for task_index, task in enumerate(train_dataloader.dataloader):  # Ti in p(T)
             task_model = copy.deepcopy(test_model)
             calibration_samples, validation_samples = sample(task, test_model.K, test_model.L)
-            #            calibration_samples = []
-            #            validation_samples = []
-            #            for train_sample in train_samples:
-            #                calibration_samples.append(get_data_ready_to_use(args, train_sample))
-            #            for test_sample in test_samples:
-            #                validation_samples.append(get_data_ready_to_use(args, test_sample))
 
             innerLoop(task_model, calibration_samples)  # updating test model weights
             get_new_metamodel_weights(meta_model, task_model, validation_samples)
@@ -294,7 +282,8 @@ if __name__ == "__main__":
                      args=(args,),
                      nprocs=args.world_size,
                      join=True)
-        mp.spawn(train_loop,
+        else:
+            mp.spawn(train_loop,
                  args=(args,),
                  nprocs=args.world_size,
                  join=True)
@@ -302,4 +291,5 @@ if __name__ == "__main__":
     else:
         if args.train_type == "MAML":
             MAMLtrain(0, args)
-        train_loop(0, args)
+        else:
+            train_loop(0, args)

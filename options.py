@@ -34,6 +34,7 @@ def parse_arguments_for_training():
     parser.add_argument("--inneroptimizer", type=str, choices=["adam", "SGD"], default="SGD")
     ############
     parser.add_argument("--lr", type=float, default=1e-5, help="Initial learning rate")
+    parser.add_argument("--inner_lr", type=float, default=1e-5, help="Initial inner learning rate")
     parser.add_argument("--lr_policy", type=str, choices=["lambda", "plateau", "multi_step", "cyclic"],
                         default="plateau",
                         help="learning rate scheduler policy")
@@ -66,6 +67,8 @@ def parse_arguments_for_training():
                         help="Select the number of datapoint in the calibration set")
     parser.add_argument("--L", "--validationSetSize", type=int, default=10,
                         help="Select the number of datapoint in the validation set")
+    parser.add_argument("--model_path", type=str, help="path to model that will be used for predictions")
+
     ########
     args = parser.parse_args()
     args.dataset_folder = Path(args.dataset_folder)

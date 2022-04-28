@@ -98,7 +98,7 @@ class LookItDataset(data.Dataset):
         my_list = []
         logging.info("{}: Collecting paths for dataloader".format(self.opt.phase))
         video_counter = 0
-        for name in coding_names:
+        for name in coding_names[:10]:
             gaze_labels = np.load(str(Path.joinpath(dataset_folder_path, name, f'gaze_labels.npy')))
             gaze_labels_second = None
             if self.opt.use_mutually_agreed:
