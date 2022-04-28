@@ -1051,8 +1051,11 @@ def generate_age_vs_agreement(sorted_IDs, all_metrics, args, video_dataset):
         y.append(agreement)
     plt.rc('font', size=16)
     fig, ax = plt.subplots()
-    ax.scatter(x, y,
-               color=label_to_color("vlblue"), alpha=0.5, s=40, marker="o")
+
+    ax = sns.regplot(x=x, y=y)
+
+    # ax.scatter(x, y,
+    #            color=label_to_color("vlblue"), alpha=0.5, s=40, marker="o")
     ax.set_xlabel("Age [months]")
     ax.set_ylabel("Percent Agreement")
     save_path = args.output_folder
@@ -1476,24 +1479,38 @@ def generate_collage_plot(sorted_IDs, all_metrics, save_path):
 
 
 def plot_luminance_vs_accuracy(sorted_IDs, all_metrics, args):
-    plt.figure(figsize=(8.0, 6.0))
+    plt.rc('font', size=16)
+    fig, ax = plt.subplots()
+    # plt.figure(figsize=(8.0, 6.0))
     if args.raw_dataset_type == "vcx":
         color = label_to_color("vlgreen")
     else:
         color = label_to_color("vlblue")
-    plt.scatter([sample_luminance(id, args,
+
+
+    x = [sample_luminance(id, args,
                                   all_metrics[id]["human1_vs_machine_session"]['start'],
-                                  all_metrics[id]["human1_vs_machine_session"]['end']) for id in sorted_IDs],
-                [all_metrics[id]["human1_vs_machine_session"]["agreement"] for id in sorted_IDs],
-                color=color)
-    # plt.xlim([0, 1])
-    # plt.ylim([0, 1])
-    plt.xlabel("Luminance")
-    plt.ylabel("Percent Agreement")
-    # plt.title("iCatcher+ accuracy versus mean video luminance for all doubly coded videos")
-    plt.savefig(Path(args.output_folder, 'agreement_vs_luminance.pdf'))
+                                  all_metrics[id]["human1_vs_machine_session"]['end']) for id in sorted_IDs]
+    y = [all_metrics[id]["human1_vs_machine_session"]["agreement"] for id in sorted_IDs]
+    sns.regplot(x, y, color=color)
+    ax.set_xlabel("Luminance")
+    ax.set_ylabel("Percent Agreement")
+
+    save_path = args.output_folder
+    plt.savefig(str(Path(save_path, "agreement_vs_luminance.pdf")), bbox_inches='tight')
     plt.cla()
     plt.clf()
+    plt.close(fig)
+
+    # plt.scatter(x, y, color=color)
+    # plt.xlim([0, 1])
+    # plt.ylim([0, 1])
+    # plt.xlabel("Luminance")
+    # plt.ylabel("Percent Agreement")
+    # # plt.title("iCatcher+ accuracy versus mean video luminance for all doubly coded videos")
+    # plt.savefig(Path(args.output_folder, 'agreement_vs_luminance.pdf'))
+    # plt.cla()
+    # plt.clf()
 
 
 def get_face_pixel_density(id, faces_folder):
@@ -1549,37 +1566,68 @@ def get_face_location_std(id, faces_folder):
 
 
 def plot_face_pixel_density_vs_accuracy(sorted_IDs, all_metrics, args):
-    plt.figure(figsize=(8.0, 6.0))
-    densities = [all_metrics[x]["stats"]["avg_face_pixel_density"] for x in sorted_IDs]
+    plt.rc('font', size=16)
+    fig, ax = plt.subplots()
+    x = [all_metrics[x]["stats"]["avg_face_pixel_density"] for x in sorted_IDs]
     if args.raw_dataset_type == "vcx":
         color = label_to_color("vlgreen")
     else:
         color = label_to_color("vlblue")
-    plt.scatter(densities, [all_metrics[id]["human1_vs_machine_session"]["agreement"] for id in sorted_IDs],
-                color=color)
-    plt.xlabel("Face pixel density")
-    plt.ylabel("Percent Agreement")
-    # plt.title("iCatcher+ accuracy versus average face pixel density per video")
-    plt.savefig(Path(args.output_folder, 'agreement_vs_face_density.pdf'))
+    y = [all_metrics[id]["human1_vs_machine_session"]["agreement"] for id in sorted_IDs]
+    sns.regplot(x, y, color=color)
+    ax.set_xlabel("Face pixel density")
+    ax.set_ylabel("Percent Agreement")
+
+    save_path = args.output_folder
+    plt.savefig(str(Path(save_path, "agreement_vs_face_density.pdf")), bbox_inches='tight')
     plt.cla()
     plt.clf()
+    plt.close(fig)
+
+    # plt.figure(figsize=(8.0, 6.0))
+    # densities = [all_metrics[x]["stats"]["avg_face_pixel_density"] for x in sorted_IDs]
+    # if args.raw_dataset_type == "vcx":
+    #     color = label_to_color("vlgreen")
+    # else:
+    #     color = label_to_color("vlblue")
+    # plt.scatter(densities, [all_metrics[id]["human1_vs_machine_session"]["agreement"] for id in sorted_IDs],
+    #             color=color)
+    # plt.xlabel("Face pixel density")
+    # plt.ylabel("Percent Agreement")
+    # # plt.title("iCatcher+ accuracy versus average face pixel density per video")
+    # plt.savefig(Path(args.output_folder, 'agreement_vs_face_density.pdf'))
+    # plt.cla()
+    # plt.clf()
 
 
 def plot_face_location_vs_accuracy(sorted_IDs, all_metrics, args):
-    plt.figure(figsize=(8.0, 6.0))
-    stds = [all_metrics[x]["stats"]["avg_face_loc_std"] for x in sorted_IDs]
+    plt.rc('font', size=16)
+    fig, ax = plt.subplots()
+    x = [all_metrics[x]["stats"]["avg_face_loc_std"] for x in sorted_IDs]
     if args.raw_dataset_type == "vcx":
         color = label_to_color("vlgreen")
     else:
         color = label_to_color("vlblue")
-    plt.scatter(stds, [all_metrics[id]["human1_vs_machine_session"]["agreement"] for id in sorted_IDs],
-                color=color)
-    plt.xlabel("Face location std in pixels")
-    plt.ylabel("Percent Agreement")
-    # plt.title("iCatcher+ accuracy versus face location pixel std")
-    plt.savefig(Path(args.output_folder, 'agreement_vs_face_loc_std.pdf'))
+    y = [all_metrics[id]["human1_vs_machine_session"]["agreement"] for id in sorted_IDs]
+    sns.regplot(x, y, color=color)
+    ax.set_xlabel("Face location std in pixels")
+    ax.set_ylabel("Percent Agreement")
+
+    save_path = args.output_folder
+    plt.savefig(str(Path(save_path, "agreement_vs_face_loc_std.pdf")), bbox_inches='tight')
     plt.cla()
     plt.clf()
+    plt.close(fig)
+
+    # plt.figure(figsize=(8.0, 6.0))
+    # plt.scatter(x, [all_metrics[id]["human1_vs_machine_session"]["agreement"] for id in sorted_IDs],
+    #             color=color)
+    # plt.xlabel("Face location std in pixels")
+    # plt.ylabel("Percent Agreement")
+    # # plt.title("iCatcher+ accuracy versus face location pixel std")
+    # plt.savefig(Path(args.output_folder, 'agreement_vs_face_loc_std.pdf'))
+    # plt.cla()
+    # plt.clf()
 
 
 def create_cache_metrics(args, force_create=False):
@@ -1643,7 +1691,11 @@ def create_cache_metrics(args, force_create=False):
                 human_coding_file2 = None
             key = human_coding_file.stem
             try:
-                res = compare_coding_files(human_coding_file, human_coding_file2, machine_coding_file, args)
+                # hack for cali-bw because we accidentally mapped human1 to reliability coder
+                if args.raw_dataset_type == "vcx":
+                    res = compare_coding_files(human_coding_file2, human_coding_file, machine_coding_file, args)
+                else:
+                    res = compare_coding_files(human_coding_file, human_coding_file2, machine_coding_file, args)
             except (IndexError, AssertionError) as e:
                 logging.warning("skipped: {}, because of failure:".format(key))
                 logging.warning(e)
